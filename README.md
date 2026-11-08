@@ -37,7 +37,16 @@ Net-CAR/
 
 ## Getting Started
 
-### Web
+### Web (Root / AI Studio / Bun / npm)
+The root directory is configured as a monorepo workspace supporting **npm**, **bun**, and cloud IDEs like **Google AI Studio**:
+
+```bash
+# From project root:
+npm install        # or: bun install
+npm run dev        # or: bun run dev
+```
+
+Or from the `web/` subfolder:
 ```bash
 cd web
 npm install

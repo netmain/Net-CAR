@@ -240,7 +240,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<{ uid: string; email: string; displayName?: string; photoURL?: string } | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultProfile);
-  const [lang, setLangState] = useState<SupportedLanguage>('fr');
+  const [lang, setLangState] = useState<SupportedLanguage>(() => {
+    if (typeof window !== 'undefined') {
+      const savedLang = localStorage.getItem('netcar_lang') as SupportedLanguage;
+      if (savedLang && (savedLang === 'en' || savedLang === 'fr')) {
+        return savedLang;
+      }
+    }
+    return 'fr';
+  });
   const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
   const [activeVehicleId, setActiveVehicleId] = useState<string>('veh-1');
   const [fillUps, setFillUps] = useState<FillUp[]>(initialFillUps);
@@ -252,11 +260,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Initialize from LocalStorage & Firebase Auth
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const savedLang = localStorage.getItem('netcar_lang') as SupportedLanguage;
-      if (savedLang && (savedLang === 'en' || savedLang === 'fr')) {
-        setLangState(savedLang);
-      }
-
       // Check saved user session
       const savedUser = localStorage.getItem('netcar_user');
       if (savedUser) {

@@ -29,6 +29,7 @@ export default function RemindersPage() {
     completeReminder, 
     deleteReminder, 
     userProfile, 
+    lang,
     t 
   } = useApp();
 
