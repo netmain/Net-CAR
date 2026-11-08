@@ -3,7 +3,10 @@ package com.netcar.app.ui.reports
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
+import com.netcar.app.model.Expense
 import com.netcar.app.model.ExpenseCategory
+import com.netcar.app.model.FillUp
+import com.netcar.app.model.ServiceRecord
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -45,6 +48,19 @@ data class ReportsUiState(
     val userSettings: UserSettings = UserSettings()
 )
 
+private data class ReportsMeta(
+    val vehicles: List<Vehicle>,
+    val selectedId: String?,
+    val period: ReportPeriod,
+    val settings: UserSettings
+)
+
+private data class ReportsRecords(
+    val fillUps: List<FillUp>,
+    val expenses: List<Expense>,
+    val services: List<ServiceRecord>
+)
+
 @HiltViewModel
 class ReportsViewModel @Inject constructor(
     private val repository: NetCarRepository
@@ -53,15 +69,35 @@ class ReportsViewModel @Inject constructor(
     private val _selectedPeriod = MutableStateFlow(ReportPeriod.MONTH)
     val selectedPeriod: StateFlow<ReportPeriod> = _selectedPeriod.asStateFlow()
 
-    val uiState: StateFlow<ReportsUiState> = combine(
+    private val metaFlow = combine(
         repository.vehicles,
         repository.selectedVehicleId,
-        repository.fillUps,
-        repository.expenses,
-        repository.serviceRecords,
         _selectedPeriod,
         repository.userSettings
-    ) { vehicles, selectedId, fillUps, expenses, services, period, settings ->
+    ) { vehicles, selectedId, period, settings ->
+        ReportsMeta(vehicles, selectedId, period, settings)
+    }
+
+    private val recordsFlow = combine(
+        repository.fillUps,
+        repository.expenses,
+        repository.serviceRecords
+    ) { fillUps, expenses, services ->
+        ReportsRecords(fillUps, expenses, services)
+    }
+
+    val uiState: StateFlow<ReportsUiState> = combine(
+        metaFlow,
+        recordsFlow
+    ) { meta, records ->
+        val vehicles = meta.vehicles
+        val selectedId = meta.selectedId
+        val period = meta.period
+        val settings = meta.settings
+        val fillUps = records.fillUps
+        val expenses = records.expenses
+        val services = records.services
+
         val selected = vehicles.find { it.id == selectedId } ?: vehicles.firstOrNull()
         val cutoff = System.currentTimeMillis() - (period.days.toLong() * 86400000L)
 

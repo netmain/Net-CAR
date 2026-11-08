@@ -50,6 +50,7 @@ import com.netcar.app.ui.theme.SuccessGreen
 import java.text.NumberFormat
 import java.util.Locale
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun VehicleListScreen(
     viewModel: VehicleViewModel,

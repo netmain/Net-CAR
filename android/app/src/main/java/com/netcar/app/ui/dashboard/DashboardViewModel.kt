@@ -4,8 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
 import com.netcar.app.model.DashboardStats
+import com.netcar.app.model.Expense
 import com.netcar.app.model.FillUp
 import com.netcar.app.model.Reminder
+import com.netcar.app.model.ServiceRecord
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,20 +27,44 @@ data class DashboardUiState(
     val isLoading: Boolean = false
 )
 
+private data class DashboardRecords(
+    val fillUps: List<FillUp>,
+    val expenses: List<Expense>,
+    val services: List<ServiceRecord>,
+    val reminders: List<Reminder>
+)
+
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val repository: NetCarRepository
 ) : ViewModel() {
 
-    val uiState: StateFlow<DashboardUiState> = combine(
+    private val vehicleDataFlow = combine(
         repository.vehicles,
         repository.selectedVehicleId,
+        repository.userSettings
+    ) { vehicles, selectedId, settings ->
+        Triple(vehicles, selectedId, settings)
+    }
+
+    private val recordsFlow = combine(
         repository.fillUps,
         repository.expenses,
         repository.serviceRecords,
-        repository.reminders,
-        repository.userSettings
-    ) { vehicles, selectedId, fillUps, expenses, services, reminders, settings ->
+        repository.reminders
+    ) { fillUps, expenses, services, reminders ->
+        DashboardRecords(fillUps, expenses, services, reminders)
+    }
+
+    val uiState: StateFlow<DashboardUiState> = combine(
+        vehicleDataFlow,
+        recordsFlow
+    ) { (vehicles, selectedId, settings), records ->
+        val fillUps = records.fillUps
+        val expenses = records.expenses
+        val services = records.services
+        val reminders = records.reminders
+
         val selected = vehicles.find { it.id == selectedId } ?: vehicles.firstOrNull()
         val vehicleFillUps = fillUps.filter { it.vehicleId == selected?.id }
         val vehicleExpenses = expenses.filter { it.vehicleId == selected?.id }
