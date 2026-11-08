@@ -44,12 +44,12 @@ export function Sidebar() {
   const isCloudConnected = Boolean(user && !user.isDemo);
 
   return (
-    <aside className="w-64 border-r border-slate-800/80 bg-[#0B0F19]/95 min-h-[calc(100vh-4rem)] flex flex-col justify-between py-6 px-3.5 backdrop-blur-xl">
+    <aside className="w-64 border-r border-slate-800/80 bg-[#0B0F19] min-h-[calc(100vh-4rem)] flex flex-col justify-between py-6 px-3.5">
       <div className="space-y-1">
         <div className="px-3 pb-3 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
           <span>Cockpit</span>
           <span className="flex items-center gap-1 text-[9px] text-emerald-400 font-bold lowercase">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
             live
           </span>
         </div>
@@ -63,15 +63,15 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`group flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-all duration-150 ${
+              className={`group flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-semibold transition-colors duration-100 ${
                 isActive
-                  ? 'bg-gradient-to-r from-amber-500/15 via-orange-500/5 to-transparent text-amber-400 border-l-2 border-amber-500 shadow-sm'
+                  ? 'bg-amber-500/15 text-amber-400 border-l-2 border-amber-500'
                   : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
               }`}
             >
               <div className="flex items-center gap-3">
                 <Icon
-                  className={`h-4 w-4 transition-colors ${
+                  className={`h-4 w-4 ${
                     isActive
                       ? 'text-amber-400'
                       : 'text-slate-500 group-hover:text-slate-300'
@@ -96,18 +96,15 @@ export function Sidebar() {
       </div>
 
       {/* Cloud & Telemetry Sync Widget */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#121826]/80 p-3.5 mx-1 shadow-inner relative overflow-hidden group">
-        <div className="absolute top-0 right-0 h-16 w-16 bg-amber-500/5 rounded-full blur-xl pointer-events-none" />
+      <div className="rounded-2xl border border-slate-800/80 bg-[#121826] p-3.5 mx-1 relative overflow-hidden">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-xs text-slate-200">
             <Radio className="h-3.5 w-3.5 text-amber-400" />
             <span>{isCloudConnected ? 'Firebase Cloud Sync' : 'Telemetry Link'}</span>
           </div>
           <span
-            className={`h-2 w-2 rounded-full shadow-sm animate-pulse ${
-              isCloudConnected
-                ? 'bg-emerald-400 shadow-emerald-400/80'
-                : 'bg-amber-400 shadow-amber-400/80'
+            className={`h-2 w-2 rounded-full ${
+              isCloudConnected ? 'bg-emerald-400' : 'bg-amber-400'
             }`}
           />
         </div>
@@ -123,7 +120,7 @@ export function Sidebar() {
         {!isCloudConnected && (
           <button
             onClick={() => setAuthModalOpen(true)}
-            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 text-[11px] font-mono font-bold text-amber-300 hover:bg-amber-500/25 transition"
+            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 px-3 py-1.5 text-[11px] font-mono font-bold text-amber-300 hover:bg-amber-500/25 transition cursor-pointer"
           >
             <Cloud className="h-3.5 w-3.5 text-amber-400" />
             <span>{lang === 'fr' ? 'Connecter Gmail / Email' : 'Connect Gmail / Email'}</span>

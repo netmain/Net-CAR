@@ -91,11 +91,7 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Hero Vehicle Cockpit Card */}
       {activeVehicle ? (
-        <div className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-gradient-to-br from-[#121826] via-[#0F1522] to-[#0A0E18] p-6 sm:p-8 shadow-2xl">
-          {/* Ambient telemetry glow flares */}
-          <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
-
+        <div className="relative overflow-hidden rounded-3xl border border-slate-800/80 bg-gradient-to-br from-[#121826] via-[#0F1522] to-[#0A0E18] p-6 sm:p-8 shadow-lg">
           {/* Quick Vehicle Switcher Bar inside Cockpit Hero */}
           {vehicles.length > 0 && (
             <div className="relative z-10 mb-5 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-800/80">

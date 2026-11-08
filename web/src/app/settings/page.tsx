@@ -1,29 +1,38 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/app-context';
 import { SupportedCurrency, Units, SupportedLanguage } from '@/types';
-import { 
-  Globe, 
-  Cloud, 
-  Download, 
-  Upload, 
-  CheckCircle2, 
-  User, 
-  Save, 
+import {
+  Globe,
+  Cloud,
+  Download,
+  Upload,
+  CheckCircle2,
+  User,
+  Save,
   AlertCircle,
-  HardDrive
+  HardDrive,
+  RefreshCw,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 export default function SettingsPage() {
-  const { 
-    userProfile, 
-    updatePreferences, 
-    lang, 
-    setLang, 
-    exportBackupJson, 
-    importBackupJson, 
-    t 
+  const {
+    user,
+    userProfile,
+    updatePreferences,
+    lang,
+    setLang,
+    syncStatus,
+    lastSyncedAt,
+    setAuthModalOpen,
+    signOut,
+    syncToCloudNow,
+    exportBackupJson,
+    importBackupJson,
+    t,
   } = useApp();
 
   // Profile Form State
@@ -31,10 +40,19 @@ export default function SettingsPage() {
   const [email, setEmail] = useState(userProfile.email || '');
   const [profileSuccess, setProfileSuccess] = useState(false);
 
-  // Backup State
-  const [backupSyncing, setBackupSyncing] = useState(false);
-  const [backupMessage, setBackupMessage] = useState<string | null>(null);
-  const [restoreMessage, setRestoreMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  // Sync & Backup State
+  const [cloudSyncing, setCloudSyncing] = useState(false);
+  const [cloudMessage, setCloudMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<{ text: string; error?: boolean } | null>(
+    null
+  );
+
+  useEffect(() => {
+    setName(userProfile.name || '');
+    setEmail(userProfile.email || '');
+  }, [userProfile.name, userProfile.email]);
+
+  const isCloudConnected = Boolean(user && !user.isDemo);
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,31 +74,54 @@ export default function SettingsPage() {
     updatePreferences({ currency: newCurrency });
   };
 
-  // Google Drive Backup action
-  const handleBackupNow = () => {
-    setBackupSyncing(true);
-    setBackupMessage(null);
+  // Real Firebase Cloud Sync action
+  const handleCloudSync = async () => {
+    setCloudMessage(null);
+    if (!isCloudConnected) {
+      setAuthModalOpen(true);
+      return;
+    }
 
+    setCloudSyncing(true);
+    const res = await syncToCloudNow();
+    setCloudSyncing(false);
+
+    if (res.success) {
+      setCloudMessage({
+        text:
+          lang === 'fr'
+            ? `Synchronisation Cloud réussie (${res.count || 0} éléments sauvegardés sur Firebase pour ${user?.email}).`
+            : `Cloud sync complete (${res.count || 0} records saved to Firebase for ${user?.email}).`,
+      });
+      setTimeout(() => setCloudMessage(null), 6000);
+    } else if (res.error) {
+      setCloudMessage({ text: res.error, error: true });
+    }
+  };
+
+  // Local JSON Export action
+  const handleExportLocalJson = () => {
     try {
       const json = exportBackupJson();
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `NetCAR_GoogleDrive_Backup_${new Date().toISOString().split('T')[0]}.json`;
+      link.download = `NetCAR_Backup_${new Date().toISOString().split('T')[0]}.json`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
 
-      setTimeout(() => {
-        setBackupSyncing(false);
-        setBackupMessage(t.settings.backupSuccess);
-        setTimeout(() => setBackupMessage(null), 5000);
-      }, 1000);
+      setRestoreMessage({
+        text:
+          lang === 'fr'
+            ? 'Fichier JSON exporté sur votre appareil avec succès.'
+            : 'JSON backup file downloaded to your device.',
+      });
+      setTimeout(() => setRestoreMessage(null), 5000);
     } catch (err) {
       console.error(err);
-      setBackupSyncing(false);
     }
   };
 
@@ -90,18 +131,40 @@ export default function SettingsPage() {
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
         const success = importBackupJson(content);
         if (success) {
-          setRestoreMessage({ text: lang === 'fr' ? 'Données restaurées avec succès depuis le fichier !' : 'Data restored successfully from backup file!' });
+          if (isCloudConnected) {
+            await syncToCloudNow();
+          }
+          setRestoreMessage({
+            text:
+              lang === 'fr'
+                ? isCloudConnected
+                  ? 'Données restaurées depuis le fichier et synchronisées avec le Cloud !'
+                  : 'Données restaurées avec succès depuis le fichier local !'
+                : isCloudConnected
+                  ? 'Data restored from file and synced to the Cloud!'
+                  : 'Data restored successfully from local backup file!',
+          });
           setTimeout(() => setRestoreMessage(null), 5000);
         } else {
-          setRestoreMessage({ text: lang === 'fr' ? 'Fichier de sauvegarde invalide ou corrompu.' : 'Invalid or corrupt backup file.', error: true });
+          setRestoreMessage({
+            text:
+              lang === 'fr'
+                ? 'Fichier de sauvegarde invalide ou corrompu.'
+                : 'Invalid or corrupt backup file.',
+            error: true,
+          });
         }
-      } catch (err) {
-        setRestoreMessage({ text: lang === 'fr' ? 'Échec de lecture du fichier.' : 'Failed to read backup file.', error: true });
+      } catch {
+        setRestoreMessage({
+          text:
+            lang === 'fr' ? 'Échec de lecture du fichier.' : 'Failed to read backup file.',
+          error: true,
+        });
       }
     };
     reader.readAsText(file);
@@ -119,24 +182,26 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-300">
+    <div className="max-w-4xl mx-auto space-y-8">
       {/* Header Banner */}
       <div className="border-b border-slate-800/80 pb-5">
         <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-100 font-mono">
           {t.settings.title}
         </h1>
-        <p className="mt-1 text-sm text-slate-400">
-          {t.settings.subtitle}
-        </p>
+        <p className="mt-1 text-sm text-slate-400">{t.settings.subtitle}</p>
       </div>
 
       {/* Section 1: Localization & Units */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-xl shadow-black/40 space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-lg space-y-6">
         <h2 className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
             <Globe className="h-5 w-5" />
           </div>
-          <span>{lang === 'fr' ? 'Préférences Régionales & Affichage' : 'Regional & Display Preferences'}</span>
+          <span>
+            {lang === 'fr'
+              ? 'Préférences Régionales & Affichage'
+              : 'Regional & Display Preferences'}
+          </span>
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -225,48 +290,108 @@ export default function SettingsPage() {
               ))}
             </select>
             <p className="mt-1.5 text-[11px] text-slate-500 font-mono">
-              {lang === 'fr' ? 'Symbole pour carburant & frais' : 'Fuel, service and expense symbol'}
+              {lang === 'fr'
+                ? 'Symbole pour carburant & frais'
+                : 'Fuel, service and expense symbol'}
             </p>
           </div>
         </div>
       </div>
 
-      {/* Section 2: Google Drive Cloud Backup & Restore */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-xl shadow-black/40 space-y-6">
+      {/* Section 2: Real Firebase Cloud Synchronization & Local Backup */}
+      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-lg space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="space-y-1">
             <h2 className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
                 <Cloud className="h-5 w-5" />
               </div>
-              <span>{t.settings.googleDriveBackup}</span>
+              <span>
+                {lang === 'fr'
+                  ? 'Synchronisation Cloud & Sauvegarde'
+                  : 'Cloud Synchronization & Backup'}
+              </span>
             </h2>
             <p className="text-xs text-slate-400 max-w-xl leading-relaxed font-sans">
-              {t.settings.backupDescription}
+              {isCloudConnected
+                ? lang === 'fr'
+                  ? `Votre garage est synchronisé en temps réel avec le compte Cloud ${user?.email}.`
+                  : `Your garage is synchronized in real time with Cloud account ${user?.email}.`
+                : lang === 'fr'
+                  ? "Vous êtes actuellement en Mode Local (hors-ligne). Connectez-vous avec Google (Gmail) ou Email/Mot de passe pour synchroniser vos véhicules dans le Cloud entre tous vos appareils."
+                  : 'You are currently in Local Mode (offline). Sign in with Google (Gmail) or Email/Password to synchronize your vehicles in the Cloud across all your devices.'}
             </p>
           </div>
 
-          {/* Sync Status Badge */}
-          <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-mono font-bold text-emerald-400 shrink-0">
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span>{lang === 'fr' ? 'Connecté & Prêt' : 'Ready & Connected'}</span>
-          </div>
+          {/* Honest, Real Sync Status Badge */}
+          {isCloudConnected ? (
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1.5 text-xs font-mono font-bold text-emerald-400">
+                <div className="h-2 w-2 rounded-full bg-emerald-400" />
+                <span>
+                  {syncStatus === 'syncing'
+                    ? lang === 'fr'
+                      ? 'Sync en cours...'
+                      : 'Syncing...'
+                    : `${lang === 'fr' ? 'Connecté :' : 'Connected:'} ${user?.email}`}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={signOut}
+                className="flex items-center gap-1 rounded-xl border border-slate-700 bg-slate-800/80 px-3 py-1.5 text-xs font-mono font-semibold text-slate-300 hover:border-red-500/40 hover:text-red-400 transition"
+                title={t.nav.logout}
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                <span>{t.nav.logout}</span>
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-2 rounded-full border border-amber-500/40 bg-amber-500/10 px-3.5 py-1.5 text-xs font-mono font-bold text-amber-300">
+                <div className="h-2 w-2 rounded-full bg-amber-400" />
+                <span>
+                  {lang === 'fr' ? 'Non connecté (Mode Local)' : 'Not Connected (Local Mode)'}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAuthModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3.5 py-1.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 transition cursor-pointer"
+              >
+                <LogIn className="h-3.5 w-3.5" />
+                <span>{lang === 'fr' ? 'Se connecter' : 'Sign In'}</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Notifications */}
-        {backupMessage && (
-          <div className="flex items-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3.5 text-xs font-mono font-semibold text-emerald-300">
-            <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span>{backupMessage}</span>
+        {cloudMessage && (
+          <div
+            className={`flex items-center gap-2 rounded-xl p-3.5 text-xs font-mono font-semibold ${
+              cloudMessage.error
+                ? 'bg-red-500/15 border border-red-500/30 text-red-300'
+                : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+            }`}
+          >
+            {cloudMessage.error ? (
+              <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            )}
+            <span>{cloudMessage.text}</span>
           </div>
         )}
 
         {restoreMessage && (
-          <div className={`flex items-center gap-2 rounded-xl p-3.5 text-xs font-mono font-semibold ${
-            restoreMessage.error 
-              ? 'bg-red-500/15 border border-red-500/30 text-red-300' 
-              : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
-          }`}>
+          <div
+            className={`flex items-center gap-2 rounded-xl p-3.5 text-xs font-mono font-semibold ${
+              restoreMessage.error
+                ? 'bg-red-500/15 border border-red-500/30 text-red-300'
+                : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+            }`}
+          >
             {restoreMessage.error ? (
               <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
             ) : (
@@ -276,60 +401,110 @@ export default function SettingsPage() {
           </div>
         )}
 
-        {/* Actions: Backup & Restore */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          {/* Backup Button */}
+        {/* Actions: 1. Real Cloud Sync | 2. Local JSON Export/Import */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+          {/* Card 1: Real Firebase Cloud Sync */}
           <div className="rounded-xl border border-slate-800 p-5 bg-slate-900/60 flex flex-col justify-between">
             <div>
-              <div className="flex items-center gap-2 font-mono font-bold text-slate-200 text-sm">
-                <HardDrive className="h-4 w-4 text-cyan-400" />
-                <span>{lang === 'fr' ? 'Créer un instantané cloud' : 'Create Cloud Snapshot'}</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 font-mono font-bold text-slate-200 text-sm">
+                  <Cloud className="h-4 w-4 text-cyan-400" />
+                  <span>
+                    {lang === 'fr'
+                      ? 'Synchronisation Cloud (Multi-Appareils)'
+                      : 'Cloud Sync (Multi-Device)'}
+                  </span>
+                </div>
               </div>
-              <p className="mt-1 text-xs text-slate-400 font-sans">
-                {lang === 'fr' 
-                  ? 'Exporte tous vos véhicules, pleins, entretiens et rappels dans un instantané JSON crypté.'
-                  : 'Exports all vehicles, fuel logs, service history, and custom reminders into an encrypted JSON snapshot.'}
+              <p className="mt-1.5 text-xs text-slate-400 font-sans">
+                {isCloudConnected
+                  ? lang === 'fr'
+                    ? `Sauvegarde et synchronise instantanément vos véhicules, pleins, dépenses et rappels sur votre compte (${user?.email}).`
+                    : `Instantly backs up and syncs your vehicles, fill-ups, expenses, and reminders to your Cloud account (${user?.email}).`
+                  : lang === 'fr'
+                    ? 'Connectez votre compte Google (Gmail) ou Email pour sauvegarder vos données dans le Cloud et les retrouver sur tous vos appareils.'
+                    : 'Connect your Google (Gmail) or Email account to back up your data in the Cloud and access it across all devices.'}
               </p>
+              {isCloudConnected && lastSyncedAt && (
+                <p className="mt-2 text-[11px] font-mono text-emerald-400">
+                  {lang === 'fr' ? 'Dernière synchro :' : 'Last synced:'}{' '}
+                  {new Date(lastSyncedAt).toLocaleTimeString()}
+                </p>
+              )}
             </div>
             <button
-              onClick={handleBackupNow}
-              disabled={backupSyncing}
-              className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 transition"
+              type="button"
+              onClick={handleCloudSync}
+              disabled={cloudSyncing}
+              className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 disabled:opacity-50 transition cursor-pointer"
             >
-              <Download className="h-4 w-4" />
-              <span>{backupSyncing ? (lang === 'fr' ? 'Synchronisation en cours...' : 'Syncing with Google Drive...') : t.settings.backupNow}</span>
+              {cloudSyncing ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : isCloudConnected ? (
+                <RefreshCw className="h-4 w-4" />
+              ) : (
+                <LogIn className="h-4 w-4" />
+              )}
+              <span>
+                {cloudSyncing
+                  ? lang === 'fr'
+                    ? 'Synchronisation Cloud en cours...'
+                    : 'Syncing with Cloud...'
+                  : isCloudConnected
+                    ? lang === 'fr'
+                      ? 'Synchroniser avec le Cloud maintenant'
+                      : 'Sync with Cloud Now'
+                    : lang === 'fr'
+                      ? 'Se connecter (Google / Email) pour synchroniser'
+                      : 'Sign In (Google / Email) to Sync'}
+              </span>
             </button>
           </div>
 
-          {/* Restore Input */}
+          {/* Card 2: Local File Backup (Export / Import JSON) */}
           <div className="rounded-xl border border-slate-800 p-5 bg-slate-900/60 flex flex-col justify-between">
             <div>
               <div className="flex items-center gap-2 font-mono font-bold text-slate-200 text-sm">
-                <Upload className="h-4 w-4 text-indigo-400" />
-                <span>{lang === 'fr' ? 'Restaurer un instantané' : 'Restore Snapshot'}</span>
+                <HardDrive className="h-4 w-4 text-indigo-400" />
+                <span>
+                  {lang === 'fr'
+                    ? 'Sauvegarde Fichier Local (.JSON)'
+                    : 'Local File Backup (.JSON)'}
+                </span>
               </div>
-              <p className="mt-1 text-xs text-slate-400 font-sans">
+              <p className="mt-1.5 text-xs text-slate-400 font-sans">
                 {lang === 'fr'
-                  ? 'Téléversez un fichier de sauvegarde Net-CAR pour restaurer votre garage et historique.'
-                  : 'Upload a previous Net-CAR backup file to restore all garage data and maintenance history.'}
+                  ? 'Exportez une copie de sauvegarde sur votre PC au format .JSON ou restaurez un fichier existant.'
+                  : 'Download a local .JSON backup copy to your PC or restore from a saved backup file.'}
               </p>
             </div>
-            <label className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 hover:bg-slate-700/80 cursor-pointer shadow-sm transition">
-              <Upload className="h-4 w-4 text-cyan-400" />
-              <span>{t.settings.restoreNow}</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleRestoreFile}
-                className="hidden"
-              />
-            </label>
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={handleExportLocalJson}
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/90 px-3 py-2.5 text-xs font-mono font-bold text-slate-200 hover:bg-slate-700 transition cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 text-amber-400" />
+                <span>{lang === 'fr' ? 'Exporter .JSON' : 'Export .JSON'}</span>
+              </button>
+
+              <label className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/90 px-3 py-2.5 text-xs font-mono font-bold text-slate-200 hover:bg-slate-700 cursor-pointer transition">
+                <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                <span>{lang === 'fr' ? 'Importer .JSON' : 'Import .JSON'}</span>
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleRestoreFile}
+                  className="hidden"
+                />
+              </label>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Section 3: User Profile */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-xl shadow-black/40 space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-lg space-y-6">
         <h2 className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400">
             <User className="h-5 w-5" />
@@ -340,7 +515,11 @@ export default function SettingsPage() {
         {profileSuccess && (
           <div className="flex items-center gap-2 rounded-xl bg-emerald-500/15 border border-emerald-500/30 p-3 text-xs font-mono font-semibold text-emerald-300">
             <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-            <span>{lang === 'fr' ? 'Profil mis à jour avec succès !' : 'Profile information updated successfully!'}</span>
+            <span>
+              {lang === 'fr'
+                ? 'Profil mis à jour avec succès !'
+                : 'Profile information updated successfully!'}
+            </span>
           </div>
         )}
 
@@ -374,7 +553,7 @@ export default function SettingsPage() {
           <div className="flex justify-end pt-2">
             <button
               type="submit"
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition"
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:from-amber-400 hover:to-amber-500 transition cursor-pointer"
             >
               <Save className="h-4 w-4" />
               <span>{t.common.save}</span>

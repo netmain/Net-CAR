@@ -1,5 +1,5 @@
 @echo off
-title Net-CAR - Vehicle Management and Telemetry OS
+title Net-CAR - Fast Production Mode (Low RAM)
 cd /d "%~dp0"
 
 echo ========================================================
@@ -20,20 +20,22 @@ call npm install
 if errorlevel 1 goto :error_install
 
 :check_build
-if exist "web\.next\BUILD_ID" goto :start_server
+if exist "web\.next\win32_ready.txt" goto :start_prod
 echo.
-echo [Step 2] Building optimized app for fast PC performance...
-call npm run build
+echo [Step 2] Building optimized production bundle (one-time setup for low RAM and instant speed)...
+if exist "web\.next" rmdir /s /q "web\.next"
+call npm run build --workspace=web
 if errorlevel 1 goto :fallback_dev
+echo ok > "web\.next\win32_ready.txt"
 
-:start_server
+:start_prod
 echo.
-echo [Step 3] Starting Net-CAR server on http://localhost:3000 ...
-echo Your browser will open automatically in 3 seconds.
-echo Keep this window open while using the app.
+echo [Step 3] Starting Net-CAR Fast Server on http://localhost:3000 ...
+echo Memory usage in this mode is ~80 MB RAM (vs 1.8 GB in dev mode).
+echo Opening browser in 2 seconds...
 echo.
-start "" cmd /c "timeout /t 3 /nobreak >nul & explorer http://localhost:3000"
-call npm run start
+start "" cmd /c "timeout /t 2 /nobreak >nul & explorer http://localhost:3000"
+call npm run start --workspace=web
 if errorlevel 1 goto :fallback_dev
 pause
 exit /b 0
@@ -41,10 +43,8 @@ exit /b 0
 :fallback_dev
 echo.
 echo Starting Net-CAR in Development Mode on http://localhost:3000 ...
-echo Please wait 10 seconds after the browser opens for the first page to compile.
-echo.
 start "" cmd /c "timeout /t 5 /nobreak >nul & explorer http://localhost:3000"
-call npm run dev
+call npm run dev --workspace=web
 pause
 exit /b 0
 

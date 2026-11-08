@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Vehicle,
   FillUp,
@@ -107,6 +107,7 @@ interface AppContextType {
 
   // Backup & Preferences
   updatePreferences: (prefs: Partial<UserProfile>) => void;
+  syncToCloudNow: () => Promise<{ success: boolean; error?: string; count?: number }>;
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
 }
@@ -1393,6 +1394,191 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const syncToCloudNow = async (): Promise<{
+    success: boolean;
+    error?: string;
+    count?: number;
+  }> => {
+    const fbUser = auth.currentUser;
+    if (!fbUser) {
+      setAuthModalOpen(true);
+      return {
+        success: false,
+        error:
+          lang === 'fr'
+            ? 'Veuillez vous connecter avec votre compte Google ou Email pour synchroniser avec le Cloud.'
+            : 'Please sign in with your Google or Email account to synchronize with the Cloud.',
+      };
+    }
+
+    const uid = fbUser.uid;
+    setSyncStatus('syncing');
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userDocRef);
+      const baseProfile = {
+        userId: uid,
+        name: (userProfile.name || fbUser.displayName || 'Pilot').slice(0, 200),
+        email: (fbUser.email || userProfile.email || 'driver@netcar.app').slice(0, 320),
+        preferredLang: lang || 'fr',
+        units: userProfile.units || 'metric',
+        currency: userProfile.currency || 'DZD',
+        activeVehicleId: activeVehicleId || vehicles[0]?.id || 'veh-1',
+        updatedAt: serverTimestamp(),
+      };
+
+      if (!userSnap.exists()) {
+        await setDoc(userDocRef, stripUndefined({ ...baseProfile, createdAt: serverTimestamp() }));
+      } else {
+        await updateDoc(userDocRef, stripUndefined(baseProfile));
+      }
+      isCloudReadyRef.current = true;
+
+      const writePromises: Promise<void>[] = [];
+
+      for (const v of vehicles) {
+        writePromises.push(
+          setDoc(
+            doc(db, 'users', uid, 'vehicles', v.id),
+            stripUndefined({
+              id: v.id,
+              userId: uid,
+              name: v.name?.slice(0, 100),
+              make: v.make.slice(0, 100),
+              model: v.model.slice(0, 100),
+              year: Number(v.year),
+              plate: v.plate?.slice(0, 30),
+              vin: v.vin?.slice(0, 30),
+              fuelType: v.fuelType,
+              photoUrl: v.photoUrl?.slice(0, 2048),
+              currentOdometer: Number(v.currentOdometer) || 0,
+              notes: v.notes?.slice(0, 5000),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      for (const f of fillUps) {
+        writePromises.push(
+          setDoc(
+            doc(db, 'users', uid, 'fillups', f.id),
+            stripUndefined({
+              id: f.id,
+              userId: uid,
+              vehicleId: f.vehicleId,
+              date: String(f.date),
+              odometer: Number(f.odometer),
+              volume: Number(f.volume),
+              pricePerUnit: Number(f.pricePerUnit),
+              totalCost: Number(f.totalCost),
+              fuelType: f.fuelType,
+              isFullTank: Boolean(f.isFullTank),
+              station: f.station?.slice(0, 200),
+              notes: f.notes?.slice(0, 5000),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      for (const e of expenses) {
+        writePromises.push(
+          setDoc(
+            doc(db, 'users', uid, 'expenses', e.id),
+            stripUndefined({
+              id: e.id,
+              userId: uid,
+              vehicleId: e.vehicleId,
+              date: String(e.date),
+              category: e.category,
+              amount: Number(e.amount),
+              description: e.description.slice(0, 500),
+              receiptUrl: e.receiptUrl?.slice(0, 2048),
+              odometer: e.odometer !== undefined ? Number(e.odometer) : undefined,
+              notes: e.notes?.slice(0, 5000),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      for (const s of services) {
+        writePromises.push(
+          setDoc(
+            doc(db, 'users', uid, 'services', s.id),
+            stripUndefined({
+              id: s.id,
+              userId: uid,
+              vehicleId: s.vehicleId,
+              date: String(s.date),
+              type: s.type,
+              odometer: Number(s.odometer),
+              cost: Number(s.cost),
+              description: s.description.slice(0, 500),
+              parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
+              receiptUrl: s.receiptUrl?.slice(0, 2048),
+              notes: s.notes?.slice(0, 5000),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      for (const r of reminders) {
+        writePromises.push(
+          setDoc(
+            doc(db, 'users', uid, 'reminders', r.id),
+            stripUndefined({
+              id: r.id,
+              userId: uid,
+              vehicleId: r.vehicleId,
+              type: String(r.type),
+              title: r.title?.slice(0, 200),
+              intervalKm: r.intervalKm !== undefined ? Number(r.intervalKm) : undefined,
+              intervalDays: r.intervalDays !== undefined ? Number(r.intervalDays) : undefined,
+              lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate) : undefined,
+              lastServiceOdometer:
+                r.lastServiceOdometer !== undefined ? Number(r.lastServiceOdometer) : undefined,
+              nextDueDate: r.nextDueDate ? String(r.nextDueDate) : undefined,
+              nextDueOdometer:
+                r.nextDueOdometer !== undefined ? Number(r.nextDueOdometer) : undefined,
+              isRecurring: Boolean(r.isRecurring),
+              isActive: Boolean(r.isActive),
+              createdAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+            })
+          )
+        );
+      }
+
+      await Promise.all(writePromises);
+      const nowIso = new Date().toISOString();
+      setSyncStatus('synced');
+      setLastSyncedAt(nowIso);
+      return {
+        success: true,
+        count: writePromises.length,
+      };
+    } catch (error) {
+      setSyncStatus('error');
+      handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : lang === 'fr'
+              ? 'Erreur de synchronisation Cloud.'
+              : 'Cloud synchronization failed.',
+      };
+    }
+  };
+
   const exportBackupJson = () => {
     const backup = {
       exportedAt: new Date().toISOString(),
@@ -1410,23 +1596,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const importBackupJson = (jsonData: string): boolean => {
     try {
       const data = JSON.parse(jsonData);
-      if (data.vehicles) {
+      if (data.vehicles && Array.isArray(data.vehicles)) {
         setVehicles(data.vehicles);
         saveToLocal('netcar_vehicles', data.vehicles);
       }
-      if (data.fillUps) {
+      if (data.fillUps && Array.isArray(data.fillUps)) {
         setFillUps(data.fillUps);
         saveToLocal('netcar_fillups', data.fillUps);
       }
-      if (data.expenses) {
+      if (data.expenses && Array.isArray(data.expenses)) {
         setExpenses(data.expenses);
         saveToLocal('netcar_expenses', data.expenses);
       }
-      if (data.services) {
+      if (data.services && Array.isArray(data.services)) {
         setServices(data.services);
         saveToLocal('netcar_services', data.services);
       }
-      if (data.reminders) {
+      if (data.reminders && Array.isArray(data.reminders)) {
         setReminders(data.reminders);
         saveToLocal('netcar_reminders', data.reminders);
       }
@@ -1576,54 +1762,72 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const t = translations[lang];
 
-  return (
-    <AppContext.Provider
-      value={{
-        user,
-        userProfile,
-        lang,
-        setLang,
-        t,
-        vehicles,
-        activeVehicle,
-        activeVehicleId,
-        setActiveVehicleId,
-        fillUps,
-        expenses,
-        services,
-        reminders,
-        loading,
-        syncStatus,
-        lastSyncedAt,
-        authModalOpen,
-        setAuthModalOpen,
-        addVehicleModalOpen,
-        setAddVehicleModalOpen,
-        signInWithEmail,
-        signUpWithEmail,
-        signInWithGoogle,
-        signOut,
-        signInDemo,
-        addVehicle,
-        updateVehicle,
-        deleteVehicle,
-        addFillUp,
-        deleteFillUp,
-        addExpense,
-        deleteExpense,
-        addService,
-        deleteService,
-        addReminder,
-        completeReminder,
-        deleteReminder,
-        updatePreferences,
-        exportBackupJson,
-        importBackupJson,
-      }}
-    >
-      {children}
-    </AppContext.Provider>
+  const contextValue = useMemo<AppContextType>(
+    () => ({
+      user,
+      userProfile,
+      lang,
+      setLang,
+      t,
+      vehicles,
+      activeVehicle,
+      activeVehicleId,
+      setActiveVehicleId,
+      fillUps,
+      expenses,
+      services,
+      reminders,
+      loading,
+      syncStatus,
+      lastSyncedAt,
+      authModalOpen,
+      setAuthModalOpen,
+      addVehicleModalOpen,
+      setAddVehicleModalOpen,
+      signInWithEmail,
+      signUpWithEmail,
+      signInWithGoogle,
+      signOut,
+      signInDemo,
+      addVehicle,
+      updateVehicle,
+      deleteVehicle,
+      addFillUp,
+      deleteFillUp,
+      addExpense,
+      deleteExpense,
+      addService,
+      deleteService,
+      addReminder,
+      completeReminder,
+      deleteReminder,
+      updatePreferences,
+      syncToCloudNow,
+      exportBackupJson,
+      importBackupJson,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      user,
+      userProfile,
+      lang,
+      t,
+      vehicles,
+      activeVehicle,
+      activeVehicleId,
+      fillUps,
+      expenses,
+      services,
+      reminders,
+      loading,
+      syncStatus,
+      lastSyncedAt,
+      authModalOpen,
+      addVehicleModalOpen,
+    ]
   );
+
+  return <AppContext.Provider value={contextValue}>{children}</AppContext.Provider>;
 }
 
 export function useApp() {

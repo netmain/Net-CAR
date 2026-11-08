@@ -71,13 +71,13 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-[#0B0F19]/90 px-4 backdrop-blur-xl sm:px-6 shadow-2xl">
+      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-[#0B0F19] px-4 sm:px-6 shadow-lg">
         {/* Brand & Active Vehicle */}
         <div className="flex items-center gap-3 sm:gap-4">
           {/* Mobile hamburger button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900/80 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition"
+            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition"
             aria-label="Toggle menu"
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -85,8 +85,8 @@ export function Navbar() {
 
           {/* High-Performance Crest Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 text-white shadow-lg shadow-orange-500/20 group-hover:shadow-orange-500/40 transition-all duration-300">
-              <Car className="h-5 w-5 transition-transform duration-300 group-hover:scale-110" />
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 text-white shadow-md">
+              <Car className="h-5 w-5" />
               <div className="absolute inset-0 rounded-xl border border-white/25 pointer-events-none" />
             </div>
             <div className="hidden sm:flex flex-col">
@@ -105,8 +105,8 @@ export function Navbar() {
               <label htmlFor="vehicle-select" className="sr-only">
                 {t.common.selectVehicle}
               </label>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-700/90 bg-[#121826] px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-200 shadow-inner hover:border-amber-500/60 transition max-w-[210px] sm:max-w-none">
-                <div className="h-2 w-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse shrink-0" />
+              <div className="flex items-center gap-2 rounded-xl border border-slate-700/90 bg-[#121826] px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-200 hover:border-amber-500/60 transition max-w-[210px] sm:max-w-none">
+                <div className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
                 <select
                   ref={selectRef}
                   id="vehicle-select"

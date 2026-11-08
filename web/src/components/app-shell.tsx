@@ -46,7 +46,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </div>
 
       {/* Mobile Sticky Bottom Telemetry Bar */}
-      <nav className="fixed bottom-0 inset-x-0 z-30 bg-[#0B0F19]/95 backdrop-blur-xl border-t border-slate-800/80 py-1.5 px-2 flex justify-around items-center md:hidden shadow-2xl">
+      <nav className="fixed bottom-0 inset-x-0 z-30 bg-[#0B0F19] border-t border-slate-800/80 py-1.5 px-2 flex justify-around items-center md:hidden shadow-lg">
         {mobileNav.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));
