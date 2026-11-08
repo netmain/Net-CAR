@@ -1,75 +1,63 @@
 @echo off
-setlocal enabledelayedexpansion
-title Net-CAR - Vehicle Management & Telemetry OS
-
-echo ========================================================
-echo   Net-CAR - Performance Vehicle Management ^& Telemetry
-echo ========================================================
-echo.
-
-:: Change to the directory where this script is located
+title Net-CAR - Vehicle Management and Telemetry OS
 cd /d "%~dp0"
 
-:: 1. Verify Node.js is installed
+echo ========================================================
+echo   Net-CAR - Vehicle Management and Telemetry OS
+echo ========================================================
+echo.
+
 where node >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [ERROR] Node.js is not installed or not in your PATH.
-    echo [ERREUR] Node.js n'est pas installe sur ce PC.
-    echo.
-    echo Please download and install Node.js LTS from:
-    echo Veuillez telecharger et installer Node.js LTS depuis :
-    echo   https://nodejs.org/
-    echo.
-    pause
-    exit /b 1
-)
+if errorlevel 1 goto :no_node
 
-for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
-echo [OK] Node.js detected (%NODE_VER%)
-
-:: 2. Install dependencies if node_modules is missing
-if not exist "node_modules\" (
-    echo.
-    echo [1/3] Installing dependencies (first-time setup)...
-    echo       Installation des dependances ^(premiere execution^)...
-    call npm install
-    if %errorlevel% neq 0 (
-        echo.
-        echo [ERROR] Failed to install dependencies.
-        pause
-        exit /b 1
-    )
-) else (
-    echo [OK] Dependencies already installed.
-)
-
-:: 3. Build optimized production bundle if not yet built
-if not exist "web\.next\BUILD_ID" (
-    echo.
-    echo [2/3] Building optimized application for fast PC performance...
-    echo       Compilation optimisee de l'application...
-    call npm run build
-    if %errorlevel% neq 0 (
-        echo.
-        echo [WARN] Production build failed, falling back to development server...
-        goto :run_dev
-    )
-)
-
-:: 4. Launch browser automatically once server starts and run production server
+echo [OK] Node.js found:
+node -v
 echo.
-echo [3/3] Starting Net-CAR on http://localhost:3000 ...
-echo       Ouverture automatique du navigateur sur http://localhost:3000 ...
-echo       ^(Press Ctrl+C to stop / Appuyez sur Ctrl+C pour arreter^)
+
+if exist "node_modules" goto :check_build
+echo [Step 1] Installing dependencies...
+call npm install
+if errorlevel 1 goto :error_install
+
+:check_build
+if exist "web\.next\BUILD_ID" goto :start_server
 echo.
-start "" cmd /c "timeout /t 3 /nobreak >nul & start http://localhost:3000"
+echo [Step 2] Building optimized app for fast PC performance...
+call npm run build
+if errorlevel 1 goto :fallback_dev
+
+:start_server
+echo.
+echo [Step 3] Starting Net-CAR server on http://localhost:3000 ...
+echo Your browser will open automatically in 3 seconds.
+echo Keep this window open while using the app.
+echo.
+start "" cmd /c "timeout /t 3 /nobreak >nul & explorer http://localhost:3000"
 call npm run start
+if errorlevel 1 goto :fallback_dev
 pause
 exit /b 0
 
-:run_dev
+:fallback_dev
 echo.
-echo Starting Net-CAR (Development Mode) on http://localhost:3000 ...
-start "" cmd /c "timeout /t 5 /nobreak >nul & start http://localhost:3000"
+echo Starting Net-CAR in Development Mode on http://localhost:3000 ...
+echo Please wait 10 seconds after the browser opens for the first page to compile.
+echo.
+start "" cmd /c "timeout /t 5 /nobreak >nul & explorer http://localhost:3000"
 call npm run dev
 pause
+exit /b 0
+
+:no_node
+echo [ERROR] Node.js is not installed on this PC.
+echo Please download and install Node.js LTS from: https://nodejs.org/
+echo.
+pause
+exit /b 1
+
+:error_install
+echo.
+echo [ERROR] npm install failed. Check your internet connection and try again.
+echo.
+pause
+exit /b 1

@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=web",
-    "build": "npm run build --workspace=web",
+    "build": "npm run build --workspace=web && node -e \"const fs=require('fs');fs.rmSync('.next',{recursive:true,force:true});fs.cpSync('web/.next','.next',{recursive:true});\"",
     "start": "npm run start --workspace=web",
     "lint": "npm run lint --workspace=web"
   },
