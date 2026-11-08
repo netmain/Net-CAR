@@ -26,11 +26,11 @@ export default function VehiclesPage() {
     vehicles, 
     activeVehicle, 
     setActiveVehicleId, 
+    setAddVehicleModalOpen,
     updateVehicle, 
     deleteVehicle, 
     fillUps, 
     services, 
-    expenses, 
     userProfile, 
     t 
   } = useApp();
@@ -126,13 +126,14 @@ export default function VehiclesPage() {
             {t.vehicles.subtitle} ({vehicles.length} {vehicles.length === 1 ? 'véhicule' : 'véhicules'})
           </p>
         </div>
-        <Link
-          href="/vehicles/new"
-          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-orange-500/20 hover:opacity-95 transition"
+        <button
+          type="button"
+          onClick={() => setAddVehicleModalOpen(true)}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-5 py-2.5 text-sm font-black text-slate-950 shadow-lg shadow-orange-500/20 hover:opacity-95 transition cursor-pointer"
         >
           <Plus className="h-4 w-4" />
           <span>{t.vehicles.addVehicle}</span>
-        </Link>
+        </button>
       </div>
 
       {/* Empty State */}
@@ -145,13 +146,14 @@ export default function VehiclesPage() {
           <p className="mt-2 text-sm text-slate-400 max-w-md mx-auto">
             Ajoutez votre véhicule quotidien, de collection ou votre flotte pour suivre consommation, vidanges et dépenses.
           </p>
-          <Link
-            href="/vehicles/new"
-            className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-orange-500/25 hover:opacity-95 transition"
+          <button
+            type="button"
+            onClick={() => setAddVehicleModalOpen(true)}
+            className="mt-6 inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-amber-500 to-orange-600 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-orange-500/25 hover:opacity-95 transition cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             <span>{t.vehicles.addVehicle}</span>
-          </Link>
+          </button>
         </div>
       ) : (
         /* Vehicles Grid */
@@ -160,15 +162,15 @@ export default function VehiclesPage() {
             const isActive = activeVehicle?.id === v.id;
             const vehFillups = fillUps.filter(f => f.vehicleId === v.id);
             const vehServices = services.filter(s => s.vehicleId === v.id);
-            const vehExpenses = expenses.filter(e => e.vehicleId === v.id);
 
             return (
               <div
                 key={v.id}
-                className={`group relative flex flex-col justify-between overflow-hidden rounded-3xl border bg-[#121826]/80 backdrop-blur-xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] ${
+                onClick={() => setActiveVehicleId(v.id)}
+                className={`group relative flex flex-col justify-between overflow-hidden rounded-3xl border bg-[#121826]/80 backdrop-blur-xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] cursor-pointer ${
                   isActive 
                     ? 'border-amber-500/80 ring-2 ring-amber-500/20' 
-                    : 'border-slate-800/80 hover:border-slate-700'
+                    : 'border-slate-800/80 hover:border-amber-500/40'
                 }`}
               >
                 {/* Photo Header */}
@@ -191,7 +193,7 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Badges on image */}
-                  <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                  <div className="absolute top-3 left-3 z-10 flex flex-wrap gap-1.5">
                     {isActive ? (
                       <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-3 py-1 text-xs font-black text-slate-950 shadow-md">
                         <CheckCircle className="h-3.5 w-3.5" />
@@ -199,8 +201,12 @@ export default function VehiclesPage() {
                       </span>
                     ) : (
                       <button
-                        onClick={() => setActiveVehicleId(v.id)}
-                        className="rounded-full bg-slate-950/80 border border-slate-700 backdrop-blur px-3 py-1 text-xs font-bold text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveVehicleId(v.id);
+                        }}
+                        className="rounded-full bg-slate-950/90 border border-amber-500/50 backdrop-blur px-3.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer shadow-md"
                       >
                         Sélectionner
                       </button>
@@ -208,7 +214,7 @@ export default function VehiclesPage() {
                   </div>
 
                   {/* Fuel type badge */}
-                  <div className="absolute top-3 right-3">
+                  <div className="absolute top-3 right-3 z-10">
                     <span className={`rounded-xl border px-2.5 py-1 text-xs font-bold backdrop-blur-md shadow-sm ${fuelTypeBadgeColors[v.fuelType]}`}>
                       {t.fuelTypes[v.fuelType]}
                     </span>
@@ -216,7 +222,7 @@ export default function VehiclesPage() {
 
                   {/* Plate pill on bottom right (if available) */}
                   {v.plate ? (
-                    <div className="absolute bottom-3 right-3">
+                    <div className="absolute bottom-3 right-3 z-10">
                       <span className="rounded-xl border border-slate-700 bg-slate-950/90 backdrop-blur px-2.5 py-1 text-xs font-mono font-black uppercase tracking-wider text-amber-300 shadow-sm">
                         {v.plate}
                       </span>
@@ -270,28 +276,44 @@ export default function VehiclesPage() {
                   <div className="mt-5 flex items-center justify-between border-t border-slate-800/80 pt-3">
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => handleOpenEdit(v)}
-                        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenEdit(v);
+                        }}
+                        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition cursor-pointer"
                       >
                         <Edit3 className="h-3.5 w-3.5 text-slate-400" />
                         <span>{t.common.edit}</span>
                       </button>
                       <button
-                        onClick={() => setDeleteConfirmId(v.id)}
-                        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/10 transition"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirmId(v.id);
+                        }}
+                        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-red-400 hover:bg-red-500/10 transition cursor-pointer"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                         <span>{t.common.delete}</span>
                       </button>
                     </div>
 
-                    {!isActive && (
+                    {!isActive ? (
                       <button
-                        onClick={() => setActiveVehicleId(v.id)}
-                        className="text-xs font-bold text-amber-400 hover:text-amber-300 transition"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveVehicleId(v.id);
+                        }}
+                        className="rounded-xl bg-amber-500/15 border border-amber-500/40 px-3 py-1 text-xs font-bold text-amber-400 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer"
                       >
                         Activer →
                       </button>
+                    ) : (
+                      <span className="text-xs font-mono font-bold text-emerald-400">
+                        ✓ Sélectionné
+                      </span>
                     )}
                   </div>
                 </div>

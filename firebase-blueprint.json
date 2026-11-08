@@ -1,0 +1,420 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile, regional preferences, and currently active vehicle selection synchronized across devices.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Owner Firebase Auth UID",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Display name of the driver",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "User email address",
+          "minLength": 3,
+          "maxLength": 320
+        },
+        "preferredLang": {
+          "type": "string",
+          "enum": ["en", "fr"],
+          "maxLength": 10
+        },
+        "units": {
+          "type": "string",
+          "enum": ["metric", "imperial"],
+          "maxLength": 20
+        },
+        "currency": {
+          "type": "string",
+          "enum": ["DZD", "EUR", "USD", "CAD", "GBP", "MAD", "CHF"],
+          "maxLength": 10
+        },
+        "activeVehicleId": {
+          "type": "string",
+          "description": "Currently selected vehicle ID across devices",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["userId", "name", "email", "preferredLang", "units", "currency", "createdAt", "updatedAt"]
+    },
+    "Vehicle": {
+      "title": "Vehicle",
+      "description": "A vehicle in the user's garage.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "make": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "year": {
+          "type": "number"
+        },
+        "plate": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "vin": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "fuelType": {
+          "type": "string",
+          "enum": ["gasoline", "diesel", "lpg", "electric", "hybrid", "ethanol", "cng"],
+          "maxLength": 30
+        },
+        "photoUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "currentOdometer": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "make", "model", "year", "fuelType", "currentOdometer", "createdAt", "updatedAt"]
+    },
+    "FillUp": {
+      "title": "FillUp",
+      "description": "Fuel refuel telemetry record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "odometer": {
+          "type": "number"
+        },
+        "volume": {
+          "type": "number"
+        },
+        "pricePerUnit": {
+          "type": "number"
+        },
+        "totalCost": {
+          "type": "number"
+        },
+        "fuelType": {
+          "type": "string",
+          "maxLength": 30
+        },
+        "isFullTank": {
+          "type": "boolean"
+        },
+        "station": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "vehicleId", "date", "odometer", "volume", "pricePerUnit", "totalCost", "fuelType", "isFullTank", "createdAt", "updatedAt"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Vehicle expense record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "amount": {
+          "type": "number"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "receiptUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "odometer": {
+          "type": "number"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "vehicleId", "date", "category", "amount", "description", "createdAt", "updatedAt"]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Maintenance service record.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "date": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "odometer": {
+          "type": "number"
+        },
+        "cost": {
+          "type": "number"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "parts": {
+          "type": "array",
+          "description": "List of replaced parts (max 50 items)"
+        },
+        "receiptUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 5000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "vehicleId", "date", "type", "odometer", "cost", "description", "createdAt", "updatedAt"]
+    },
+    "Reminder": {
+      "title": "Reminder",
+      "description": "Scheduled maintenance reminder.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "vehicleId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "intervalKm": {
+          "type": "number"
+        },
+        "intervalDays": {
+          "type": "number"
+        },
+        "lastServiceDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "lastServiceOdometer": {
+          "type": "number"
+        },
+        "nextDueDate": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "nextDueOdometer": {
+          "type": "number"
+        },
+        "isRecurring": {
+          "type": "boolean"
+        },
+        "isActive": {
+          "type": "boolean"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["id", "userId", "vehicleId", "type", "isRecurring", "isActive", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile and cross-device settings including activeVehicleId"
+    },
+    "/users/{userId}/vehicles/{vehicleId}": {
+      "schema": { "$ref": "#/entities/Vehicle" },
+      "description": "User vehicles collection"
+    },
+    "/users/{userId}/fillups/{fillupId}": {
+      "schema": { "$ref": "#/entities/FillUp" },
+      "description": "User fuel fill-ups collection"
+    },
+    "/users/{userId}/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "User expenses collection"
+    },
+    "/users/{userId}/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/Service" },
+      "description": "User maintenance services collection"
+    },
+    "/users/{userId}/reminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/Reminder" },
+      "description": "User service reminders collection"
+    }
+  }
+}

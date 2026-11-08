@@ -31,11 +31,13 @@ export type SupportedCurrency = 'DZD' | 'EUR' | 'USD' | 'CAD' | 'GBP' | 'MAD' | 
 export type SupportedLanguage = 'en' | 'fr';
 
 export interface UserProfile {
+  userId?: string;
   name: string;
   email: string;
   preferredLang: SupportedLanguage;
   units: Units;
   currency: SupportedCurrency;
+  activeVehicleId?: string;
   createdAt?: any;
   updatedAt?: any;
 }

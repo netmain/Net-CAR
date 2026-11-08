@@ -7,10 +7,10 @@
     "web"
   ],
   "scripts": {
-    "dev": "cd web && next dev --webpack",
-    "build": "cd web && next build --webpack",
-    "start": "cd web && next start",
-    "lint": "cd web && eslint"
+    "dev": "npm run dev --workspace=web",
+    "build": "npm run build --workspace=web",
+    "start": "npm run start --workspace=web",
+    "lint": "npm run lint --workspace=web"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.5",

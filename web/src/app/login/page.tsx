@@ -37,11 +37,12 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorConsoleUrl, setErrorConsoleUrl] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // If already logged in, redirect to dashboard
+  // If already logged into real Firebase account, redirect to dashboard
   useEffect(() => {
-    if (user) {
+    if (user && !user.isDemo) {
       router.push('/');
     }
   }, [user, router]);
@@ -49,6 +50,7 @@ export default function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
+    setErrorConsoleUrl(null);
     setSuccessMessage(null);
 
     if (!email.trim() || !email.includes('@')) {
@@ -79,6 +81,7 @@ export default function LoginPage() {
           }, 600);
         } else {
           setErrorMessage(res.error || t.auth.errorInvalidAuth);
+          if (res.consoleUrl) setErrorConsoleUrl(res.consoleUrl);
           setLoading(false);
         }
       } else {
@@ -90,6 +93,7 @@ export default function LoginPage() {
           }, 600);
         } else {
           setErrorMessage(res.error || (lang === 'fr' ? 'Erreur lors de la création du compte.' : 'Failed to create account.'));
+          if (res.consoleUrl) setErrorConsoleUrl(res.consoleUrl);
           setLoading(false);
         }
       }
@@ -102,6 +106,7 @@ export default function LoginPage() {
   const handleGoogleClick = async () => {
     setLoading(true);
     setErrorMessage(null);
+    setErrorConsoleUrl(null);
     try {
       const res = await signInWithGoogle();
       if (res.success) {
@@ -150,7 +155,7 @@ export default function LoginPage() {
         <div className="flex rounded-xl border border-slate-800 bg-slate-900/90 p-1 mb-5">
           <button
             type="button"
-            onClick={() => { setMode('signin'); setErrorMessage(null); }}
+            onClick={() => { setMode('signin'); setErrorMessage(null); setErrorConsoleUrl(null); }}
             className={`flex-1 rounded-lg py-2 text-xs font-mono font-bold transition ${
               mode === 'signin'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
@@ -161,7 +166,7 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => { setMode('signup'); setErrorMessage(null); }}
+            onClick={() => { setMode('signup'); setErrorMessage(null); setErrorConsoleUrl(null); }}
             className={`flex-1 rounded-lg py-2 text-xs font-mono font-bold transition ${
               mode === 'signup'
                 ? 'bg-amber-500 text-slate-950 shadow-sm'
@@ -174,9 +179,21 @@ export default function LoginPage() {
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="mb-4 flex items-center gap-2.5 rounded-xl bg-red-500/15 border border-red-500/30 p-3 text-xs font-mono text-red-300">
-            <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
-            <span>{errorMessage}</span>
+          <div className="mb-4 rounded-xl bg-red-500/15 border border-red-500/30 p-3 text-xs font-mono text-red-300 space-y-2">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+              <span>{errorMessage}</span>
+            </div>
+            {errorConsoleUrl && (
+              <a
+                href={errorConsoleUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 rounded-lg bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-[11px] font-bold text-amber-300 hover:bg-amber-500/30 transition"
+              >
+                <span>{lang === 'fr' ? 'Ouvrir Firebase Console (Providers) →' : 'Open Firebase Console (Providers) →'}</span>
+              </a>
+            )}
           </div>
         )}
 

@@ -2,420 +2,337 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // ===============================================================
-    // Assumed Data Model
-    // ===============================================================
-    //
-    // users/{userId}  (profile document)
-    //   - name:          string  (required, max 200 chars)
-    //   - email:         string  (required, max 320 chars, email format)
-    //   - preferredLang: string  (optional, max 10 chars, e.g. "en", "fr")
-    //   - units:         string  (optional, max 20 chars, e.g. "metric")
-    //   - currency:      string  (optional, max 10 chars, e.g. "USD")
-    //   - createdAt:     timestamp (required, immutable after create)
-    //   - updatedAt:     timestamp (required)
-    //
-    // users/{userId}/vehicles/{vehicleId}
-    //   - make:           string    (required, max 100 chars)
-    //   - model:          string    (required, max 100 chars)
-    //   - year:           int       (required, 1900–2100)
-    //   - plate:          string    (required, max 20 chars)
-    //   - vin:            string    (optional, max 30 chars)
-    //   - fuelType:       string    (optional, max 30 chars)
-    //   - photoUrl:       string    (optional, max 2048 chars, https URL)
-    //   - currentOdometer: number   (optional, >= 0)
-    //   - createdAt:      timestamp (required, immutable after create)
-    //   - updatedAt:      timestamp (required)
-    //
-    // users/{userId}/vehicles/{vehicleId}/fillups/{fillupId}
-    //   - date:         timestamp (required)
-    //   - odometer:     number    (required, > 0)
-    //   - volume:       number    (required, > 0)
-    //   - pricePerUnit: number    (optional, >= 0)
-    //   - totalCost:    number    (required, >= 0)
-    //   - fuelType:     string    (optional, max 30 chars)
-    //   - isFullTank:   bool      (optional)
-    //   - station:      string    (optional, max 200 chars)
-    //   - notes:        string    (optional, max 5000 chars)
-    //   - createdAt:    timestamp (required, immutable after create)
-    //
-    // users/{userId}/vehicles/{vehicleId}/expenses/{expenseId}
-    //   - date:         timestamp (required)
-    //   - category:     string    (required, max 100 chars)
-    //   - amount:       number    (required, > 0)
-    //   - description:  string    (optional, max 500 chars)
-    //   - receiptUrl:   string    (optional, max 2048 chars, https URL)
-    //   - odometer:     number    (optional, > 0)
-    //   - notes:        string    (optional, max 5000 chars)
-    //   - createdAt:    timestamp (required, immutable after create)
-    //
-    // users/{userId}/vehicles/{vehicleId}/services/{serviceId}
-    //   - date:         timestamp (required)
-    //   - type:         string    (required, max 100 chars)
-    //   - odometer:     number    (required, > 0)
-    //   - cost:         number    (optional, >= 0)
-    //   - description:  string    (optional, max 500 chars)
-    //   - parts:        list      (optional, max 50 items, each string max 200 chars)
-    //   - receiptUrl:   string    (optional, max 2048 chars, https URL)
-    //   - notes:        string    (optional, max 5000 chars)
-    //   - createdAt:    timestamp (required, immutable after create)
-    //
-    // users/{userId}/vehicles/{vehicleId}/reminders/{reminderId}
-    //   - type:                string    (required, max 100 chars)
-    //   - intervalKm:          number    (optional, >= 0)
-    //   - intervalDays:        number    (optional, >= 0)
-    //   - lastServiceDate:     timestamp (optional)
-    //   - lastServiceOdometer: number    (optional, >= 0)
-    //   - nextDueDate:         timestamp (optional)
-    //   - nextDueOdometer:     number    (optional, >= 0)
-    //   - isRecurring:         bool      (optional)
-    //   - isActive:            bool      (optional)
-    //   - createdAt:           timestamp (required, immutable after create)
-    //   - updatedAt:           timestamp (required)
-    //
-    // ===============================================================
-
-    // ===============================================================
-    // Default Deny – block all access unless explicitly allowed
-    // ===============================================================
+    // 1. Global Safety Net (Default Deny)
     match /{document=**} {
       allow read, write: if false;
     }
 
-    // ===============================================================
-    // Helper Functions
-    // ===============================================================
-
-    // Check if the user is authenticated
-    function isAuthenticated() {
+    // 2. Hardened Primitives
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    // Check if the authenticated user matches the path userId
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Validate required fields exist in the incoming document
-    function hasRequiredFields(fields) {
-      return request.resource.data.keys().hasAll(fields);
+    function parentUserExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId)) ||
+             existsAfter(/databases/$(database)/documents/users/$(userId));
     }
 
-    // Validate document only contains allowed fields (strict schema)
-    function hasOnlyAllowedFields(fields) {
-      return request.resource.data.keys().hasOnly(fields);
+    function parentVehicleExists(userId, vehicleId) {
+      return exists(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId)) ||
+             existsAfter(/databases/$(database)/documents/users/$(userId)/vehicles/$(vehicleId));
     }
 
-    // Validate immutable fields have not changed on update
-    function areImmutableFieldsUnchanged(fields) {
-      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    function isValidOptionalString(data, field, maxLen) {
+      return !(field in data) || (data[field] is string && data[field].size() <= maxLen);
     }
 
-    // Validate a string field is present, is a string, and within length
-    function validString(field, maxLen) {
-      return request.resource.data[field] is string &&
-             request.resource.data[field].size() >= 1 &&
-             request.resource.data[field].size() <= maxLen;
+    function isValidOptionalNumber(data, field, minVal) {
+      return !(field in data) || (data[field] is number && data[field] >= minVal);
     }
 
-    // Validate an optional string field (absent or valid string within length)
-    function validOptionalString(field, maxLen) {
-      return !(field in request.resource.data) ||
-             (request.resource.data[field] is string &&
-              request.resource.data[field].size() <= maxLen);
+    // 3. Validation Blueprints (Anti-Update-Gap)
+
+    function isValidUserProfile(data, userId) {
+      let requiredKeys = ['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 320 &&
+             data.preferredLang is string && data.preferredLang.size() <= 10 && data.preferredLang in ['en', 'fr'] &&
+             data.units is string && data.units.size() <= 20 && data.units in ['metric', 'imperial'] &&
+             data.currency is string && data.currency.size() <= 10 && data.currency in ['DZD', 'EUR', 'USD', 'CAD', 'GBP', 'MAD', 'CHF'] &&
+             isValidOptionalString(data, 'activeVehicleId', 128) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
-    // Validate an optional URL field (must start with https://)
-    function validOptionalUrl(field, maxLen) {
-      return !(field in request.resource.data) ||
-             (request.resource.data[field] is string &&
-              request.resource.data[field].size() <= maxLen &&
-              request.resource.data[field].matches("^https://.*"));
+    function isValidVehicle(data, userId, vehicleId) {
+      let requiredKeys = ['id', 'userId', 'make', 'model', 'year', 'fuelType', 'currentOdometer', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['id', 'userId', 'name', 'make', 'model', 'year', 'plate', 'vin', 'fuelType', 'photoUrl', 'currentOdometer', 'notes', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.id is string && data.id == vehicleId && data.id.size() <= 128 &&
+             data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             isValidOptionalString(data, 'name', 100) &&
+             data.make is string && data.make.size() >= 1 && data.make.size() <= 100 &&
+             data.model is string && data.model.size() >= 1 && data.model.size() <= 100 &&
+             data.year is number && data.year >= 1900 && data.year <= 2100 &&
+             isValidOptionalString(data, 'plate', 30) &&
+             isValidOptionalString(data, 'vin', 30) &&
+             data.fuelType is string && data.fuelType.size() <= 30 && data.fuelType in ['gasoline', 'diesel', 'lpg', 'electric', 'hybrid', 'ethanol', 'cng'] &&
+             isValidOptionalString(data, 'photoUrl', 2048) &&
+             data.currentOdometer is number && data.currentOdometer >= 0 &&
+             isValidOptionalString(data, 'notes', 5000) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
-    // Validate email format
-    function isValidEmail(email) {
-      return email is string &&
-             email.size() <= 320 &&
-             email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    function isValidFillUp(data, userId, fillupId) {
+      let requiredKeys = ['id', 'userId', 'vehicleId', 'date', 'odometer', 'volume', 'pricePerUnit', 'totalCost', 'fuelType', 'isFullTank', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['id', 'userId', 'vehicleId', 'date', 'odometer', 'volume', 'pricePerUnit', 'totalCost', 'fuelType', 'isFullTank', 'station', 'notes', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.id is string && data.id == fillupId && data.id.size() <= 128 &&
+             data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             isValidId(data.vehicleId) &&
+             data.date is string && data.date.size() >= 1 && data.date.size() <= 64 &&
+             data.odometer is number && data.odometer >= 0 &&
+             data.volume is number && data.volume > 0 &&
+             data.pricePerUnit is number && data.pricePerUnit >= 0 &&
+             data.totalCost is number && data.totalCost >= 0 &&
+             data.fuelType is string && data.fuelType.size() >= 1 && data.fuelType.size() <= 30 &&
+             data.isFullTank is bool &&
+             isValidOptionalString(data, 'station', 200) &&
+             isValidOptionalString(data, 'notes', 5000) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
-    // Validate a timestamp field is present and is a timestamp
-    function validTimestamp(field) {
-      return request.resource.data[field] is timestamp;
+    function isValidExpense(data, userId, expenseId) {
+      let requiredKeys = ['id', 'userId', 'vehicleId', 'date', 'category', 'amount', 'description', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['id', 'userId', 'vehicleId', 'date', 'category', 'amount', 'description', 'receiptUrl', 'odometer', 'notes', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.id is string && data.id == expenseId && data.id.size() <= 128 &&
+             data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             isValidId(data.vehicleId) &&
+             data.date is string && data.date.size() >= 1 && data.date.size() <= 64 &&
+             data.category is string && data.category.size() >= 1 && data.category.size() <= 100 &&
+             data.amount is number && data.amount > 0 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 500 &&
+             isValidOptionalString(data, 'receiptUrl', 2048) &&
+             isValidOptionalNumber(data, 'odometer', 0) &&
+             isValidOptionalString(data, 'notes', 5000) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
-    // Validate an optional timestamp field
-    function validOptionalTimestamp(field) {
-      return !(field in request.resource.data) ||
-             request.resource.data[field] is timestamp;
+    function isValidPartsList(data) {
+      return !('parts' in data) || (
+        data.parts is list &&
+        data.parts.size() <= 50 &&
+        (data.parts.size() == 0 || (data.parts[0] is string && data.parts[0].size() <= 200))
+      );
     }
 
-    // Validate a number field > 0
-    function validPositiveNumber(field) {
-      return request.resource.data[field] is number &&
-             request.resource.data[field] > 0;
+    function isValidService(data, userId, serviceId) {
+      let requiredKeys = ['id', 'userId', 'vehicleId', 'date', 'type', 'odometer', 'cost', 'description', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['id', 'userId', 'vehicleId', 'date', 'type', 'odometer', 'cost', 'description', 'parts', 'receiptUrl', 'notes', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.id is string && data.id == serviceId && data.id.size() <= 128 &&
+             data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             isValidId(data.vehicleId) &&
+             data.date is string && data.date.size() >= 1 && data.date.size() <= 64 &&
+             data.type is string && data.type.size() >= 1 && data.type.size() <= 100 &&
+             data.odometer is number && data.odometer >= 0 &&
+             data.cost is number && data.cost >= 0 &&
+             data.description is string && data.description.size() >= 1 && data.description.size() <= 500 &&
+             isValidPartsList(data) &&
+             isValidOptionalString(data, 'receiptUrl', 2048) &&
+             isValidOptionalString(data, 'notes', 5000) &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
-    // Validate a number field >= 0
-    function validNonNegativeNumber(field) {
-      return request.resource.data[field] is number &&
-             request.resource.data[field] >= 0;
+    function isValidReminder(data, userId, reminderId) {
+      let requiredKeys = ['id', 'userId', 'vehicleId', 'type', 'isRecurring', 'isActive', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['id', 'userId', 'vehicleId', 'type', 'title', 'intervalKm', 'intervalDays', 'lastServiceDate', 'lastServiceOdometer', 'nextDueDate', 'nextDueOdometer', 'isRecurring', 'isActive', 'createdAt', 'updatedAt'];
+      return data.keys().hasAll(requiredKeys) &&
+             data.keys().hasOnly(allowedKeys) &&
+             data.id is string && data.id == reminderId && data.id.size() <= 128 &&
+             data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
+             isValidId(data.vehicleId) &&
+             data.type is string && data.type.size() >= 1 && data.type.size() <= 100 &&
+             isValidOptionalString(data, 'title', 200) &&
+             isValidOptionalNumber(data, 'intervalKm', 0) &&
+             isValidOptionalNumber(data, 'intervalDays', 0) &&
+             isValidOptionalString(data, 'lastServiceDate', 64) &&
+             isValidOptionalNumber(data, 'lastServiceOdometer', 0) &&
+             isValidOptionalString(data, 'nextDueDate', 64) &&
+             isValidOptionalNumber(data, 'nextDueOdometer', 0) &&
+             data.isRecurring is bool &&
+             data.isActive is bool &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
     }
 
-    // Validate an optional number field >= 0
-    function validOptionalNonNegativeNumber(field) {
-      return !(field in request.resource.data) ||
-             (request.resource.data[field] is number &&
-              request.resource.data[field] >= 0);
-    }
+    // 4. Collection Rules (Denial of Wallet Order: Auth -> Static Validation -> Relational DB Checks)
 
-    // Validate an optional number field > 0
-    function validOptionalPositiveNumber(field) {
-      return !(field in request.resource.data) ||
-             (request.resource.data[field] is number &&
-              request.resource.data[field] > 0);
-    }
-
-    // Validate an optional boolean field
-    function validOptionalBool(field) {
-      return !(field in request.resource.data) ||
-             request.resource.data[field] is bool;
-    }
-
-    // ===============================================================
-    // Domain Validators
-    // Called in BOTH create AND update rules (Validator Function Pattern)
-    // ===============================================================
-
-    // --- User Profile ---
-    function isValidProfile() {
-      let allFields = ['name', 'email', 'preferredLang', 'units', 'currency', 'createdAt', 'updatedAt'];
-      let requiredFields = ['name', 'email', 'createdAt', 'updatedAt'];
-      return hasRequiredFields(requiredFields) &&
-             hasOnlyAllowedFields(allFields) &&
-             validString('name', 200) &&
-             isValidEmail(request.resource.data.email) &&
-             validOptionalString('preferredLang', 10) &&
-             validOptionalString('units', 20) &&
-             validOptionalString('currency', 10) &&
-             validTimestamp('createdAt') &&
-             validTimestamp('updatedAt');
-    }
-
-    // --- Vehicle ---
-    function isValidVehicle() {
-      let allFields = ['name', 'make', 'model', 'year', 'plate', 'vin', 'fuelType', 'photoUrl', 'currentOdometer', 'notes', 'createdAt', 'updatedAt'];
-      let requiredFields = ['make', 'model', 'year', 'createdAt', 'updatedAt'];
-      return hasRequiredFields(requiredFields) &&
-             hasOnlyAllowedFields(allFields) &&
-             validOptionalString('name', 100) &&
-             validString('make', 100) &&
-             validString('model', 100) &&
-             request.resource.data.year is int &&
-             request.resource.data.year >= 1900 &&
-             request.resource.data.year <= 2100 &&
-             validOptionalString('plate', 30) &&
-             validOptionalString('vin', 30) &&
-             validOptionalString('fuelType', 30) &&
-             validOptionalUrl('photoUrl', 2048) &&
-             validOptionalNonNegativeNumber('currentOdometer') &&
-             validOptionalString('notes', 5000) &&
-             validTimestamp('createdAt') &&
-             validTimestamp('updatedAt');
-    }
-
-    // --- Fillup ---
-    function isValidFillup() {
-      let allFields = ['date', 'odometer', 'volume', 'pricePerUnit', 'totalCost', 'fuelType', 'isFullTank', 'station', 'notes', 'createdAt'];
-      let requiredFields = ['date', 'odometer', 'volume', 'totalCost', 'createdAt'];
-      return hasRequiredFields(requiredFields) &&
-             hasOnlyAllowedFields(allFields) &&
-             validTimestamp('date') &&
-             validPositiveNumber('odometer') &&
-             validPositiveNumber('volume') &&
-             validOptionalNonNegativeNumber('pricePerUnit') &&
-             validNonNegativeNumber('totalCost') &&
-             validOptionalString('fuelType', 30) &&
-             validOptionalBool('isFullTank') &&
-             validOptionalString('station', 200) &&
-             validOptionalString('notes', 5000) &&
-             validTimestamp('createdAt');
-    }
-
-    // --- Expense ---
-    function isValidExpense() {
-      let allFields = ['date', 'category', 'amount', 'description', 'receiptUrl', 'odometer', 'notes', 'createdAt'];
-      let requiredFields = ['date', 'category', 'amount', 'createdAt'];
-      return hasRequiredFields(requiredFields) &&
-             hasOnlyAllowedFields(allFields) &&
-             validTimestamp('date') &&
-             validString('category', 100) &&
-             validPositiveNumber('amount') &&
-             validOptionalString('description', 500) &&
-             validOptionalUrl('receiptUrl', 2048) &&
-             validOptionalPositiveNumber('odometer') &&
-             validOptionalString('notes', 5000) &&
-             validTimestamp('createdAt');
-    }
-
-    // --- Service ---
-    function isValidService() {
-      let allFields = ['date', 'type', 'odometer', 'cost', 'description', 'parts', 'receiptUrl', 'notes', 'createdAt'];
-      let requiredFields = ['date', 'type', 'odometer', 'createdAt'];
-      return hasRequiredFields(requiredFields) &&
-             hasOnlyAllowedFields(allFields) &&
-             validTimestamp('date') &&
-             validString('type', 100) &&
-             validPositiveNumber('odometer') &&
-             validOptionalNonNegativeNumber('cost') &&
-             validOptionalString('description', 500) &&
-             isValidOptionalPartsList() &&
-             validOptionalUrl('receiptUrl', 2048) &&
-             validOptionalString('notes', 5000) &&
-             validTimestamp('createdAt');
-    }
-
-    // Validate the optional parts array – each element must be a string <= 200 chars
-    function isValidOptionalPartsList() {
-      return !('parts' in request.resource.data) ||
-             (request.resource.data.parts is list &&
-              request.resource.data.parts.size() <= 50 &&
-              (request.resource.data.parts.size() == 0 ||
-               // Validate individual elements (CEL limits deep iteration;
-               // check first 10 elements as best-effort defense)
-               (request.resource.data.parts[0] is string && request.resource.data.parts[0].size() <= 200 &&
-                (request.resource.data.parts.size() < 2 || (request.resource.data.parts[1] is string && request.resource.data.parts[1].size() <= 200)) &&
-                (request.resource.data.parts.size() < 3 || (request.resource.data.parts[2] is string && request.resource.data.parts[2].size() <= 200)) &&
-                (request.resource.data.parts.size() < 4 || (request.resource.data.parts[3] is string && request.resource.data.parts[3].size() <= 200)) &&
-                (request.resource.data.parts.size() < 5 || (request.resource.data.parts[4] is string && request.resource.data.parts[4].size() <= 200)) &&
-                (request.resource.data.parts.size() < 6 || (request.resource.data.parts[5] is string && request.resource.data.parts[5].size() <= 200)) &&
-                (request.resource.data.parts.size() < 7 || (request.resource.data.parts[6] is string && request.resource.data.parts[6].size() <= 200)) &&
-                (request.resource.data.parts.size() < 8 || (request.resource.data.parts[7] is string && request.resource.data.parts[7].size() <= 200)) &&
-                (request.resource.data.parts.size() < 9 || (request.resource.data.parts[8] is string && request.resource.data.parts[8].size() <= 200)) &&
-                (request.resource.data.parts.size() < 10 || (request.resource.data.parts[9] is string && request.resource.data.parts[9].size() <= 200))
-               )
-              ));
-    }
-
-    // --- Reminder ---
-    function isValidReminder() {
-      let allFields = ['type', 'intervalKm', 'intervalDays', 'lastServiceDate', 'lastServiceOdometer', 'nextDueDate', 'nextDueOdometer', 'isRecurring', 'isActive', 'createdAt', 'updatedAt'];
-      let requiredFields = ['type', 'createdAt', 'updatedAt'];
-      return hasRequiredFields(requiredFields) &&
-             hasOnlyAllowedFields(allFields) &&
-             validString('type', 100) &&
-             validOptionalNonNegativeNumber('intervalKm') &&
-             validOptionalNonNegativeNumber('intervalDays') &&
-             // At least one interval must be present and > 0
-             hasAtLeastOneInterval() &&
-             validOptionalTimestamp('lastServiceDate') &&
-             validOptionalNonNegativeNumber('lastServiceOdometer') &&
-             validOptionalTimestamp('nextDueDate') &&
-             validOptionalNonNegativeNumber('nextDueOdometer') &&
-             validOptionalBool('isRecurring') &&
-             validOptionalBool('isActive') &&
-             validTimestamp('createdAt') &&
-             validTimestamp('updatedAt');
-    }
-
-    // At least one of intervalKm or intervalDays must be > 0
-    function hasAtLeastOneInterval() {
-      let data = request.resource.data;
-      let hasKm = 'intervalKm' in data && data.intervalKm is number && data.intervalKm > 0;
-      let hasDays = 'intervalDays' in data && data.intervalDays is number && data.intervalDays > 0;
-      return hasKm || hasDays;
-    }
-
-    // ===============================================================
-    // Collection Rules
-    // ===============================================================
-
-    // --- User Profile ---
     match /users/{userId} {
-      // Owner can read their own profile
-      allow read: if isOwner(userId);
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 
-      // Owner can create their own profile with valid data
       allow create: if isOwner(userId) &&
-                       isValidProfile();
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().createdAt == request.time &&
+                       incoming().updatedAt == request.time;
 
-      // Owner can update their own profile; createdAt is immutable
       allow update: if isOwner(userId) &&
-                       isValidProfile() &&
-                       areImmutableFieldsUnchanged(['createdAt']);
+                       isValidId(userId) &&
+                       isValidUserProfile(incoming(), userId) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().updatedAt == request.time &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'updatedAt']);
 
-      // Owner can delete their own profile
-      allow delete: if isOwner(userId);
+      allow delete: if isOwner(userId) && isValidId(userId);
 
-      // --- Vehicles ---
       match /vehicles/{vehicleId} {
-        allow read: if isOwner(userId);
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(vehicleId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 
         allow create: if isOwner(userId) &&
-                         isValidVehicle();
+                         isValidId(userId) &&
+                         isValidId(vehicleId) &&
+                         isValidVehicle(incoming(), userId, vehicleId) &&
+                         incoming().createdAt == request.time &&
+                         incoming().updatedAt == request.time &&
+                         parentUserExists(userId);
 
         allow update: if isOwner(userId) &&
-                         isValidVehicle() &&
-                         areImmutableFieldsUnchanged(['createdAt']);
+                         isValidId(userId) &&
+                         isValidId(vehicleId) &&
+                         isValidVehicle(incoming(), userId, vehicleId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt == request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'make', 'model', 'year', 'plate', 'vin', 'fuelType', 'photoUrl', 'currentOdometer', 'notes', 'updatedAt']) &&
+                         parentUserExists(userId);
 
-        allow delete: if isOwner(userId);
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(vehicleId) && parentUserExists(userId);
+      }
 
-        // --- Fillups ---
-        match /fillups/{fillupId} {
-          allow read: if isOwner(userId);
+      match /fillups/{fillupId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(fillupId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 
-          allow create: if isOwner(userId) &&
-                           isValidFillup();
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(fillupId) &&
+                         isValidFillUp(incoming(), userId, fillupId) &&
+                         incoming().createdAt == request.time &&
+                         incoming().updatedAt == request.time &&
+                         parentUserExists(userId) &&
+                         parentVehicleExists(userId, incoming().vehicleId);
 
-          allow update: if isOwner(userId) &&
-                           isValidFillup() &&
-                           areImmutableFieldsUnchanged(['createdAt']);
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(fillupId) &&
+                         isValidFillUp(incoming(), userId, fillupId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().vehicleId == existing().vehicleId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt == request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'odometer', 'volume', 'pricePerUnit', 'totalCost', 'fuelType', 'isFullTank', 'station', 'notes', 'updatedAt']) &&
+                         parentUserExists(userId);
 
-          allow delete: if isOwner(userId);
-        }
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(fillupId) && parentUserExists(userId);
+      }
 
-        // --- Expenses ---
-        match /expenses/{expenseId} {
-          allow read: if isOwner(userId);
+      match /expenses/{expenseId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(expenseId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 
-          allow create: if isOwner(userId) &&
-                           isValidExpense();
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(expenseId) &&
+                         isValidExpense(incoming(), userId, expenseId) &&
+                         incoming().createdAt == request.time &&
+                         incoming().updatedAt == request.time &&
+                         parentUserExists(userId) &&
+                         parentVehicleExists(userId, incoming().vehicleId);
 
-          allow update: if isOwner(userId) &&
-                           isValidExpense() &&
-                           areImmutableFieldsUnchanged(['createdAt']);
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(expenseId) &&
+                         isValidExpense(incoming(), userId, expenseId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().vehicleId == existing().vehicleId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt == request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'category', 'amount', 'description', 'receiptUrl', 'odometer', 'notes', 'updatedAt']) &&
+                         parentUserExists(userId);
 
-          allow delete: if isOwner(userId);
-        }
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(expenseId) && parentUserExists(userId);
+      }
 
-        // --- Services ---
-        match /services/{serviceId} {
-          allow read: if isOwner(userId);
+      match /services/{serviceId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(serviceId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 
-          allow create: if isOwner(userId) &&
-                           isValidService();
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(serviceId) &&
+                         isValidService(incoming(), userId, serviceId) &&
+                         incoming().createdAt == request.time &&
+                         incoming().updatedAt == request.time &&
+                         parentUserExists(userId) &&
+                         parentVehicleExists(userId, incoming().vehicleId);
 
-          allow update: if isOwner(userId) &&
-                           isValidService() &&
-                           areImmutableFieldsUnchanged(['createdAt']);
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(serviceId) &&
+                         isValidService(incoming(), userId, serviceId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().vehicleId == existing().vehicleId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt == request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'type', 'odometer', 'cost', 'description', 'parts', 'receiptUrl', 'notes', 'updatedAt']) &&
+                         parentUserExists(userId);
 
-          allow delete: if isOwner(userId);
-        }
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(serviceId) && parentUserExists(userId);
+      }
 
-        // --- Reminders ---
-        match /reminders/{reminderId} {
-          allow read: if isOwner(userId);
+      match /reminders/{reminderId} {
+        allow get: if isOwner(userId) && isValidId(userId) && isValidId(reminderId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.userId == request.auth.uid;
 
-          allow create: if isOwner(userId) &&
-                           isValidReminder();
+        allow create: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(reminderId) &&
+                         isValidReminder(incoming(), userId, reminderId) &&
+                         incoming().createdAt == request.time &&
+                         incoming().updatedAt == request.time &&
+                         parentUserExists(userId) &&
+                         parentVehicleExists(userId, incoming().vehicleId);
 
-          allow update: if isOwner(userId) &&
-                           isValidReminder() &&
-                           areImmutableFieldsUnchanged(['createdAt']);
+        allow update: if isOwner(userId) &&
+                         isValidId(userId) &&
+                         isValidId(reminderId) &&
+                         isValidReminder(incoming(), userId, reminderId) &&
+                         incoming().id == existing().id &&
+                         incoming().userId == existing().userId &&
+                         incoming().vehicleId == existing().vehicleId &&
+                         incoming().createdAt == existing().createdAt &&
+                         incoming().updatedAt == request.time &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['type', 'title', 'intervalKm', 'intervalDays', 'lastServiceDate', 'lastServiceOdometer', 'nextDueDate', 'nextDueOdometer', 'isRecurring', 'isActive', 'updatedAt']) &&
+                         parentUserExists(userId);
 
-          allow delete: if isOwner(userId);
-        }
+        allow delete: if isOwner(userId) && isValidId(userId) && isValidId(reminderId) && parentUserExists(userId);
       }
     }
   }

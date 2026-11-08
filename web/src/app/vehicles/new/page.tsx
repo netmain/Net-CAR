@@ -31,7 +31,7 @@ export default function NewVehiclePage() {
   const [plate, setPlate] = useState('');
   const [vin, setVin] = useState('');
   const [fuelType, setFuelType] = useState<FuelType>('gasoline');
-  const [odometer, setOdometer] = useState<number | ''>('');
+  const [odometer, setOdometer] = useState<number | ''>(0);
   const [photoUrl, setPhotoUrl] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -47,8 +47,8 @@ export default function NewVehiclePage() {
     if (!year || year < 1900 || year > new Date().getFullYear() + 2) {
       errs.year = lang === 'fr' ? 'Année invalide' : 'Please enter a valid year';
     }
-    if (odometer === '' || Number(odometer) < 0) {
-      errs.odometer = lang === 'fr' ? 'Kilométrage initial requis' : 'Initial odometer reading is required';
+    if (odometer !== '' && Number(odometer) < 0) {
+      errs.odometer = lang === 'fr' ? 'Kilométrage invalide' : 'Invalid odometer reading';
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -68,7 +68,7 @@ export default function NewVehiclePage() {
         plate: plate.trim() ? plate.trim().toUpperCase() : '',
         vin: vin.trim() || undefined,
         fuelType,
-        currentOdometer: Number(odometer),
+        currentOdometer: odometer === '' ? 0 : Number(odometer),
         photoUrl: photoUrl.trim() || undefined,
         notes: notes.trim() || undefined,
       });

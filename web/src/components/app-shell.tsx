@@ -7,6 +7,7 @@ import { useApp } from '@/lib/app-context';
 import { Navbar } from './navbar';
 import { Sidebar } from './sidebar';
 import { AuthModal } from './auth-modal';
+import { AddVehicleModal } from './add-vehicle-modal';
 import { 
   LayoutDashboard, 
   Fuel, 
@@ -17,8 +18,10 @@ import {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { t, reminders } = useApp();
-  const dueCount = reminders.filter(r => r.isActive).length;
+  const { t, reminders, activeVehicle } = useApp();
+  const dueCount = reminders.filter(
+    (r) => r.isActive && (!activeVehicle || r.vehicleId === activeVehicle.id)
+  ).length;
 
   const mobileNav = [
     { href: '/', label: t.nav.dashboard, icon: LayoutDashboard },
@@ -32,6 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-screen bg-[#080b11] text-slate-100 flex flex-col font-sans pb-16 md:pb-0 carbon-grid">
       <Navbar />
       <AuthModal />
+      <AddVehicleModal />
       <div className="flex flex-1">
         <div className="hidden md:block">
           <Sidebar />

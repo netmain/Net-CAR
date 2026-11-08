@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/app-context';
 import { 
   Download, 
@@ -17,6 +17,7 @@ export default function ReportsPage() {
   const { 
     vehicles, 
     activeVehicle, 
+    setActiveVehicleId,
     fillUps, 
     expenses, 
     services, 
@@ -26,6 +27,12 @@ export default function ReportsPage() {
   } = useApp();
 
   const [selectedVehicleId, setSelectedVehicleId] = useState<string>(activeVehicle?.id || 'all');
+
+  useEffect(() => {
+    if (activeVehicle?.id) {
+      setSelectedVehicleId(activeVehicle.id);
+    }
+  }, [activeVehicle?.id]);
 
   const currencySymbol = userProfile.currency === 'EUR' ? '€' : userProfile.currency === 'USD' ? '$' : userProfile.currency;
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
@@ -182,7 +189,13 @@ export default function ReportsPage() {
           {/* Vehicle Filter Selector */}
           <select
             value={selectedVehicleId}
-            onChange={(e) => setSelectedVehicleId(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value;
+              setSelectedVehicleId(val);
+              if (val !== 'all') {
+                setActiveVehicleId(val);
+              }
+            }}
             className="rounded-xl border border-slate-800 bg-[#0F1522] px-3.5 py-2 text-sm font-mono font-semibold text-slate-200 shadow-sm focus:border-amber-500 focus:outline-none"
           >
             <option value="all" className="bg-slate-900">

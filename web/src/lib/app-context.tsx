@@ -1,53 +1,92 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  Vehicle, 
-  FillUp, 
-  Expense, 
-  Service, 
-  Reminder, 
-  UserProfile, 
-  SupportedLanguage, 
-  SupportedCurrency, 
-  Units 
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import {
+  Vehicle,
+  FillUp,
+  Expense,
+  Service,
+  Reminder,
+  UserProfile,
+  SupportedLanguage,
 } from '@/types';
 import { translations } from '@/lib/translations';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
-  signOut as fbSignOut, 
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut as fbSignOut,
   onAuthStateChanged,
-  updateProfile
+  updateProfile,
 } from 'firebase/auth';
-import { auth } from './firebase';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  serverTimestamp,
+  query,
+  where,
+} from 'firebase/firestore';
+import {
+  auth,
+  db,
+  OperationType,
+  handleFirestoreError,
+  testFirestoreConnection,
+} from './firebase';
+
+export type SyncStatus = 'synced' | 'syncing' | 'local' | 'error';
+
+interface AppUser {
+  uid: string;
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+  isDemo?: boolean;
+}
 
 interface AppContextType {
-  user: { uid: string; email: string; displayName?: string; photoURL?: string } | null;
+  user: AppUser | null;
   userProfile: UserProfile;
   lang: SupportedLanguage;
   setLang: (lang: SupportedLanguage) => void;
   t: typeof translations.en;
   vehicles: Vehicle[];
   activeVehicle: Vehicle | null;
+  activeVehicleId: string;
   setActiveVehicleId: (id: string) => void;
   fillUps: FillUp[];
   expenses: Expense[];
   services: Service[];
   reminders: Reminder[];
   loading: boolean;
+  syncStatus: SyncStatus;
+  lastSyncedAt: string | null;
   authModalOpen: boolean;
   setAuthModalOpen: (open: boolean) => void;
-  
+  addVehicleModalOpen: boolean;
+  setAddVehicleModalOpen: (open: boolean) => void;
+
   // Auth actions
-  signInWithEmail: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
-  signUpWithEmail: (email: string, password: string, name?: string) => Promise<{ success: boolean; error?: string }>;
+  signInWithEmail: (
+    email: string,
+    password: string
+  ) => Promise<{ success: boolean; error?: string; consoleUrl?: string }>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    name?: string
+  ) => Promise<{ success: boolean; error?: string; consoleUrl?: string }>;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signOut: () => Promise<void>;
   signInDemo: () => void;
-  
+
   // CRUD actions
   addVehicle: (v: Omit<Vehicle, 'id'>) => Promise<string>;
   updateVehicle: (id: string, v: Partial<Vehicle>) => Promise<void>;
@@ -78,6 +117,7 @@ const defaultProfile: UserProfile = {
   preferredLang: 'fr',
   units: 'metric',
   currency: 'DZD',
+  activeVehicleId: 'veh-1',
 };
 
 const initialVehicles: Vehicle[] = [
@@ -90,7 +130,8 @@ const initialVehicles: Vehicle[] = [
     plate: '00124-116-16',
     fuelType: 'diesel',
     currentOdometer: 64250,
-    photoUrl: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
+    photoUrl:
+      'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
     notes: 'Vidange chaque 10 000 km avec filtre à huile',
   },
   {
@@ -102,16 +143,17 @@ const initialVehicles: Vehicle[] = [
     plate: '09834-118-31',
     fuelType: 'gasoline',
     currentOdometer: 28400,
-    photoUrl: 'https://images.unsplash.com/photo-1619767886558-efdc259cde1a?auto=format&fit=crop&w=800&q=80',
+    photoUrl:
+      'https://images.unsplash.com/photo-1619767886558-efdc259cde1a?auto=format&fit=crop&w=800&q=80',
     notes: 'Véhicule urbain',
-  }
+  },
 ];
 
 const initialFillUps: FillUp[] = [
   {
     id: 'f-1',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 3 * 86400000).toISOString(),
+    date: '2026-11-05T10:00:00.000Z',
     odometer: 64250,
     volume: 50.0,
     pricePerUnit: 29.0,
@@ -124,7 +166,7 @@ const initialFillUps: FillUp[] = [
   {
     id: 'f-2',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 14 * 86400000).toISOString(),
+    date: '2026-10-25T10:00:00.000Z',
     odometer: 63480,
     volume: 48.0,
     pricePerUnit: 29.0,
@@ -136,7 +178,7 @@ const initialFillUps: FillUp[] = [
   {
     id: 'f-3',
     vehicleId: 'veh-2',
-    date: new Date(Date.now() - 6 * 86400000).toISOString(),
+    date: '2026-11-02T10:00:00.000Z',
     odometer: 28400,
     volume: 38.0,
     pricePerUnit: 45.6,
@@ -144,14 +186,14 @@ const initialFillUps: FillUp[] = [
     fuelType: 'gasoline',
     isFullTank: true,
     station: 'Naftal Bir Mourad Rais',
-  }
+  },
 ];
 
 const initialExpenses: Expense[] = [
   {
     id: 'e-1',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 10 * 86400000).toISOString(),
+    date: '2026-10-29T10:00:00.000Z',
     category: 'parking',
     amount: 500.0,
     description: 'Parking Centre Ville',
@@ -160,7 +202,7 @@ const initialExpenses: Expense[] = [
   {
     id: 'e-2',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 25 * 86400000).toISOString(),
+    date: '2026-10-14T10:00:00.000Z',
     category: 'insurance',
     amount: 18500.0,
     description: 'Assurance Tous Risques CAAT',
@@ -168,18 +210,18 @@ const initialExpenses: Expense[] = [
   {
     id: 'e-3',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 40 * 86400000).toISOString(),
+    date: '2026-09-29T10:00:00.000Z',
     category: 'carWash',
     amount: 800.0,
     description: 'Lavage complet intérieur / extérieur',
-  }
+  },
 ];
 
 const initialServices: Service[] = [
   {
     id: 's-1',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 45 * 86400000).toISOString(),
+    date: '2026-09-24T10:00:00.000Z',
     type: 'oilChange',
     odometer: 60000,
     cost: 7500.0,
@@ -189,13 +231,13 @@ const initialServices: Service[] = [
   {
     id: 's-2',
     vehicleId: 'veh-1',
-    date: new Date(Date.now() - 120 * 86400000).toISOString(),
+    date: '2026-07-11T10:00:00.000Z',
     type: 'brakes',
     odometer: 54000,
     cost: 12000.0,
     description: 'Remplacement plaquettes de frein avant Brembo',
     parts: ['Plaquettes de frein avant'],
-  }
+  },
 ];
 
 const initialReminders: Reminder[] = [
@@ -208,7 +250,7 @@ const initialReminders: Reminder[] = [
     intervalDays: 365,
     lastServiceOdometer: 60000,
     nextDueOdometer: 75000,
-    nextDueDate: new Date(Date.now() + 180 * 86400000).toISOString(),
+    nextDueDate: '2027-05-07T10:00:00.000Z',
     isRecurring: true,
     isActive: true,
   },
@@ -218,7 +260,7 @@ const initialReminders: Reminder[] = [
     type: 'inspection',
     title: 'Technical Inspection (Contrôle Technique)',
     intervalDays: 730,
-    nextDueDate: new Date(Date.now() + 60 * 86400000).toISOString(),
+    nextDueDate: '2027-01-07T10:00:00.000Z',
     isRecurring: true,
     isActive: true,
   },
@@ -231,155 +273,802 @@ const initialReminders: Reminder[] = [
     nextDueOdometer: 30000,
     isRecurring: true,
     isActive: true,
-  }
+  },
 ];
+
+function stripUndefined<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const result: Record<string, any> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined && v !== '') {
+      result[k] = v;
+    }
+  }
+  return result;
+}
+
+function normalizeTimestampField(val: any): string | undefined {
+  if (!val) return undefined;
+  if (typeof val === 'string') return val;
+  if (typeof val?.toDate === 'function') {
+    return val.toDate().toISOString();
+  }
+  return String(val);
+}
 
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<{ uid: string; email: string; displayName?: string; photoURL?: string } | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [addVehicleModalOpen, setAddVehicleModalOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<UserProfile>(defaultProfile);
-  const [lang, setLangState] = useState<SupportedLanguage>(() => {
-    if (typeof window !== 'undefined') {
-      const savedLang = localStorage.getItem('netcar_lang') as SupportedLanguage;
-      if (savedLang && (savedLang === 'en' || savedLang === 'fr')) {
-        return savedLang;
-      }
-    }
-    return 'fr';
-  });
+  const [lang, setLangState] = useState<SupportedLanguage>('fr');
   const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
-  const [activeVehicleId, setActiveVehicleId] = useState<string>('veh-1');
+  const [activeVehicleId, setActiveVehicleIdState] = useState<string>('veh-1');
   const [fillUps, setFillUps] = useState<FillUp[]>(initialFillUps);
   const [expenses, setExpenses] = useState<Expense[]>(initialExpenses);
   const [services, setServices] = useState<Service[]>(initialServices);
   const [reminders, setReminders] = useState<Reminder[]>(initialReminders);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [loading] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('local');
+  const [lastSyncedAt, setLastSyncedAt] = useState<string | null>(null);
+  const isCloudReadyRef = useRef<boolean>(false);
 
-  // Initialize from LocalStorage & Firebase Auth
-  useEffect(() => {
+  const saveToLocal = useCallback((key: string, data: any) => {
     if (typeof window !== 'undefined') {
-      // Check saved user session
-      const savedUser = localStorage.getItem('netcar_user');
-      if (savedUser) {
-        try {
-          const parsed = JSON.parse(savedUser);
-          setUser(parsed);
-        } catch (e) {}
-      } else {
-        // Default to demo driver session
-        const defaultUser = { uid: 'usr-karim', email: 'karim.mansouri@netcar.app', displayName: 'Karim Mansouri' };
-        setUser(defaultUser);
-        localStorage.setItem('netcar_user', JSON.stringify(defaultUser));
-      }
-
-      const savedVehicles = localStorage.getItem('netcar_vehicles');
-      if (savedVehicles) {
-        try { setVehicles(JSON.parse(savedVehicles)); } catch (e) {}
-      }
-
-      const savedFillups = localStorage.getItem('netcar_fillups');
-      if (savedFillups) {
-        try { setFillUps(JSON.parse(savedFillups)); } catch (e) {}
-      }
-
-      const savedExpenses = localStorage.getItem('netcar_expenses');
-      if (savedExpenses) {
-        try { setExpenses(JSON.parse(savedExpenses)); } catch (e) {}
-      }
-
-      const savedServices = localStorage.getItem('netcar_services');
-      if (savedServices) {
-        try { setServices(JSON.parse(savedServices)); } catch (e) {}
-      }
-
-      const savedReminders = localStorage.getItem('netcar_reminders');
-      if (savedReminders) {
-        try { setReminders(JSON.parse(savedReminders)); } catch (e) {}
-      }
-
-      const savedProfile = localStorage.getItem('netcar_profile');
-      if (savedProfile) {
-        try { setUserProfile(JSON.parse(savedProfile)); } catch (e) {}
-      }
-
-      // Listen to Firebase Auth
       try {
-        const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
-          if (fbUser) {
-            const u = {
-              uid: fbUser.uid,
-              email: fbUser.email || '',
-              displayName: fbUser.displayName || fbUser.email?.split('@')[0] || '',
-              photoURL: fbUser.photoURL || undefined
-            };
-            setUser(u);
-            localStorage.setItem('netcar_user', JSON.stringify(u));
-            setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName || prev.name }));
-          }
-        });
-        return () => unsubscribe();
-      } catch (e) {
-        console.warn('Firebase Auth state listener skipped:', e);
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch {
+        // Ignore storage quota errors
       }
     }
   }, []);
 
-  const saveToLocal = (key: string, data: any) => {
+  // Load initial state from localStorage & test Firestore connection
+  useEffect(() => {
+    testFirestoreConnection();
+
     if (typeof window !== 'undefined') {
-      localStorage.setItem(key, JSON.stringify(data));
+      const savedLang = localStorage.getItem('netcar_lang') as SupportedLanguage;
+      if (savedLang === 'en' || savedLang === 'fr') {
+        setLangState(savedLang);
+      }
+
+      const savedActiveVehId = localStorage.getItem('netcar_active_vehicle_id');
+      if (savedActiveVehId) {
+        setActiveVehicleIdState(savedActiveVehId);
+      }
+
+      const savedVehicles = localStorage.getItem('netcar_vehicles');
+      if (savedVehicles) {
+        try {
+          const parsed = JSON.parse(savedVehicles);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setVehicles(parsed);
+          }
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+
+      const savedFillups = localStorage.getItem('netcar_fillups');
+      if (savedFillups) {
+        try {
+          setFillUps(JSON.parse(savedFillups));
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+
+      const savedExpenses = localStorage.getItem('netcar_expenses');
+      if (savedExpenses) {
+        try {
+          setExpenses(JSON.parse(savedExpenses));
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+
+      const savedServices = localStorage.getItem('netcar_services');
+      if (savedServices) {
+        try {
+          setServices(JSON.parse(savedServices));
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+
+      const savedReminders = localStorage.getItem('netcar_reminders');
+      if (savedReminders) {
+        try {
+          setReminders(JSON.parse(savedReminders));
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+
+      const savedProfile = localStorage.getItem('netcar_profile');
+      if (savedProfile) {
+        try {
+          const parsedProfile = JSON.parse(savedProfile);
+          setUserProfile(parsedProfile);
+          if (parsedProfile.activeVehicleId && !savedActiveVehId) {
+            setActiveVehicleIdState(parsedProfile.activeVehicleId);
+          }
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
+
+      const savedDemoUser = localStorage.getItem('netcar_demo_user');
+      if (savedDemoUser && !auth.currentUser) {
+        try {
+          setUser(JSON.parse(savedDemoUser));
+        } catch {
+          // Ignore malformed JSON
+        }
+      }
     }
-  };
+  }, []);
 
-  const setLang = (newLang: SupportedLanguage) => {
-    setLangState(newLang);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('netcar_lang', newLang);
+  // Listen to Firebase Auth state & establish real-time Firestore listeners
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    let unsubProfile: (() => void) | null = null;
+    let unsubVehicles: (() => void) | null = null;
+    let unsubFillups: (() => void) | null = null;
+    let unsubExpenses: (() => void) | null = null;
+    let unsubServices: (() => void) | null = null;
+    let unsubReminders: (() => void) | null = null;
+
+    const cleanupListeners = () => {
+      if (unsubProfile) unsubProfile();
+      if (unsubVehicles) unsubVehicles();
+      if (unsubFillups) unsubFillups();
+      if (unsubExpenses) unsubExpenses();
+      if (unsubServices) unsubServices();
+      if (unsubReminders) unsubReminders();
+      unsubProfile = null;
+      unsubVehicles = null;
+      unsubFillups = null;
+      unsubExpenses = null;
+      unsubServices = null;
+      unsubReminders = null;
+      isCloudReadyRef.current = false;
+    };
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (fbUser) => {
+      cleanupListeners();
+
+      if (!fbUser) {
+        const savedDemo = localStorage.getItem('netcar_demo_user');
+        if (savedDemo) {
+          try {
+            setUser(JSON.parse(savedDemo));
+          } catch {
+            setUser(null);
+          }
+        } else {
+          setUser(null);
+        }
+        setSyncStatus('local');
+        return;
+      }
+
+      // Real Firebase authenticated user
+      localStorage.removeItem('netcar_demo_user');
+      const uid = fbUser.uid;
+      const email = fbUser.email || 'driver@netcar.app';
+      const displayName = fbUser.displayName || email.split('@')[0] || 'Pilot';
+      const appUser: AppUser = {
+        uid,
+        email,
+        displayName,
+        photoURL: fbUser.photoURL || undefined,
+        isDemo: false,
+      };
+      setUser(appUser);
+      setSyncStatus('syncing');
+
+      const userDocPath = `users/${uid}`;
+      const userDocRef = doc(db, 'users', uid);
+
+      try {
+        const userSnap = await getDoc(userDocRef);
+        const currentSavedActiveId =
+          localStorage.getItem('netcar_active_vehicle_id') || activeVehicleId || 'veh-1';
+
+        if (!userSnap.exists()) {
+          // Initialize user profile document in Firestore
+          const initialUserDoc = stripUndefined({
+            userId: uid,
+            name: displayName.slice(0, 200),
+            email: email.slice(0, 320),
+            preferredLang: lang || 'fr',
+            units: userProfile.units || 'metric',
+            currency: userProfile.currency || 'DZD',
+            activeVehicleId: currentSavedActiveId,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          await setDoc(userDocRef, initialUserDoc);
+        }
+        isCloudReadyRef.current = true;
+
+        // Check if user has any vehicles in Firestore yet; if not, seed initial/local garage
+        const vehiclesColRef = collection(db, 'users', uid, 'vehicles');
+        const existingVehSnap = await getDocs(query(vehiclesColRef, where('userId', '==', uid)));
+        if (existingVehSnap.empty) {
+          const seedVehicles = vehicles.length > 0 ? vehicles : initialVehicles;
+          for (const v of seedVehicles) {
+            const vRef = doc(db, 'users', uid, 'vehicles', v.id);
+            await setDoc(
+              vRef,
+              stripUndefined({
+                id: v.id,
+                userId: uid,
+                name: v.name?.slice(0, 100),
+                make: v.make.slice(0, 100),
+                model: v.model.slice(0, 100),
+                year: Number(v.year),
+                plate: v.plate?.slice(0, 30),
+                vin: v.vin?.slice(0, 30),
+                fuelType: v.fuelType,
+                photoUrl: v.photoUrl?.slice(0, 2048),
+                currentOdometer: Number(v.currentOdometer) || 0,
+                notes: v.notes?.slice(0, 5000),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              })
+            );
+          }
+
+          for (const f of fillUps) {
+            const fRef = doc(db, 'users', uid, 'fillups', f.id);
+            await setDoc(
+              fRef,
+              stripUndefined({
+                id: f.id,
+                userId: uid,
+                vehicleId: f.vehicleId,
+                date: String(f.date),
+                odometer: Number(f.odometer),
+                volume: Number(f.volume),
+                pricePerUnit: Number(f.pricePerUnit),
+                totalCost: Number(f.totalCost),
+                fuelType: f.fuelType,
+                isFullTank: Boolean(f.isFullTank),
+                station: f.station?.slice(0, 200),
+                notes: f.notes?.slice(0, 5000),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              })
+            );
+          }
+
+          for (const e of expenses) {
+            const eRef = doc(db, 'users', uid, 'expenses', e.id);
+            await setDoc(
+              eRef,
+              stripUndefined({
+                id: e.id,
+                userId: uid,
+                vehicleId: e.vehicleId,
+                date: String(e.date),
+                category: e.category,
+                amount: Number(e.amount),
+                description: e.description.slice(0, 500),
+                receiptUrl: e.receiptUrl?.slice(0, 2048),
+                odometer: e.odometer !== undefined ? Number(e.odometer) : undefined,
+                notes: e.notes?.slice(0, 5000),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              })
+            );
+          }
+
+          for (const s of services) {
+            const sRef = doc(db, 'users', uid, 'services', s.id);
+            await setDoc(
+              sRef,
+              stripUndefined({
+                id: s.id,
+                userId: uid,
+                vehicleId: s.vehicleId,
+                date: String(s.date),
+                type: s.type,
+                odometer: Number(s.odometer),
+                cost: Number(s.cost),
+                description: s.description.slice(0, 500),
+                parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
+                receiptUrl: s.receiptUrl?.slice(0, 2048),
+                notes: s.notes?.slice(0, 5000),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              })
+            );
+          }
+
+          for (const r of reminders) {
+            const rRef = doc(db, 'users', uid, 'reminders', r.id);
+            await setDoc(
+              rRef,
+              stripUndefined({
+                id: r.id,
+                userId: uid,
+                vehicleId: r.vehicleId,
+                type: String(r.type),
+                title: r.title?.slice(0, 200),
+                intervalKm: r.intervalKm !== undefined ? Number(r.intervalKm) : undefined,
+                intervalDays: r.intervalDays !== undefined ? Number(r.intervalDays) : undefined,
+                lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate) : undefined,
+                lastServiceOdometer:
+                  r.lastServiceOdometer !== undefined ? Number(r.lastServiceOdometer) : undefined,
+                nextDueDate: r.nextDueDate ? String(r.nextDueDate) : undefined,
+                nextDueOdometer:
+                  r.nextDueOdometer !== undefined ? Number(r.nextDueOdometer) : undefined,
+                isRecurring: Boolean(r.isRecurring),
+                isActive: Boolean(r.isActive),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              })
+            );
+          }
+        }
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.WRITE, userDocPath);
+      }
+
+      // Attach Real-Time Listeners for Multi-Device Auto-Sync
+      unsubProfile = onSnapshot(
+        userDocRef,
+        (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
+            const syncedProfile: UserProfile = {
+              userId: uid,
+              name: data.name || displayName,
+              email: data.email || email,
+              preferredLang: data.preferredLang || 'fr',
+              units: data.units || 'metric',
+              currency: data.currency || 'DZD',
+              activeVehicleId: data.activeVehicleId,
+              createdAt: normalizeTimestampField(data.createdAt),
+              updatedAt: normalizeTimestampField(data.updatedAt),
+            };
+            setUserProfile(syncedProfile);
+            saveToLocal('netcar_profile', syncedProfile);
+            if (data.preferredLang === 'en' || data.preferredLang === 'fr') {
+              setLangState(data.preferredLang);
+              localStorage.setItem('netcar_lang', data.preferredLang);
+            }
+            if (data.activeVehicleId) {
+              setActiveVehicleIdState(data.activeVehicleId);
+              localStorage.setItem('netcar_active_vehicle_id', data.activeVehicleId);
+            }
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date().toISOString());
+          }
+        },
+        (error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.GET, userDocPath);
+        }
+      );
+
+      const vehiclesPath = `users/${uid}/vehicles`;
+      unsubVehicles = onSnapshot(
+        query(collection(db, vehiclesPath), where('userId', '==', uid)),
+        (snap) => {
+          const list: Vehicle[] = snap.docs.map((d) => {
+            const raw = d.data();
+            return {
+              id: raw.id || d.id,
+              name: raw.name,
+              make: raw.make,
+              model: raw.model,
+              year: Number(raw.year),
+              plate: raw.plate,
+              vin: raw.vin,
+              fuelType: raw.fuelType,
+              photoUrl: raw.photoUrl,
+              currentOdometer: Number(raw.currentOdometer) || 0,
+              notes: raw.notes,
+              createdAt: normalizeTimestampField(raw.createdAt),
+              updatedAt: normalizeTimestampField(raw.updatedAt),
+            };
+          });
+          setVehicles(list);
+          saveToLocal('netcar_vehicles', list);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        },
+        (error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.LIST, vehiclesPath);
+        }
+      );
+
+      const fillupsPath = `users/${uid}/fillups`;
+      unsubFillups = onSnapshot(
+        query(collection(db, fillupsPath), where('userId', '==', uid)),
+        (snap) => {
+          const list: FillUp[] = snap.docs.map((d) => {
+            const raw = d.data();
+            return {
+              id: raw.id || d.id,
+              vehicleId: raw.vehicleId,
+              date: raw.date,
+              odometer: Number(raw.odometer),
+              volume: Number(raw.volume),
+              pricePerUnit: Number(raw.pricePerUnit),
+              totalCost: Number(raw.totalCost),
+              fuelType: raw.fuelType,
+              isFullTank: Boolean(raw.isFullTank),
+              station: raw.station,
+              notes: raw.notes,
+              createdAt: normalizeTimestampField(raw.createdAt),
+            };
+          });
+          setFillUps(list);
+          saveToLocal('netcar_fillups', list);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        },
+        (error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.LIST, fillupsPath);
+        }
+      );
+
+      const expensesPath = `users/${uid}/expenses`;
+      unsubExpenses = onSnapshot(
+        query(collection(db, expensesPath), where('userId', '==', uid)),
+        (snap) => {
+          const list: Expense[] = snap.docs.map((d) => {
+            const raw = d.data();
+            return {
+              id: raw.id || d.id,
+              vehicleId: raw.vehicleId,
+              date: raw.date,
+              category: raw.category,
+              amount: Number(raw.amount),
+              description: raw.description,
+              receiptUrl: raw.receiptUrl,
+              odometer: raw.odometer !== undefined ? Number(raw.odometer) : undefined,
+              notes: raw.notes,
+              createdAt: normalizeTimestampField(raw.createdAt),
+            };
+          });
+          setExpenses(list);
+          saveToLocal('netcar_expenses', list);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        },
+        (error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.LIST, expensesPath);
+        }
+      );
+
+      const servicesPath = `users/${uid}/services`;
+      unsubServices = onSnapshot(
+        query(collection(db, servicesPath), where('userId', '==', uid)),
+        (snap) => {
+          const list: Service[] = snap.docs.map((d) => {
+            const raw = d.data();
+            return {
+              id: raw.id || d.id,
+              vehicleId: raw.vehicleId,
+              date: raw.date,
+              type: raw.type,
+              odometer: Number(raw.odometer),
+              cost: Number(raw.cost),
+              description: raw.description,
+              parts: raw.parts,
+              receiptUrl: raw.receiptUrl,
+              notes: raw.notes,
+              createdAt: normalizeTimestampField(raw.createdAt),
+            };
+          });
+          setServices(list);
+          saveToLocal('netcar_services', list);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        },
+        (error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.LIST, servicesPath);
+        }
+      );
+
+      const remindersPath = `users/${uid}/reminders`;
+      unsubReminders = onSnapshot(
+        query(collection(db, remindersPath), where('userId', '==', uid)),
+        (snap) => {
+          const list: Reminder[] = snap.docs.map((d) => {
+            const raw = d.data();
+            return {
+              id: raw.id || d.id,
+              vehicleId: raw.vehicleId,
+              type: raw.type,
+              title: raw.title,
+              intervalKm: raw.intervalKm !== undefined ? Number(raw.intervalKm) : undefined,
+              intervalDays: raw.intervalDays !== undefined ? Number(raw.intervalDays) : undefined,
+              lastServiceDate: raw.lastServiceDate,
+              lastServiceOdometer:
+                raw.lastServiceOdometer !== undefined
+                  ? Number(raw.lastServiceOdometer)
+                  : undefined,
+              nextDueDate: raw.nextDueDate,
+              nextDueOdometer:
+                raw.nextDueOdometer !== undefined ? Number(raw.nextDueOdometer) : undefined,
+              isRecurring: Boolean(raw.isRecurring),
+              isActive: Boolean(raw.isActive),
+              createdAt: normalizeTimestampField(raw.createdAt),
+              updatedAt: normalizeTimestampField(raw.updatedAt),
+            };
+          });
+          setReminders(list);
+          saveToLocal('netcar_reminders', list);
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        },
+        (error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.LIST, remindersPath);
+        }
+      );
+    });
+
+    return () => {
+      cleanupListeners();
+      unsubscribeAuth();
+    };
+  }, []);
+
+  // Switch active vehicle and persist across localStorage & Firestore
+  const setActiveVehicleId = useCallback(
+    (id: string) => {
+      setActiveVehicleIdState(id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('netcar_active_vehicle_id', id);
+      }
+      setUserProfile((prev) => {
+        const updated = { ...prev, activeVehicleId: id };
+        saveToLocal('netcar_profile', updated);
+        return updated;
+      });
+
+      const currentUid = auth.currentUser?.uid;
+      if (currentUid && isCloudReadyRef.current) {
+        const userDocPath = `users/${currentUid}`;
+        setSyncStatus('syncing');
+        updateDoc(doc(db, 'users', currentUid), {
+          activeVehicleId: id,
+          updatedAt: serverTimestamp(),
+        })
+          .then(() => {
+            setSyncStatus('synced');
+            setLastSyncedAt(new Date().toISOString());
+          })
+          .catch((error) => {
+            handleFirestoreError(error, OperationType.UPDATE, userDocPath);
+          });
+      }
+    },
+    [saveToLocal]
+  );
+
+  const setLang = useCallback(
+    (newLang: SupportedLanguage) => {
+      setLangState(newLang);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('netcar_lang', newLang);
+      }
+      setUserProfile((prev) => {
+        const updated = { ...prev, preferredLang: newLang };
+        saveToLocal('netcar_profile', updated);
+        return updated;
+      });
+
+      const currentUid = auth.currentUser?.uid;
+      if (currentUid && isCloudReadyRef.current) {
+        const userDocPath = `users/${currentUid}`;
+        updateDoc(doc(db, 'users', currentUid), {
+          preferredLang: newLang,
+          updatedAt: serverTimestamp(),
+        }).catch((error) => {
+          handleFirestoreError(error, OperationType.UPDATE, userDocPath);
+        });
+      }
+    },
+    [saveToLocal]
+  );
+
+  const activeVehicle =
+    vehicles.find((v) => v.id === activeVehicleId) || vehicles[0] || null;
+
+  // Keep activeVehicleId aligned if current activeVehicleId no longer exists in vehicles list
+  useEffect(() => {
+    if (vehicles.length > 0 && !vehicles.some((v) => v.id === activeVehicleId)) {
+      setActiveVehicleIdState(vehicles[0].id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('netcar_active_vehicle_id', vehicles[0].id);
+      }
     }
-    setUserProfile(prev => ({ ...prev, preferredLang: newLang }));
-  };
+  }, [vehicles, activeVehicleId]);
 
-  const activeVehicle = vehicles.find(v => v.id === activeVehicleId) || vehicles[0] || null;
-
-  // CRUD Implementations
+  // CRUD Implementations with Firestore Auto-Sync
   const addVehicle = async (v: Omit<Vehicle, 'id'>) => {
     const id = `veh-${Date.now()}`;
-    const newVehicle: Vehicle = { ...v, id, createdAt: new Date().toISOString() };
-    const updated = [...vehicles, newVehicle];
-    setVehicles(updated);
-    saveToLocal('netcar_vehicles', updated);
-    if (!activeVehicleId) setActiveVehicleId(id);
+    const newVehicle: Vehicle = {
+      ...v,
+      id,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    setVehicles((prev) => {
+      const updated = [...prev, newVehicle];
+      saveToLocal('netcar_vehicles', updated);
+      return updated;
+    });
+
+    // Always make the newly added vehicle the active vehicle immediately
+    setActiveVehicleId(id);
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/vehicles/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await setDoc(
+          doc(db, 'users', currentUid, 'vehicles', id),
+          stripUndefined({
+            id,
+            userId: currentUid,
+            name: v.name?.slice(0, 100),
+            make: v.make.slice(0, 100),
+            model: v.model.slice(0, 100),
+            year: Number(v.year),
+            plate: v.plate?.slice(0, 30),
+            vin: v.vin?.slice(0, 30),
+            fuelType: v.fuelType,
+            photoUrl: v.photoUrl?.slice(0, 2048),
+            currentOdometer: Number(v.currentOdometer) || 0,
+            notes: v.notes?.slice(0, 5000),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        );
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+
     return id;
   };
 
   const updateVehicle = async (id: string, updates: Partial<Vehicle>) => {
-    const updated = vehicles.map(v => v.id === id ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v);
-    setVehicles(updated);
-    saveToLocal('netcar_vehicles', updated);
+    setVehicles((prev) => {
+      const updated = prev.map((v) =>
+        v.id === id ? { ...v, ...updates, updatedAt: new Date().toISOString() } : v
+      );
+      saveToLocal('netcar_vehicles', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/vehicles/${id}`;
+      setSyncStatus('syncing');
+      try {
+        const cleanUpdates = stripUndefined({
+          name: updates.name !== undefined ? updates.name.slice(0, 100) : undefined,
+          make: updates.make !== undefined ? updates.make.slice(0, 100) : undefined,
+          model: updates.model !== undefined ? updates.model.slice(0, 100) : undefined,
+          year: updates.year !== undefined ? Number(updates.year) : undefined,
+          plate: updates.plate !== undefined ? updates.plate.slice(0, 30) : undefined,
+          vin: updates.vin !== undefined ? updates.vin.slice(0, 30) : undefined,
+          fuelType: updates.fuelType,
+          photoUrl: updates.photoUrl !== undefined ? updates.photoUrl.slice(0, 2048) : undefined,
+          currentOdometer:
+            updates.currentOdometer !== undefined ? Number(updates.currentOdometer) : undefined,
+          notes: updates.notes !== undefined ? updates.notes.slice(0, 5000) : undefined,
+          updatedAt: serverTimestamp(),
+        });
+        await updateDoc(doc(db, 'users', currentUid, 'vehicles', id), cleanUpdates);
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
+    }
   };
 
   const deleteVehicle = async (id: string) => {
-    const updated = vehicles.filter(v => v.id !== id);
-    setVehicles(updated);
-    saveToLocal('netcar_vehicles', updated);
-    if (activeVehicleId === id && updated.length > 0) {
-      setActiveVehicleId(updated[0].id);
+    let nextActiveId: string | null = null;
+    setVehicles((prev) => {
+      const updated = prev.filter((v) => v.id !== id);
+      saveToLocal('netcar_vehicles', updated);
+      if (activeVehicleId === id && updated.length > 0) {
+        nextActiveId = updated[0].id;
+      }
+      return updated;
+    });
+
+    if (nextActiveId) {
+      setActiveVehicleId(nextActiveId);
+    }
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/vehicles/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await deleteDoc(doc(db, 'users', currentUid, 'vehicles', id));
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
     }
   };
 
   const addFillUp = async (f: Omit<FillUp, 'id'>) => {
     const id = `f-${Date.now()}`;
     const newFillUp: FillUp = { ...f, id, createdAt: new Date().toISOString() };
-    const updated = [newFillUp, ...fillUps];
-    setFillUps(updated);
-    saveToLocal('netcar_fillups', updated);
+    setFillUps((prev) => {
+      const updated = [newFillUp, ...prev];
+      saveToLocal('netcar_fillups', updated);
+      return updated;
+    });
 
-    // Update active vehicle odometer if fill-up odometer is higher
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/fillups/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await setDoc(
+          doc(db, 'users', currentUid, 'fillups', id),
+          stripUndefined({
+            id,
+            userId: currentUid,
+            vehicleId: f.vehicleId,
+            date: String(f.date),
+            odometer: Number(f.odometer),
+            volume: Number(f.volume),
+            pricePerUnit: Number(f.pricePerUnit),
+            totalCost: Number(f.totalCost),
+            fuelType: f.fuelType,
+            isFullTank: Boolean(f.isFullTank),
+            station: f.station?.slice(0, 200),
+            notes: f.notes?.slice(0, 5000),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        );
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
+
+    // Update vehicle odometer if fill-up odometer is higher
     if (f.vehicleId && f.odometer) {
-      const targetVeh = vehicles.find(v => v.id === f.vehicleId);
+      const targetVeh = vehicles.find((v) => v.id === f.vehicleId);
       if (targetVeh && f.odometer > targetVeh.currentOdometer) {
-        updateVehicle(f.vehicleId, { currentOdometer: f.odometer });
+        await updateVehicle(f.vehicleId, { currentOdometer: f.odometer });
       }
     }
 
@@ -387,89 +1076,321 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteFillUp = async (id: string) => {
-    const updated = fillUps.filter(f => f.id !== id);
-    setFillUps(updated);
-    saveToLocal('netcar_fillups', updated);
+    setFillUps((prev) => {
+      const updated = prev.filter((f) => f.id !== id);
+      saveToLocal('netcar_fillups', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/fillups/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await deleteDoc(doc(db, 'users', currentUid, 'fillups', id));
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
   };
 
   const addExpense = async (e: Omit<Expense, 'id'>) => {
     const id = `e-${Date.now()}`;
     const newExpense: Expense = { ...e, id, createdAt: new Date().toISOString() };
-    const updated = [newExpense, ...expenses];
-    setExpenses(updated);
-    saveToLocal('netcar_expenses', updated);
+    setExpenses((prev) => {
+      const updated = [newExpense, ...prev];
+      saveToLocal('netcar_expenses', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/expenses/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await setDoc(
+          doc(db, 'users', currentUid, 'expenses', id),
+          stripUndefined({
+            id,
+            userId: currentUid,
+            vehicleId: e.vehicleId,
+            date: String(e.date),
+            category: e.category,
+            amount: Number(e.amount),
+            description: e.description.slice(0, 500),
+            receiptUrl: e.receiptUrl?.slice(0, 2048),
+            odometer: e.odometer !== undefined ? Number(e.odometer) : undefined,
+            notes: e.notes?.slice(0, 5000),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        );
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
     return id;
   };
 
   const deleteExpense = async (id: string) => {
-    const updated = expenses.filter(e => e.id !== id);
-    setExpenses(updated);
-    saveToLocal('netcar_expenses', updated);
+    setExpenses((prev) => {
+      const updated = prev.filter((e) => e.id !== id);
+      saveToLocal('netcar_expenses', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/expenses/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await deleteDoc(doc(db, 'users', currentUid, 'expenses', id));
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
   };
 
   const addService = async (s: Omit<Service, 'id'>) => {
     const id = `s-${Date.now()}`;
     const newService: Service = { ...s, id, createdAt: new Date().toISOString() };
-    const updated = [newService, ...services];
-    setServices(updated);
-    saveToLocal('netcar_services', updated);
+    setServices((prev) => {
+      const updated = [newService, ...prev];
+      saveToLocal('netcar_services', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/services/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await setDoc(
+          doc(db, 'users', currentUid, 'services', id),
+          stripUndefined({
+            id,
+            userId: currentUid,
+            vehicleId: s.vehicleId,
+            date: String(s.date),
+            type: s.type,
+            odometer: Number(s.odometer),
+            cost: Number(s.cost),
+            description: s.description.slice(0, 500),
+            parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
+            receiptUrl: s.receiptUrl?.slice(0, 2048),
+            notes: s.notes?.slice(0, 5000),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        );
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
 
     if (s.vehicleId && s.odometer) {
-      const targetVeh = vehicles.find(v => v.id === s.vehicleId);
+      const targetVeh = vehicles.find((v) => v.id === s.vehicleId);
       if (targetVeh && s.odometer > targetVeh.currentOdometer) {
-        updateVehicle(s.vehicleId, { currentOdometer: s.odometer });
+        await updateVehicle(s.vehicleId, { currentOdometer: s.odometer });
       }
     }
     return id;
   };
 
   const deleteService = async (id: string) => {
-    const updated = services.filter(s => s.id !== id);
-    setServices(updated);
-    saveToLocal('netcar_services', updated);
+    setServices((prev) => {
+      const updated = prev.filter((s) => s.id !== id);
+      saveToLocal('netcar_services', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/services/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await deleteDoc(doc(db, 'users', currentUid, 'services', id));
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
   };
 
   const addReminder = async (r: Omit<Reminder, 'id'>) => {
     const id = `r-${Date.now()}`;
-    const newReminder: Reminder = { ...r, id, isActive: true, createdAt: new Date().toISOString() };
-    const updated = [newReminder, ...reminders];
-    setReminders(updated);
-    saveToLocal('netcar_reminders', updated);
+    const newReminder: Reminder = {
+      ...r,
+      id,
+      isActive: true,
+      createdAt: new Date().toISOString(),
+    };
+    setReminders((prev) => {
+      const updated = [newReminder, ...prev];
+      saveToLocal('netcar_reminders', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/reminders/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await setDoc(
+          doc(db, 'users', currentUid, 'reminders', id),
+          stripUndefined({
+            id,
+            userId: currentUid,
+            vehicleId: r.vehicleId,
+            type: String(r.type),
+            title: r.title?.slice(0, 200),
+            intervalKm: r.intervalKm !== undefined ? Number(r.intervalKm) : undefined,
+            intervalDays: r.intervalDays !== undefined ? Number(r.intervalDays) : undefined,
+            lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate) : undefined,
+            lastServiceOdometer:
+              r.lastServiceOdometer !== undefined ? Number(r.lastServiceOdometer) : undefined,
+            nextDueDate: r.nextDueDate ? String(r.nextDueDate) : undefined,
+            nextDueOdometer:
+              r.nextDueOdometer !== undefined ? Number(r.nextDueOdometer) : undefined,
+            isRecurring: Boolean(r.isRecurring),
+            isActive: true,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        );
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.CREATE, path);
+      }
+    }
     return id;
   };
 
   const completeReminder = async (id: string) => {
-    const target = reminders.find(r => r.id === id);
+    const target = reminders.find((r) => r.id === id);
     if (!target) return;
 
+    const nowIso = new Date().toISOString();
+    let firestoreUpdate: Record<string, any> = {};
+
     if (target.isRecurring && target.intervalKm && activeVehicle) {
-      // Advance to next interval
-      const updated = reminders.map(r => r.id === id ? {
-        ...r,
+      const nextOdo = activeVehicle.currentOdometer + (target.intervalKm || 10000);
+      firestoreUpdate = {
         lastServiceOdometer: activeVehicle.currentOdometer,
-        nextDueOdometer: activeVehicle.currentOdometer + (r.intervalKm || 10000),
-        lastServiceDate: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      } : r);
-      setReminders(updated);
-      saveToLocal('netcar_reminders', updated);
+        nextDueOdometer: nextOdo,
+        lastServiceDate: nowIso,
+        updatedAt: serverTimestamp(),
+      };
+      setReminders((prev) => {
+        const updated = prev.map((r) =>
+          r.id === id
+            ? {
+                ...r,
+                lastServiceOdometer: activeVehicle.currentOdometer,
+                nextDueOdometer: nextOdo,
+                lastServiceDate: nowIso,
+                updatedAt: nowIso,
+              }
+            : r
+        );
+        saveToLocal('netcar_reminders', updated);
+        return updated;
+      });
     } else {
-      const updated = reminders.map(r => r.id === id ? { ...r, isActive: false } : r);
-      setReminders(updated);
-      saveToLocal('netcar_reminders', updated);
+      firestoreUpdate = {
+        isActive: false,
+        updatedAt: serverTimestamp(),
+      };
+      setReminders((prev) => {
+        const updated = prev.map((r) => (r.id === id ? { ...r, isActive: false } : r));
+        saveToLocal('netcar_reminders', updated);
+        return updated;
+      });
+    }
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/reminders/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await updateDoc(doc(db, 'users', currentUid, 'reminders', id), firestoreUpdate);
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.UPDATE, path);
+      }
     }
   };
 
   const deleteReminder = async (id: string) => {
-    const updated = reminders.filter(r => r.id !== id);
-    setReminders(updated);
-    saveToLocal('netcar_reminders', updated);
+    setReminders((prev) => {
+      const updated = prev.filter((r) => r.id !== id);
+      saveToLocal('netcar_reminders', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/reminders/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await deleteDoc(doc(db, 'users', currentUid, 'reminders', id));
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        handleFirestoreError(error, OperationType.DELETE, path);
+      }
+    }
   };
 
   const updatePreferences = (prefs: Partial<UserProfile>) => {
-    const updated = { ...userProfile, ...prefs };
-    setUserProfile(updated);
-    saveToLocal('netcar_profile', updated);
+    setUserProfile((prev) => {
+      const updated = { ...prev, ...prefs };
+      saveToLocal('netcar_profile', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const userDocPath = `users/${currentUid}`;
+      setSyncStatus('syncing');
+      const cleanPrefs = stripUndefined({
+        name: prefs.name !== undefined ? prefs.name.slice(0, 200) : undefined,
+        email: prefs.email !== undefined ? prefs.email.slice(0, 320) : undefined,
+        preferredLang: prefs.preferredLang,
+        units: prefs.units,
+        currency: prefs.currency,
+        activeVehicleId: prefs.activeVehicleId,
+        updatedAt: serverTimestamp(),
+      });
+      updateDoc(doc(db, 'users', currentUid), cleanPrefs)
+        .then(() => {
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        })
+        .catch((error) => {
+          setSyncStatus('error');
+          handleFirestoreError(error, OperationType.UPDATE, userDocPath);
+        });
+    }
   };
 
   const exportBackupJson = () => {
@@ -516,178 +1437,141 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Auth Helper & Implementations
-  const isPlaceholderApiKey = () => {
-    const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '';
-    return !key || key.includes('Placeholder') || key.includes('Demo') || key.startsWith('AIzaSyDemo');
-  };
+  // Firebase Auth Implementations (Email/Password + Google OAuth)
+  const formatAuthError = (
+    err: any,
+    currentLang: SupportedLanguage
+  ): { error: string; consoleUrl?: string } => {
+    const code = (err?.code || '').toLowerCase();
+    const projectConsoleUrl =
+      'https://console.firebase.google.com/project/axiomatic-serenity-8lvvl/authentication/providers';
 
-  const isApiKeyError = (err: any) => {
-    if (!err) return false;
-    const code = (err.code || '').toLowerCase();
-    const msg = (err.message || '').toLowerCase();
-    return (
-      code.includes('api-key') ||
-      code.includes('invalid-api-key') ||
-      code.includes('api-key-not-valid') ||
-      code.includes('network-request-failed') ||
-      code.includes('internal-error') ||
-      msg.includes('api key') ||
-      msg.includes('api-key') ||
-      msg.includes('invalid-api-key') ||
-      msg.includes('not-valid') ||
-      msg.includes('please-pass-a-valid-api-key')
-    );
-  };
-
-  const signInWithEmail = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
-    if (isPlaceholderApiKey()) {
-      const u = {
-        uid: `usr-${Date.now()}`,
-        email,
-        displayName: email.split('@')[0],
+    if (code.includes('operation-not-allowed') || code.includes('configuration-not-found')) {
+      return {
+        error:
+          currentLang === 'fr'
+            ? "Le fournisseur Email/Mot de passe n'est pas encore activé dans votre console Firebase. Activez-le dans Firebase Console > Authentication > Sign-in method, ou connectez-vous directement avec Google."
+            : 'Email/Password sign-in is not enabled yet in your Firebase project. Please enable it in Firebase Console > Authentication > Sign-in method, or sign in with Google.',
+        consoleUrl: projectConsoleUrl,
       };
-      setUser(u);
-      saveToLocal('netcar_user', u);
-      setUserProfile(prev => ({ ...prev, email: u.email, name: email.split('@')[0] }));
-      return { success: true };
     }
-
-    try {
-      const cred = await signInWithEmailAndPassword(auth, email, pass);
-      const u = {
-        uid: cred.user.uid,
-        email: cred.user.email || email,
-        displayName: cred.user.displayName || email.split('@')[0],
-        photoURL: cred.user.photoURL || undefined,
+    if (
+      code.includes('invalid-credential') ||
+      code.includes('wrong-password') ||
+      code.includes('user-not-found')
+    ) {
+      return {
+        error:
+          currentLang === 'fr'
+            ? 'Email ou mot de passe incorrect. Si vous êtes nouveau, cliquez sur Créer un compte.'
+            : 'Invalid email or password. If you do not have an account yet, switch to Create Account.',
       };
-      setUser(u);
-      saveToLocal('netcar_user', u);
-      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName || prev.name }));
+    }
+    if (code.includes('email-already-in-use')) {
+      return {
+        error:
+          currentLang === 'fr'
+            ? 'Cette adresse e-mail est déjà associée à un compte. Veuillez vous connecter.'
+            : 'This email address is already registered. Please sign in instead.',
+      };
+    }
+    if (code.includes('popup-closed-by-user')) {
+      return {
+        error:
+          currentLang === 'fr'
+            ? 'La fenêtre de connexion Google a été fermée avant la fin.'
+            : 'Google Sign-In popup was closed before completing.',
+      };
+    }
+    if (code.includes('popup-blocked')) {
+      return {
+        error:
+          currentLang === 'fr'
+            ? 'La fenêtre popup a été bloquée par votre navigateur. Veuillez autoriser les popups.'
+            : 'Sign-in popup was blocked by your browser. Please allow popups for this site.',
+      };
+    }
+    return {
+      error:
+        err?.message ||
+        (currentLang === 'fr' ? "Erreur d'authentification." : 'Authentication error.'),
+    };
+  };
+
+  const signInWithEmail = async (
+    email: string,
+    pass: string
+  ): Promise<{ success: boolean; error?: string; consoleUrl?: string }> => {
+    try {
+      await signInWithEmailAndPassword(auth, email, pass);
       return { success: true };
     } catch (err: any) {
-      if (isApiKeyError(err)) {
-        console.warn('Firebase API key is placeholder; using local session for:', email);
-        const u = {
-          uid: `usr-${Date.now()}`,
-          email,
-          displayName: email.split('@')[0],
-        };
-        setUser(u);
-        saveToLocal('netcar_user', u);
-        setUserProfile(prev => ({ ...prev, email: u.email, name: email.split('@')[0] }));
-        return { success: true };
-      }
-      return { success: false, error: err.message };
+      const formatted = formatAuthError(err, lang);
+      return { success: false, ...formatted };
     }
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name?: string): Promise<{ success: boolean; error?: string }> => {
-    if (isPlaceholderApiKey()) {
-      const u = {
-        uid: `usr-${Date.now()}`,
-        email,
-        displayName: name || email.split('@')[0],
-      };
-      setUser(u);
-      saveToLocal('netcar_user', u);
-      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
-      return { success: true };
-    }
-
+  const signUpWithEmail = async (
+    email: string,
+    pass: string,
+    name?: string
+  ): Promise<{ success: boolean; error?: string; consoleUrl?: string }> => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
       if (name && cred.user) {
-        try { await updateProfile(cred.user, { displayName: name }); } catch (e) {}
+        try {
+          await updateProfile(cred.user, { displayName: name });
+        } catch {
+          // Ignore display name update errors
+        }
       }
-      const u = {
-        uid: cred.user.uid,
-        email: cred.user.email || email,
-        displayName: name || email.split('@')[0],
-      };
-      setUser(u);
-      saveToLocal('netcar_user', u);
-      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
       return { success: true };
     } catch (err: any) {
-      if (isApiKeyError(err)) {
-        console.warn('Firebase API key is placeholder; creating local session for new user:', email);
-        const u = {
-          uid: `usr-${Date.now()}`,
-          email,
-          displayName: name || email.split('@')[0],
-        };
-        setUser(u);
-        saveToLocal('netcar_user', u);
-        setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
-        return { success: true };
-      }
-      return { success: false, error: err.message };
+      const formatted = formatAuthError(err, lang);
+      return { success: false, ...formatted };
     }
   };
 
   const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
-    if (isPlaceholderApiKey()) {
-      const u = {
-        uid: `google-${Date.now()}`,
-        email: 'google.driver@netcar.app',
-        displayName: 'Google Pilot',
-      };
-      setUser(u);
-      saveToLocal('netcar_user', u);
-      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
-      return { success: true };
-    }
-
     try {
       const provider = new GoogleAuthProvider();
-      const cred = await signInWithPopup(auth, provider);
-      const u = {
-        uid: cred.user.uid,
-        email: cred.user.email || '',
-        displayName: cred.user.displayName || 'Google Pilot',
-        photoURL: cred.user.photoURL || undefined,
-      };
-      setUser(u);
-      saveToLocal('netcar_user', u);
-      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
       return { success: true };
     } catch (err: any) {
-      if (isApiKeyError(err) || err.code === 'auth/popup-closed-by-user') {
-        console.warn('Firebase API key is placeholder; using Google simulated session');
-        const u = {
-          uid: `google-${Date.now()}`,
-          email: 'google.driver@netcar.app',
-          displayName: 'Google Pilot',
-        };
-        setUser(u);
-        saveToLocal('netcar_user', u);
-        setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
-        return { success: true };
-      }
-      return { success: false, error: err.message };
+      const formatted = formatAuthError(err, lang);
+      return { success: false, error: formatted.error };
     }
   };
 
   const signOut = async () => {
     try {
       await fbSignOut(auth);
-    } catch (e) {}
+    } catch {
+      // Ignore signout errors
+    }
     setUser(null);
+    setSyncStatus('local');
     if (typeof window !== 'undefined') {
-      localStorage.removeItem('netcar_user');
+      localStorage.removeItem('netcar_demo_user');
     }
   };
 
   const signInDemo = () => {
-    const u = {
+    const u: AppUser = {
       uid: 'usr-karim',
       email: 'karim.mansouri@netcar.app',
       displayName: 'Karim Mansouri',
+      isDemo: true,
     };
     setUser(u);
-    saveToLocal('netcar_user', u);
-    setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
+    setSyncStatus('local');
+    saveToLocal('netcar_demo_user', u);
+    setUserProfile((prev) => ({
+      ...prev,
+      email: u.email,
+      name: u.displayName || prev.name,
+    }));
   };
 
   const t = translations[lang];
@@ -702,14 +1586,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         t,
         vehicles,
         activeVehicle,
+        activeVehicleId,
         setActiveVehicleId,
         fillUps,
         expenses,
         services,
         reminders,
         loading,
+        syncStatus,
+        lastSyncedAt,
         authModalOpen,
         setAuthModalOpen,
+        addVehicleModalOpen,
+        setAddVehicleModalOpen,
         signInWithEmail,
         signUpWithEmail,
         signInWithGoogle,

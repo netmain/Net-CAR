@@ -3,6 +3,11 @@
 import React from 'react';
 import Link from 'next/link';
 import { useApp } from '@/lib/app-context';
+import {
+  calculateAverageEconomy,
+  calculateCostShares,
+  calculateReminderProgress,
+} from '@/lib/telemetry-math';
 import { 
   Car, 
   Fuel, 
@@ -29,6 +34,8 @@ export default function DashboardPage() {
     userProfile, 
     vehicles, 
     activeVehicle, 
+    setActiveVehicleId,
+    setAddVehicleModalOpen,
     fillUps, 
     expenses, 
     services, 
@@ -45,24 +52,8 @@ export default function DashboardPage() {
   const totalFuelCost = vehicleFillups.reduce((acc, f) => acc + f.totalCost, 0);
   const totalExpenseCost = vehicleExpenses.reduce((acc, e) => acc + e.amount, 0);
   const totalServiceCost = vehicleServices.reduce((acc, s) => acc + s.cost, 0);
-  const totalSpent = totalFuelCost + totalExpenseCost + totalServiceCost;
 
-  // Compute fuel economy (L/100km or MPG)
-  let avgEconomy = 0;
-  if (vehicleFillups.length >= 2) {
-    const sorted = [...vehicleFillups].sort((a, b) => a.odometer - b.odometer);
-    const distance = sorted[sorted.length - 1].odometer - sorted[0].odometer;
-    const totalVolume = sorted.slice(1).reduce((acc, f) => acc + f.volume, 0);
-    if (distance > 0 && totalVolume > 0) {
-      if (userProfile.units === 'metric') {
-        avgEconomy = Number(((totalVolume / distance) * 100).toFixed(1));
-      } else {
-        avgEconomy = Number((distance / totalVolume).toFixed(1));
-      }
-    }
-  } else {
-    avgEconomy = userProfile.units === 'metric' ? 5.8 : 40.5;
-  }
+  const avgEconomy = calculateAverageEconomy(vehicleFillups, userProfile.units);
 
   const activeReminders = vehicleReminders.filter(r => r.isActive);
   const currencySymbol = userProfile.currency === 'DZD' ? 'DA ' : userProfile.currency === 'EUR' ? '€' : userProfile.currency === 'USD' ? '$' : userProfile.currency + ' ';
@@ -70,10 +61,31 @@ export default function DashboardPage() {
   const volumeUnit = userProfile.units === 'metric' ? 'L' : 'gal';
   const economyUnit = userProfile.units === 'metric' ? 'L/100km' : 'MPG';
 
-  // Cost shares
-  const fuelShare = totalSpent > 0 ? Math.round((totalFuelCost / totalSpent) * 100) : 45;
-  const serviceShare = totalSpent > 0 ? Math.round((totalServiceCost / totalSpent) * 100) : 35;
-  const expenseShare = totalSpent > 0 ? 100 - fuelShare - serviceShare : 20;
+  const { fuelShare, serviceShare, expenseShare, totalSpent } = calculateCostShares(
+    totalFuelCost,
+    totalServiceCost,
+    totalExpenseCost
+  );
+
+  // Dynamic distance since previous fillup for the active vehicle
+  const sortedVehFillups = [...vehicleFillups].sort((a, b) => b.odometer - a.odometer);
+  const lastDistanceDelta =
+    sortedVehFillups.length >= 2
+      ? Math.max(0, sortedVehFillups[0].odometer - sortedVehFillups[1].odometer)
+      : 0;
+
+  // Dynamic next reminder summary for the active vehicle
+  const primaryReminder = activeReminders[0];
+  const nextReminderLabel = primaryReminder
+    ? primaryReminder.nextDueOdometer && activeVehicle
+      ? `${primaryReminder.title || primaryReminder.type} (${Math.max(
+          0,
+          primaryReminder.nextDueOdometer - activeVehicle.currentOdometer
+        ).toLocaleString()} ${distUnit})`
+      : `${primaryReminder.title || primaryReminder.type}`
+    : lang === 'fr'
+      ? 'Aucun rappel en attente'
+      : 'No pending reminders';
 
   return (
     <div className="space-y-8">
@@ -83,6 +95,52 @@ export default function DashboardPage() {
           {/* Ambient telemetry glow flares */}
           <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-amber-500/10 blur-3xl pointer-events-none" />
           <div className="absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl pointer-events-none" />
+
+          {/* Quick Vehicle Switcher Bar inside Cockpit Hero */}
+          {vehicles.length > 0 && (
+            <div className="relative z-10 mb-5 flex flex-wrap items-center gap-2 pb-4 border-b border-slate-800/80">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400 mr-1">
+                {lang === 'fr' ? 'Véhicule actif :' : 'Active Vehicle:'}
+              </span>
+              {vehicles.map((v) => {
+                const isSelected = v.id === activeVehicle.id;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => setActiveVehicleId(v.id)}
+                    className={`inline-flex items-center gap-2 rounded-xl px-3.5 py-1.5 text-xs font-mono font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md shadow-amber-500/20'
+                        : 'border border-slate-800 bg-slate-900/80 text-slate-300 hover:border-amber-500/40 hover:text-amber-300'
+                    }`}
+                  >
+                    <Car className="h-3.5 w-3.5" />
+                    <span>
+                      {v.make} {v.model}
+                    </span>
+                    {v.plate && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded ${
+                          isSelected ? 'bg-slate-950/20 text-slate-950' : 'bg-slate-800 text-amber-400'
+                        }`}
+                      >
+                        {v.plate}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+              <button
+                type="button"
+                onClick={() => setAddVehicleModalOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-dashed border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-mono font-bold text-amber-400 hover:bg-amber-500/20 transition cursor-pointer"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span>{t.vehicles.addVehicle}</span>
+              </button>
+            </div>
+          )}
 
           <div className="relative z-10 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
             <div className="space-y-3">
@@ -192,7 +250,7 @@ export default function DashboardPage() {
               <TrendingDown className="h-3.5 w-3.5" />
               <span>{lang === 'fr' ? 'Mode Éco Optimal' : 'Optimal Eco'}</span>
             </span>
-            <span className="text-[10px] font-mono text-slate-500">Naftal avg</span>
+            <span className="text-[10px] font-mono text-slate-500">{vehicleFillups.length} {lang === 'fr' ? 'pleins' : 'fill-ups'}</span>
           </div>
           <div className="mt-2 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-cyan-500" style={{ width: '85%' }} />
@@ -242,7 +300,7 @@ export default function DashboardPage() {
           </div>
           <p className="mt-2 text-xs text-amber-400 font-semibold truncate flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
-            <span>Vidange moteur dans ~750 {distUnit}</span>
+            <span>{nextReminderLabel}</span>
           </p>
           <div className="mt-2 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-red-500" style={{ width: '60%' }} />
@@ -266,7 +324,11 @@ export default function DashboardPage() {
             <span className="text-xs font-bold text-slate-400">{distUnit}</span>
           </div>
           <p className="mt-2 text-xs text-slate-400">
-            +770 {distUnit} {lang === 'fr' ? 'depuis le dernier plein' : 'since last refuel'}
+            {lastDistanceDelta > 0
+              ? `+${lastDistanceDelta.toLocaleString()} ${distUnit} ${lang === 'fr' ? 'depuis le dernier plein' : 'since last refuel'}`
+              : lang === 'fr'
+                ? `${vehicleFillups.length} plein(s) enregistré(s)`
+                : `${vehicleFillups.length} fill-up(s) logged`}
           </p>
           <div className="mt-2 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-violet-500 to-cyan-500" style={{ width: '90%' }} />
@@ -301,7 +363,10 @@ export default function DashboardPage() {
               <p className="py-8 text-center text-sm text-slate-500">{t.common.noData}</p>
             ) : (
               activeReminders.map((r) => {
-                const isOverdue = r.nextDueOdometer && activeVehicle && activeVehicle.currentOdometer > r.nextDueOdometer;
+                const { isOverdue, progressPercent } = calculateReminderProgress(
+                  r,
+                  activeVehicle?.currentOdometer || 0
+                );
                 return (
                   <div 
                     key={r.id} 
@@ -344,12 +409,12 @@ export default function DashboardPage() {
                     <div className="mt-3">
                       <div className="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
                         <span>{t.reminders.progress}</span>
-                        <span className="font-bold text-amber-400">82%</span>
+                        <span className="font-bold text-amber-400">{progressPercent}%</span>
                       </div>
                       <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
                         <div 
                           className="h-full rounded-full bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 shadow-sm shadow-amber-500/50" 
-                          style={{ width: '82%' }} 
+                          style={{ width: `${progressPercent}%` }} 
                         />
                       </div>
                     </div>
