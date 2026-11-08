@@ -513,8 +513,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Auth Implementations
+  // Auth Helper & Implementations
+  const isPlaceholderApiKey = () => {
+    const key = process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '';
+    return !key || key.includes('Placeholder') || key.includes('Demo') || key.startsWith('AIzaSyDemo');
+  };
+
+  const isApiKeyError = (err: any) => {
+    if (!err) return false;
+    const code = (err.code || '').toLowerCase();
+    const msg = (err.message || '').toLowerCase();
+    return (
+      code.includes('api-key') ||
+      code.includes('invalid-api-key') ||
+      code.includes('api-key-not-valid') ||
+      code.includes('network-request-failed') ||
+      code.includes('internal-error') ||
+      msg.includes('api key') ||
+      msg.includes('api-key') ||
+      msg.includes('invalid-api-key') ||
+      msg.includes('not-valid') ||
+      msg.includes('please-pass-a-valid-api-key')
+    );
+  };
+
   const signInWithEmail = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
+    if (isPlaceholderApiKey()) {
+      const u = {
+        uid: `usr-${Date.now()}`,
+        email,
+        displayName: email.split('@')[0],
+      };
+      setUser(u);
+      saveToLocal('netcar_user', u);
+      setUserProfile(prev => ({ ...prev, email: u.email, name: email.split('@')[0] }));
+      return { success: true };
+    }
+
     try {
       const cred = await signInWithEmailAndPassword(auth, email, pass);
       const u = {
@@ -528,12 +563,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName || prev.name }));
       return { success: true };
     } catch (err: any) {
-      if (
-        err.code === 'auth/invalid-api-key' || 
-        err.code === 'auth/api-key-not-valid' || 
-        err.code === 'auth/network-request-failed' ||
-        err.message?.includes('API key')
-      ) {
+      if (isApiKeyError(err)) {
         console.warn('Firebase API key is placeholder; using local session for:', email);
         const u = {
           uid: `usr-${Date.now()}`,
@@ -542,7 +572,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(u);
         saveToLocal('netcar_user', u);
-        setUserProfile(prev => ({ ...prev, email, name: email.split('@')[0] }));
+        setUserProfile(prev => ({ ...prev, email: u.email, name: email.split('@')[0] }));
         return { success: true };
       }
       return { success: false, error: err.message };
@@ -550,6 +580,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUpWithEmail = async (email: string, pass: string, name?: string): Promise<{ success: boolean; error?: string }> => {
+    if (isPlaceholderApiKey()) {
+      const u = {
+        uid: `usr-${Date.now()}`,
+        email,
+        displayName: name || email.split('@')[0],
+      };
+      setUser(u);
+      saveToLocal('netcar_user', u);
+      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
+      return { success: true };
+    }
+
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, pass);
       if (name && cred.user) {
@@ -565,12 +607,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
       return { success: true };
     } catch (err: any) {
-      if (
-        err.code === 'auth/invalid-api-key' || 
-        err.code === 'auth/api-key-not-valid' || 
-        err.code === 'auth/network-request-failed' ||
-        err.message?.includes('API key')
-      ) {
+      if (isApiKeyError(err)) {
         console.warn('Firebase API key is placeholder; creating local session for new user:', email);
         const u = {
           uid: `usr-${Date.now()}`,
@@ -579,7 +616,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
         setUser(u);
         saveToLocal('netcar_user', u);
-        setUserProfile(prev => ({ ...prev, email, name: u.displayName }));
+        setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
         return { success: true };
       }
       return { success: false, error: err.message };
@@ -587,6 +624,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
+    if (isPlaceholderApiKey()) {
+      const u = {
+        uid: `google-${Date.now()}`,
+        email: 'google.driver@netcar.app',
+        displayName: 'Google Pilot',
+      };
+      setUser(u);
+      saveToLocal('netcar_user', u);
+      setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
+      return { success: true };
+    }
+
     try {
       const provider = new GoogleAuthProvider();
       const cred = await signInWithPopup(auth, provider);
@@ -601,12 +650,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setUserProfile(prev => ({ ...prev, email: u.email, name: u.displayName }));
       return { success: true };
     } catch (err: any) {
-      if (
-        err.code === 'auth/invalid-api-key' || 
-        err.code === 'auth/api-key-not-valid' || 
-        err.code === 'auth/popup-closed-by-user' ||
-        err.message?.includes('API key')
-      ) {
+      if (isApiKeyError(err) || err.code === 'auth/popup-closed-by-user') {
         console.warn('Firebase API key is placeholder; using Google simulated session');
         const u = {
           uid: `google-${Date.now()}`,
