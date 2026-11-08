@@ -1,0 +1,312 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Application & Common Actions -->
+    <string name="app_name">Net-CAR</string>
+    <string name="app_tagline">Suivi intelligent des véhicules et gestion de flotte</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Annuler</string>
+    <string name="save">Enregistrer</string>
+    <string name="delete">Supprimer</string>
+    <string name="edit">Modifier</string>
+    <string name="add">Ajouter</string>
+    <string name="close">Fermer</string>
+    <string name="back">Retour</string>
+    <string name="done">Terminé</string>
+    <string name="next">Suivant</string>
+    <string name="finish">Terminer</string>
+    <string name="retry">Réessayer</string>
+    <string name="search">Rechercher</string>
+    <string name="filter">Filtrer</string>
+    <string name="sort">Trier</string>
+    <string name="clear">Effacer</string>
+    <string name="select">Sélectionner</string>
+    <string name="confirm">Confirmer</string>
+    <string name="loading">Chargement…</string>
+    <string name="no_data">Aucune donnée disponible</string>
+    <string name="required">Requis</string>
+    <string name="optional">Facultatif</string>
+    <string name="all">Tous</string>
+    <string name="none">Aucun</string>
+    <string name="yes">Oui</string>
+    <string name="no">Non</string>
+    <string name="details">Détails</string>
+    <string name="view_all">Tout afficher</string>
+    <string name="refresh">Actualiser</string>
+    <string name="see_more">Voir plus</string>
+
+    <!-- Navigation -->
+    <string name="nav_dashboard">Tableau de bord</string>
+    <string name="nav_vehicles">Véhicules</string>
+    <string name="nav_fillups">Carburant</string>
+    <string name="nav_expenses">Dépenses</string>
+    <string name="nav_services">Entretien</string>
+    <string name="nav_reminders">Rappels</string>
+    <string name="nav_reports">Rapports</string>
+    <string name="nav_settings">Paramètres</string>
+    <string name="nav_profile">Profil</string>
+
+    <!-- Authentication & Profile -->
+    <string name="auth_sign_in">Se connecter</string>
+    <string name="auth_sign_up">S\'inscrire</string>
+    <string name="auth_sign_out">Se déconnecter</string>
+    <string name="auth_email">E-mail</string>
+    <string name="auth_email_hint">Entrez votre adresse e-mail</string>
+    <string name="auth_password">Mot de passe</string>
+    <string name="auth_password_hint">Entrez votre mot de passe</string>
+    <string name="auth_confirm_password">Confirmer le mot de passe</string>
+    <string name="auth_confirm_password_hint">Retapez votre mot de passe</string>
+    <string name="auth_forgot_password">Mot de passe oublié ?</string>
+    <string name="auth_reset_password">Réinitialiser le mot de passe</string>
+    <string name="auth_reset_password_instruction">Entrez votre adresse e-mail pour recevoir les instructions de réinitialisation.</string>
+    <string name="auth_send_reset_link">Envoyer le lien</string>
+    <string name="auth_reset_link_sent">E-mail de réinitialisation envoyé. Vérifiez votre boîte de réception.</string>
+    <string name="auth_google_sign_in">Continuer avec Google</string>
+    <string name="auth_dont_have_account">Vous n\'avez pas de compte ? S\'inscrire</string>
+    <string name="auth_already_have_account">Vous avez déjà un compte ? Se connecter</string>
+    <string name="auth_name">Nom complet</string>
+    <string name="auth_name_hint">Entrez votre nom complet</string>
+    <string name="auth_sign_out_confirm">Êtes-vous sûr de vouloir vous déconnecter ?</string>
+    <string name="auth_account_created">Compte créé avec succès !</string>
+    <string name="auth_welcome_back">Bon retour parmi nous !</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_title">Tableau de bord</string>
+    <string name="dashboard_quick_actions">Actions rapides</string>
+    <string name="dashboard_total_spent">Dépenses totales</string>
+    <string name="dashboard_avg_fuel_consumption">Conso. moyenne</string>
+    <string name="dashboard_total_distance">Distance totale</string>
+    <string name="dashboard_recent_activity">Activité récente</string>
+    <string name="dashboard_upcoming_reminders">Rappels à venir</string>
+    <string name="dashboard_no_activities">Aucune activité récente enregistrée</string>
+    <string name="dashboard_select_vehicle">Sélectionner un véhicule</string>
+    <string name="dashboard_all_vehicles">Tous les véhicules</string>
+    <string name="dashboard_this_month">Ce mois-ci</string>
+    <string name="dashboard_last_month">Le mois dernier</string>
+    <string name="dashboard_this_year">Cette année</string>
+
+    <!-- Vehicles -->
+    <string name="vehicle_title">Véhicules</string>
+    <string name="vehicle_add">Ajouter un véhicule</string>
+    <string name="vehicle_edit">Modifier le véhicule</string>
+    <string name="vehicle_delete">Supprimer le véhicule</string>
+    <string name="vehicle_delete_confirm">Êtes-vous sûr de vouloir supprimer ce véhicule ? Tous les pleins, dépenses et entretiens associés seront également supprimés.</string>
+    <string name="vehicle_make">Marque</string>
+    <string name="vehicle_make_hint">ex. Toyota, Volkswagen, Renault</string>
+    <string name="vehicle_model">Modèle</string>
+    <string name="vehicle_model_hint">ex. Corolla, Golf, Clio</string>
+    <string name="vehicle_year">Année</string>
+    <string name="vehicle_year_hint">ex. 2022</string>
+    <string name="vehicle_plate">Immatriculation</string>
+    <string name="vehicle_plate_hint">ex. 12345-A-1, AB-123-CD</string>
+    <string name="vehicle_vin">N° de série (VIN)</string>
+    <string name="vehicle_vin_hint">Numéro d\'identification à 17 caractères</string>
+    <string name="vehicle_fuel_type">Type de carburant</string>
+    <string name="vehicle_current_odometer">Kilométrage actuel</string>
+    <string name="vehicle_current_odometer_hint">ex. 45000</string>
+    <string name="vehicle_photo">Photo du véhicule</string>
+    <string name="vehicle_notes">Remarques</string>
+    <string name="vehicle_notes_hint">Remarques additionnelles sur le véhicule…</string>
+    <string name="vehicle_empty">Aucun véhicule enregistré. Ajoutez votre premier véhicule pour commencer !</string>
+    <string name="vehicle_saved">Véhicule enregistré avec succès</string>
+    <string name="vehicle_deleted">Véhicule supprimé avec succès</string>
+    <string name="vehicle_details">Détails du véhicule</string>
+
+    <!-- Fuel & Fill-ups -->
+    <string name="fillup_title">Carburant &amp; Pleins</string>
+    <string name="fillup_add">Ajouter un plein</string>
+    <string name="fillup_edit">Modifier le plein</string>
+    <string name="fillup_delete">Supprimer le plein</string>
+    <string name="fillup_delete_confirm">Êtes-vous sûr de vouloir supprimer ce plein de carburant ?</string>
+    <string name="fillup_date">Date</string>
+    <string name="fillup_odometer">Kilométrage au compteur</string>
+    <string name="fillup_volume">Volume de carburant</string>
+    <string name="fillup_price_per_unit">Prix unitaire</string>
+    <string name="fillup_total_cost">Coût total</string>
+    <string name="fillup_is_full_tank">Plein complet</string>
+    <string name="fillup_station">Station-service / Enseigne</string>
+    <string name="fillup_station_hint">ex. Shell, Total, BP, Mobil</string>
+    <string name="fillup_fuel_type">Type de carburant</string>
+    <string name="fillup_consumption">Consommation de carburant</string>
+    <string name="fillup_efficiency">Efficacité énergétique</string>
+    <string name="fillup_empty">Aucun plein enregistré pour ce véhicule.</string>
+    <string name="fillup_saved">Plein enregistré avec succès</string>
+    <string name="fillup_deleted">Plein supprimé avec succès</string>
+    <string name="fillup_distance_since_last">Distance depuis le dernier plein</string>
+
+    <!-- Expenses -->
+    <string name="expense_title">Dépenses</string>
+    <string name="expense_add">Ajouter une dépense</string>
+    <string name="expense_edit">Modifier la dépense</string>
+    <string name="expense_delete">Supprimer la dépense</string>
+    <string name="expense_delete_confirm">Êtes-vous sûr de vouloir supprimer cette dépense ?</string>
+    <string name="expense_category">Catégorie</string>
+    <string name="expense_amount">Montant</string>
+    <string name="expense_date">Date</string>
+    <string name="expense_description">Description</string>
+    <string name="expense_description_hint">ex. Paiement annuel assurance auto</string>
+    <string name="expense_receipt">Reçu / Facture</string>
+    <string name="expense_odometer">Kilométrage (facultatif)</string>
+    <string name="expense_notes">Remarques</string>
+    <string name="expense_empty">Aucune dépense enregistrée pour le moment.</string>
+    <string name="expense_saved">Dépense enregistrée avec succès</string>
+    <string name="expense_deleted">Dépense supprimée avec succès</string>
+
+    <!-- Maintenance & Services -->
+    <string name="service_title">Entretien &amp; Révisions</string>
+    <string name="service_add">Ajouter un entretien</string>
+    <string name="service_edit">Modifier l\'entretien</string>
+    <string name="service_delete">Supprimer l\'entretien</string>
+    <string name="service_delete_confirm">Êtes-vous sûr de vouloir supprimer cet enregistrement d\'entretien ?</string>
+    <string name="service_type">Type d\'intervention</string>
+    <string name="service_date">Date de l\'intervention</string>
+    <string name="service_odometer">Kilométrage lors de l\'intervention</string>
+    <string name="service_cost">Coût</string>
+    <string name="service_description">Description / Travaux réalisés</string>
+    <string name="service_description_hint">ex. Vidange huile synthétique et changement filtre à huile</string>
+    <string name="service_parts">Pièces remplacées</string>
+    <string name="service_add_part">Ajouter une pièce</string>
+    <string name="service_part_name">Nom de la pièce</string>
+    <string name="service_receipt">Facture / Ordre de réparation</string>
+    <string name="service_notes">Remarques</string>
+    <string name="service_empty">Aucun historique d\'entretien enregistré.</string>
+    <string name="service_saved">Entretien enregistré avec succès</string>
+    <string name="service_deleted">Entretien supprimé avec succès</string>
+
+    <!-- Reminders & Alerts -->
+    <string name="reminder_title">Rappels</string>
+    <string name="reminder_add">Ajouter un rappel</string>
+    <string name="reminder_edit">Modifier le rappel</string>
+    <string name="reminder_delete">Supprimer le rappel</string>
+    <string name="reminder_delete_confirm">Êtes-vous sûr de vouloir supprimer ce rappel ?</string>
+    <string name="reminder_name">Titre du rappel</string>
+    <string name="reminder_name_hint">ex. Prochaine vidange moteur</string>
+    <string name="reminder_type">Type d\'intervention</string>
+    <string name="reminder_interval_km">Intervalle par distance</string>
+    <string name="reminder_interval_km_hint">ex. 10000 km</string>
+    <string name="reminder_interval_days">Intervalle par durée (jours)</string>
+    <string name="reminder_interval_days_hint">ex. 365 jours</string>
+    <string name="reminder_last_service_date">Date du dernier entretien</string>
+    <string name="reminder_last_service_odometer">Kilométrage du dernier entretien</string>
+    <string name="reminder_next_due_date">Prochaine date d\'échéance</string>
+    <string name="reminder_next_due_odometer">Prochain kilométrage d\'échéance</string>
+    <string name="reminder_recurring">Répéter automatiquement</string>
+    <string name="reminder_active">Actif</string>
+    <string name="reminder_status_overdue">EN RETARD</string>
+    <string name="reminder_status_due_soon">BIENTÔT DÛ</string>
+    <string name="reminder_status_upcoming">À VENIR</string>
+    <string name="reminder_mark_completed">Marquer comme effectué</string>
+    <string name="reminder_complete_confirm">Marquer ce rappel comme effectué ? Cela mettra à jour l\'historique d\'entretien et reprogrammera le rappel s\'il est récurrent.</string>
+    <string name="reminder_empty">Aucun rappel configuré. Ajoutez un rappel pour ne jamais manquer un entretien !</string>
+    <string name="reminder_saved">Rappel enregistré avec succès</string>
+    <string name="reminder_deleted">Rappel supprimé avec succès</string>
+
+    <!-- Reports & Analytics -->
+    <string name="reports_title">Rapports &amp; Statistiques</string>
+    <string name="reports_total_expenses">Dépenses totales</string>
+    <string name="reports_fuel_costs">Coûts de carburant</string>
+    <string name="reports_service_costs">Coûts d\'entretien</string>
+    <string name="reports_other_expenses">Autres dépenses</string>
+    <string name="reports_avg_consumption">Consommation moyenne</string>
+    <string name="reports_cost_per_km">Coût par km</string>
+    <string name="reports_cost_per_mi">Coût par mile</string>
+    <string name="reports_monthly_spending">Évolution mensuelle des dépenses</string>
+    <string name="reports_category_breakdown">Répartition par catégorie</string>
+    <string name="reports_export">Exporter les données</string>
+    <string name="reports_export_csv">Exporter en CSV</string>
+    <string name="reports_date_range">Période</string>
+    <string name="reports_last_30_days">30 derniers jours</string>
+    <string name="reports_last_90_days">90 derniers jours</string>
+    <string name="reports_this_year">Cette année</string>
+    <string name="reports_all_time">Tout l\'historique</string>
+
+    <!-- Settings & Preferences -->
+    <string name="settings_title">Paramètres</string>
+    <string name="settings_preferences">Préférences</string>
+    <string name="settings_appearance">Apparence</string>
+    <string name="settings_theme">Thème</string>
+    <string name="settings_theme_system">Suivre le système</string>
+    <string name="settings_theme_light">Mode clair</string>
+    <string name="settings_theme_dark">Mode sombre</string>
+    <string name="settings_language">Langue</string>
+    <string name="settings_language_en">English</string>
+    <string name="settings_language_fr">Français</string>
+    <string name="settings_distance_unit">Unité de distance</string>
+    <string name="settings_distance_km">Kilomètres (km)</string>
+    <string name="settings_distance_mi">Miles (mi)</string>
+    <string name="settings_volume_unit">Unité de volume</string>
+    <string name="settings_volume_liters">Litres (L)</string>
+    <string name="settings_volume_gallons">Gallons (gal)</string>
+    <string name="settings_currency">Devise</string>
+    <string name="settings_notifications">Notifications</string>
+    <string name="settings_reminders_notification">Rappels d\'entretien</string>
+    <string name="settings_data">Données &amp; Synchronisation</string>
+    <string name="settings_sync_now">Synchroniser maintenant</string>
+    <string name="settings_sync_success">Données synchronisées avec succès</string>
+    <string name="settings_sync_failed">Échec de synchronisation. Veuillez vérifier votre connexion Internet.</string>
+    <string name="settings_about">À propos de Net-CAR</string>
+    <string name="settings_version">Version</string>
+    <string name="settings_privacy_policy">Politique de confidentialité</string>
+    <string name="settings_terms">Conditions d\'utilisation</string>
+    <string name="settings_contact_support">Contacter l\'assistance</string>
+
+    <!-- Enums: Fuel Types -->
+    <string name="fuel_gasoline">Essence</string>
+    <string name="fuel_diesel">Diesel</string>
+    <string name="fuel_electric">Électrique</string>
+    <string name="fuel_hybrid">Hybride</string>
+    <string name="fuel_lpg">GPL</string>
+    <string name="fuel_ethanol">Éthanol (E85)</string>
+    <string name="fuel_cng">GNV</string>
+
+    <!-- Enums: Expense Categories -->
+    <string name="category_insurance">Assurance</string>
+    <string name="category_parking">Stationnement</string>
+    <string name="category_tolls">Péages</string>
+    <string name="category_fines">Amendes &amp; Pénalités</string>
+    <string name="category_car_wash">Lavage auto</string>
+    <string name="category_taxes">Taxes &amp; Vignettes</string>
+    <string name="category_registration">Carte grise &amp; Immatriculation</string>
+    <string name="category_financing">Crédit &amp; Leasing</string>
+    <string name="category_repairs">Réparations</string>
+    <string name="category_maintenance">Entretien</string>
+    <string name="category_other">Autre</string>
+
+    <!-- Enums: Service Types -->
+    <string name="service_oil_change">Vidange moteur</string>
+    <string name="service_tire_rotation">Permutation des pneus</string>
+    <string name="service_brakes">Freins</string>
+    <string name="service_filters">Filtres</string>
+    <string name="service_battery">Batterie</string>
+    <string name="service_transmission">Boîte de vitesses</string>
+    <string name="service_coolant">Liquide de refroidissement</string>
+    <string name="service_spark_plugs">Bougies d\'allumage</string>
+    <string name="service_timing_belt">Courroie de distribution</string>
+    <string name="service_inspection">Contrôle technique</string>
+    <string name="service_other_type">Autre</string>
+
+    <!-- Units & Formats -->
+    <string name="unit_km">km</string>
+    <string name="unit_mi">mi</string>
+    <string name="unit_liters">L</string>
+    <string name="unit_gallons">gal</string>
+    <string name="unit_km_l">km/L</string>
+    <string name="unit_l_100km">L/100km</string>
+    <string name="unit_mpg">MPG</string>
+    <string name="currency_eur">EUR (€)</string>
+    <string name="currency_usd">USD ($)</string>
+    <string name="currency_cad">CAD ($)</string>
+    <string name="currency_gbp">GBP (£)</string>
+    <string name="currency_mad">MAD (DH)</string>
+
+    <!-- Errors & Form Validation -->
+    <string name="error_field_required">Ce champ est obligatoire</string>
+    <string name="error_invalid_email">Veuillez entrer une adresse e-mail valide</string>
+    <string name="error_password_too_short">Le mot de passe doit comporter au moins 6 caractères</string>
+    <string name="error_password_mismatch">Les mots de passe ne correspondent pas</string>
+    <string name="error_invalid_number">Veuillez entrer un nombre valide</string>
+    <string name="error_invalid_odometer">Le kilométrage doit être supérieur à zéro</string>
+    <string name="error_odometer_lower_than_previous">Le kilométrage ne peut pas être inférieur au kilométrage précédent</string>
+    <string name="error_network">Erreur réseau. Veuillez vérifier votre connexion.</string>
+    <string name="error_unknown">Une erreur inattendue s\'est produite. Veuillez réessayer.</string>
+    <string name="error_vehicle_not_found">Véhicule introuvable</string>
+</resources>

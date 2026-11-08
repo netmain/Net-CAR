@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="blue_primary">#FF1565C0</color>
+    <color name="blue_on_primary">#FFFFFFFF</color>
+    <color name="blue_primary_container">#FFD1E4FF</color>
+    <color name="blue_on_primary_container">#FF001D36</color>
+    <color name="blue_secondary">#FF535F70</color>
+    <color name="blue_on_secondary">#FFFFFFFF</color>
+    <color name="blue_secondary_container">#FFD7E3F7</color>
+    <color name="blue_on_secondary_container">#FF101C2B</color>
+    <color name="blue_tertiary">#FF6B5778</color>
+    <color name="blue_on_tertiary">#FFFFFFFF</color>
+    <color name="blue_tertiary_container">#FFF2DAFF</color>
+    <color name="blue_on_tertiary_container">#FF251431</color>
+    <color name="blue_error">#FFBA1A1A</color>
+    <color name="blue_on_error">#FFFFFFFF</color>
+    <color name="blue_error_container">#FFFFDAD6</color>
+    <color name="blue_on_error_container">#FF410002</color>
+    <color name="blue_background">#FFFDFCFF</color>
+    <color name="blue_on_background">#FF1A1C1E</color>
+    <color name="blue_surface">#FFFDFCFF</color>
+    <color name="blue_on_surface">#FF1A1C1E</color>
+    <color name="blue_surface_variant">#FFDFE2EB</color>
+    <color name="blue_on_surface_variant">#FF43474E</color>
+    <color name="blue_outline">#FF73777F</color>
+
+    <!-- Dark theme colors -->
+    <color name="blue_primary_dark">#FF9ECAFF</color>
+    <color name="blue_on_primary_dark">#FF003258</color>
+    <color name="blue_primary_container_dark">#FF00497D</color>
+    <color name="blue_on_primary_container_dark">#FFD1E4FF</color>
+    <color name="blue_secondary_dark">#FFBBC7DB</color>
+    <color name="blue_on_secondary_dark">#FF253140</color>
+    <color name="blue_secondary_container_dark">#FF3B4858</color>
+    <color name="blue_on_secondary_container_dark">#FFD7E3F7</color>
+    <color name="blue_background_dark">#FF1A1C1E</color>
+    <color name="blue_on_background_dark">#FFE2E2E6</color>
+    <color name="blue_surface_dark">#FF1A1C1E</color>
+    <color name="blue_on_surface_dark">#FFE2E2E6</color>
+    <color name="blue_surface_variant_dark">#FF43474E</color>
+    <color name="blue_on_surface_variant_dark">#FFC3C7CF</color>
+    <color name="blue_outline_dark">#FF8D9199</color>
+
+    <!-- Status colors -->
+    <color name="status_success">#FF4CAF50</color>
+    <color name="status_warning">#FFFFC107</color>
+    <color name="status_danger">#FFF44336</color>
+    <color name="fuel_color">#FF2196F3</color>
+    <color name="maintenance_color">#FFFF9800</color>
+    <color name="expense_color">#FF9C27B0</color>
+</resources>
