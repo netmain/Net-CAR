@@ -8,8 +8,8 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=web",
-    "build": "npm run build --workspace=web && node -e \"const fs=require('fs');if(fs.existsSync('web/.next/standalone/web')){if(fs.existsSync('web/.next/static'))fs.cpSync('web/.next/static','web/.next/standalone/web/.next/static',{recursive:true});if(fs.existsSync('web/public'))fs.cpSync('web/public','web/.next/standalone/web/public',{recursive:true});}fs.rmSync('.next',{recursive:true,force:true});fs.cpSync('web/.next','.next',{recursive:true});\"",
-    "start": "node server.js",
+    "build": "npm run build --workspace=web && node -e \"const fs=require('fs');if(fs.existsSync('web/.next/standalone/web')){if(fs.existsSync('web/.next/static'))fs.cpSync('web/.next/static','web/.next/standalone/web/.next/static',{recursive:true,force:true});if(fs.existsSync('web/public'))fs.cpSync('web/public','web/.next/standalone/web/public',{recursive:true,force:true});if(fs.existsSync('server.js'))fs.cpSync('server.js','web/.next/standalone/server.js',{force:true});}fs.rmSync('.next',{recursive:true,force:true});fs.cpSync('web/.next','.next',{recursive:true});\"",
+    "start": "node -e \"const fs=require('fs'),p=require('path');if(fs.existsSync('server.js'))require(p.resolve('server.js'));else if(fs.existsSync('web/server.js')){process.chdir('web');require(p.resolve('server.js'));}\"",
     "lint": "npm run lint --workspace=web"
   },
   "dependencies": {

@@ -7,12 +7,24 @@ process.env.PORT = process.env.PORT || '3000';
 process.env.HOSTNAME = process.env.HOSTNAME || '0.0.0.0';
 
 const rootDir = __dirname;
+
+// Case 1: Running from repo root where web/.next/standalone/web/server.js exists
 const standaloneWebDir = path.join(rootDir, 'web', '.next', 'standalone', 'web');
 const standaloneWebServer = path.join(standaloneWebDir, 'server.js');
+
+// Case 2: Running from repo root where .next/standalone/web/server.js exists
+const rootStandaloneWebDir = path.join(rootDir, '.next', 'standalone', 'web');
+const rootStandaloneWebServer = path.join(rootStandaloneWebDir, 'server.js');
+
+// Case 3: Running inside Cloud Run /workspace (which is the unpacked .next/standalone directory itself)
+const directWebDir = path.join(rootDir, 'web');
+const directWebServer = path.join(directWebDir, 'server.js');
+
+// Case 4: Non-monorepo standalone fallback
 const standaloneRootDir = path.join(rootDir, 'web', '.next', 'standalone');
 const standaloneRootServer = path.join(standaloneRootDir, 'server.js');
 
-function copyDirIfMissing(src, dest) {
+function copyDirAlways(src, dest) {
   try {
     if (fs.existsSync(src)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -24,28 +36,33 @@ function copyDirIfMissing(src, dest) {
 }
 
 if (fs.existsSync(standaloneWebServer)) {
-  // Ensure static assets and public directory are available inside standalone/web
-  copyDirIfMissing(
+  copyDirAlways(
     path.join(rootDir, 'web', '.next', 'static'),
     path.join(standaloneWebDir, '.next', 'static')
   );
-  copyDirIfMissing(
+  copyDirAlways(
     path.join(rootDir, 'web', 'public'),
     path.join(standaloneWebDir, 'public')
   );
-  copyDirIfMissing(
+  copyDirAlways(
     path.join(rootDir, 'public'),
     path.join(standaloneWebDir, 'public')
   );
 
   process.chdir(standaloneWebDir);
   require(standaloneWebServer);
+} else if (fs.existsSync(rootStandaloneWebServer)) {
+  process.chdir(rootStandaloneWebDir);
+  require(rootStandaloneWebServer);
+} else if (fs.existsSync(directWebServer)) {
+  process.chdir(directWebDir);
+  require(directWebServer);
 } else if (fs.existsSync(standaloneRootServer)) {
-  copyDirIfMissing(
+  copyDirAlways(
     path.join(rootDir, 'web', '.next', 'static'),
     path.join(standaloneRootDir, '.next', 'static')
   );
-  copyDirIfMissing(
+  copyDirAlways(
     path.join(rootDir, 'web', 'public'),
     path.join(standaloneRootDir, 'public')
   );
@@ -53,7 +70,6 @@ if (fs.existsSync(standaloneWebServer)) {
   process.chdir(standaloneRootDir);
   require(standaloneRootServer);
 } else {
-  // Fallback to next start inside web workspace
   const nextBin = path.join(rootDir, 'node_modules', '.bin', 'next');
   const child = spawn(
     fs.existsSync(nextBin) ? nextBin : 'npx',
