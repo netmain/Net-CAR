@@ -81,3 +81,60 @@ export function calculateReminderProgress(
 
   return { isOverdue, progressPercent };
 }
+
+export interface ConsumptionTrendPoint {
+  id: string;
+  date: string;
+  shortDate: string;
+  consumption: number;
+  odometer: number;
+  distance: number;
+  volume: number;
+  totalCost: number;
+  station: string;
+}
+
+export function buildConsumptionTrendSeries(
+  fillUps: Pick<
+    FillUp,
+    'id' | 'date' | 'odometer' | 'volume' | 'totalCost' | 'isFullTank' | 'station'
+  >[],
+  units: Units
+): ConsumptionTrendPoint[] {
+  if (fillUps.length < 2) return [];
+
+  const chronological = [...fillUps].sort((a, b) => {
+    if (a.odometer !== b.odometer) return a.odometer - b.odometer;
+    return a.date.localeCompare(b.date);
+  });
+
+  const points: ConsumptionTrendPoint[] = [];
+
+  for (let i = 1; i < chronological.length; i++) {
+    const prev = chronological[i - 1];
+    const curr = chronological[i];
+    const distance = curr.odometer - prev.odometer;
+
+    if (curr.isFullTank && prev.isFullTank && distance > 0 && curr.volume > 0) {
+      const consumption =
+        units === 'metric'
+          ? Number(((curr.volume / distance) * 100).toFixed(1))
+          : Number((distance / curr.volume).toFixed(1));
+
+      const isoDate = curr.date.slice(0, 10);
+      points.push({
+        id: curr.id,
+        date: isoDate,
+        shortDate: isoDate.slice(5),
+        consumption,
+        odometer: curr.odometer,
+        distance,
+        volume: curr.volume,
+        totalCost: curr.totalCost,
+        station: curr.station || '',
+      });
+    }
+  }
+
+  return points;
+}

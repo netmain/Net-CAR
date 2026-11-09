@@ -3,6 +3,17 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/lib/app-context';
 import { FuelType } from '@/types';
+import { buildConsumptionTrendSeries } from '@/lib/telemetry-math';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ReferenceLine,
+} from 'recharts';
 import { 
   Fuel, 
   Plus, 
@@ -19,7 +30,8 @@ import {
   CheckCircle2,
   AlertCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  TrendingDown
 } from 'lucide-react';
 
 export default function FuelPage() {
@@ -42,6 +54,7 @@ export default function FuelPage() {
   const [importingCsv, setImportingCsv] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(30);
+  const [chartRange, setChartRange] = useState<'last30' | 'all'>('last30');
 
   // Form State
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -238,6 +251,26 @@ export default function FuelPage() {
       fillupStatsMap: statsMap,
     };
   }, [vehicleFillups, currentUnits]);
+
+  // Memoize chronological fuel consumption vs. date trend points for Recharts LineChart
+  const consumptionTrendData = useMemo(() => {
+    return buildConsumptionTrendSeries(vehicleFillups, currentUnits);
+  }, [vehicleFillups, currentUnits]);
+
+  const displayedTrendData = useMemo(() => {
+    if (chartRange === 'last30' && consumptionTrendData.length > 30) {
+      return consumptionTrendData.slice(-30);
+    }
+    return consumptionTrendData;
+  }, [consumptionTrendData, chartRange]);
+
+  const bestConsumption = useMemo(() => {
+    if (consumptionTrendData.length === 0) return null;
+    if (currentUnits === 'metric') {
+      return Math.min(...consumptionTrendData.map((d) => d.consumption));
+    }
+    return Math.max(...consumptionTrendData.map((d) => d.consumption));
+  }, [consumptionTrendData, currentUnits]);
 
   // Memoize search filter
   const filteredFillups = useMemo(() => {
@@ -535,6 +568,189 @@ export default function FuelPage() {
             {fullTankCount} {lang === 'fr' ? 'réservoirs pleins' : 'full tanks'}
           </p>
         </div>
+      </div>
+
+      {/* Fuel Consumption Trend Line Chart (Consumption vs. Date) */}
+      <div
+        data-testid="fuel-consumption-chart"
+        className="rounded-3xl border border-slate-800/80 bg-[#111827]/90 p-6 shadow-xl"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800/70 pb-4">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-500/15 border border-sky-500/30 text-sky-400 shrink-0">
+                <TrendingDown className="h-4 w-4" />
+              </div>
+              <div>
+                <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+                  {lang === 'fr'
+                    ? `Évolution de la Consommation (${economyUnit} vs. Date)`
+                    : `Fuel Consumption Trend (${economyUnit} vs. Date)`}
+                </h2>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-0.5 font-mono tabular-nums">
+                  <span>
+                    {activeVehicle
+                      ? `${activeVehicle.make} ${activeVehicle.model}`
+                      : lang === 'fr'
+                        ? 'Véhicule actif'
+                        : 'Active vehicle'}
+                  </span>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {consumptionTrendData.length}{' '}
+                    {lang === 'fr' ? 'intervalles calculés' : 'measured intervals'}
+                  </span>
+                  {bestConsumption !== null && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-emerald-400 font-bold">
+                        {lang === 'fr' ? 'Record :' : 'Best:'} {bestConsumption} {economyUnit}
+                      </span>
+                    </>
+                  )}
+                  {avgEconomy > 0 && (
+                    <>
+                      <span aria-hidden="true">·</span>
+                      <span className="text-amber-400 font-bold">
+                        {lang === 'fr' ? 'Moyenne :' : 'Avg:'} {avgEconomy} {economyUnit}
+                      </span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {consumptionTrendData.length > 30 && (
+            <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-[#0B0F17] p-1 self-start sm:self-auto">
+              <button
+                type="button"
+                onClick={() => setChartRange('last30')}
+                className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  chartRange === 'last30'
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {lang === 'fr' ? '30 derniers' : 'Last 30'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartRange('all')}
+                className={`px-3 py-1.5 text-xs font-mono font-bold rounded-lg transition cursor-pointer whitespace-nowrap ${
+                  chartRange === 'all'
+                    ? 'bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {lang === 'fr'
+                  ? `Tout (${consumptionTrendData.length})`
+                  : `All (${consumptionTrendData.length})`}
+              </button>
+            </div>
+          )}
+        </div>
+
+        {displayedTrendData.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-sm font-bold text-slate-300">
+              {lang === 'fr'
+                ? 'Pas assez de pleins complets consécutifs pour tracer la courbe de consommation'
+                : 'Not enough consecutive full-tank fill-ups to plot the consumption trend'}
+            </p>
+            <p className="mt-1 text-xs text-slate-400 max-w-md mx-auto">
+              {lang === 'fr'
+                ? 'Enregistrez au moins 2 pleins complets avec kilométrage croissant pour visualiser la consommation en fonction de la date.'
+                : 'Log at least 2 full-tank fill-ups with increasing odometer readings to visualize fuel consumption over time.'}
+            </p>
+          </div>
+        ) : (
+          <div className="h-72 w-full mt-5">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={displayedTrendData}
+                margin={{ top: 10, right: 20, left: 4, bottom: 5 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis
+                  dataKey="date"
+                  stroke="#94a3b8"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickMargin={8}
+                  minTickGap={24}
+                />
+                <YAxis
+                  stroke="#94a3b8"
+                  tick={{ fill: '#94a3b8', fontSize: 11 }}
+                  tickFormatter={(val) => `${val}`}
+                  domain={['auto', 'auto']}
+                  width={44}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#0F1522',
+                    borderColor: '#1e293b',
+                    borderRadius: '14px',
+                    color: '#f8fafc',
+                    fontSize: '12px',
+                    fontFamily: 'var(--font-mono), monospace',
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.6)',
+                  }}
+                  labelStyle={{
+                    color: '#38bdf8',
+                    fontWeight: 800,
+                    marginBottom: '6px',
+                  }}
+                  formatter={(value, _name, item) => {
+                    const payload = item?.payload as
+                      | {
+                          odometer?: number;
+                          distance?: number;
+                          volume?: number;
+                          totalCost?: number;
+                          station?: string;
+                        }
+                      | undefined;
+                    const extra = payload
+                      ? ` (${payload.volume ?? 0} ${volumeUnit} · +${(payload.distance ?? 0).toLocaleString()} ${distUnit}${payload.station ? ` · ${payload.station}` : ''})`
+                      : '';
+                    return [
+                      `${Number(value).toFixed(1)} ${economyUnit}${extra}`,
+                      lang === 'fr' ? 'Consommation' : 'Consumption',
+                    ];
+                  }}
+                  labelFormatter={(label, payload) => {
+                    const first = payload?.[0]?.payload as { odometer?: number } | undefined;
+                    return first?.odometer
+                      ? `${label} · ${first.odometer.toLocaleString()} ${distUnit}`
+                      : String(label);
+                  }}
+                />
+                {avgEconomy > 0 && (
+                  <ReferenceLine
+                    y={avgEconomy}
+                    stroke="#f59e0b"
+                    strokeDasharray="4 4"
+                    strokeWidth={1.5}
+                  />
+                )}
+                <Line
+                  type="monotone"
+                  dataKey="consumption"
+                  name={
+                    lang === 'fr'
+                      ? `Consommation (${economyUnit})`
+                      : `Consumption (${economyUnit})`
+                  }
+                  stroke="#38bdf8"
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#0284c7', stroke: '#38bdf8', strokeWidth: 2 }}
+                  activeDot={{ r: 6, fill: '#38bdf8', stroke: '#ffffff', strokeWidth: 2 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {/* Filter, Search & Page Size Bar */}

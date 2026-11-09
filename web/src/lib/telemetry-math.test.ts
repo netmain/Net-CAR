@@ -4,6 +4,7 @@ import {
   calculateAverageEconomy,
   calculateCostShares,
   calculateReminderProgress,
+  buildConsumptionTrendSeries,
 } from './telemetry-math';
 import { parseFuelioCsv, exportFuelioCsv } from './fuelio-csv';
 
@@ -14,6 +15,46 @@ test('calculateAverageEconomy computes metric L/100km and imperial MPG accuratel
   ];
   assert.equal(calculateAverageEconomy(fillUps, 'metric'), 6.5);
   assert.equal(calculateAverageEconomy(fillUps, 'imperial'), 15.4);
+});
+
+test('buildConsumptionTrendSeries produces chronological consumption vs date points', () => {
+  const series = buildConsumptionTrendSeries(
+    [
+      {
+        id: 'f-3',
+        date: '2026-11-05T10:00:00.000Z',
+        odometer: 64250,
+        volume: 50.0,
+        totalCost: 1450,
+        isFullTank: true,
+        station: 'Naftal Sidi Fredj',
+      },
+      {
+        id: 'f-1',
+        date: '2026-10-10T10:00:00.000Z',
+        odometer: 62700,
+        volume: 46.0,
+        totalCost: 1334,
+        isFullTank: true,
+        station: 'Naftal Cheraga',
+      },
+      {
+        id: 'f-2',
+        date: '2026-10-25T10:00:00.000Z',
+        odometer: 63480,
+        volume: 48.0,
+        totalCost: 1392,
+        isFullTank: true,
+        station: 'Naftal Est',
+      },
+    ],
+    'metric'
+  );
+  assert.equal(series.length, 2);
+  assert.equal(series[0].date, '2026-10-25');
+  assert.equal(series[0].consumption, 6.2);
+  assert.equal(series[1].date, '2026-11-05');
+  assert.equal(series[1].consumption, 6.5);
 });
 
 test('calculateCostShares computes percentages summing to 100', () => {
