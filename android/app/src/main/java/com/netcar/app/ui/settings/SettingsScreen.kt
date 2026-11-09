@@ -57,6 +57,10 @@ import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Units
 import com.netcar.app.ui.components.TopBar
+import com.netcar.app.ui.theme.ExpenseAmber
+import com.netcar.app.ui.theme.ExpenseAmberContainer
+import com.netcar.app.ui.theme.OverdueRed
+import com.netcar.app.ui.theme.OverdueRedContainer
 import com.netcar.app.ui.theme.SuccessGreen
 import com.netcar.app.ui.theme.SuccessGreenContainer
 import java.text.SimpleDateFormat
@@ -73,7 +77,7 @@ fun SettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val settings = uiState.settings
     var currencyDropdownExpanded by remember { mutableStateOf(false) }
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault())
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
 
     Scaffold(
         topBar = {
@@ -271,8 +275,35 @@ fun SettingsScreen(
                 }
             }
 
-            // 4. Google Drive Cloud Backup Status & Sync Button
+            // 4. Cloud Synchronization Status & Sync Now Button
             item {
+                val isSyncing = uiState.isSyncing
+                val hasError = uiState.syncErrorMessage != null
+                val badgeBg = when {
+                    isSyncing -> ExpenseAmberContainer
+                    hasError -> OverdueRedContainer
+                    settings.isDriveBackupConnected -> SuccessGreenContainer
+                    else -> ExpenseAmberContainer
+                }
+                val badgeTint = when {
+                    isSyncing -> ExpenseAmber
+                    hasError -> OverdueRed
+                    settings.isDriveBackupConnected -> SuccessGreen
+                    else -> ExpenseAmber
+                }
+                val badgeLabel = when {
+                    isSyncing -> "Syncing..."
+                    hasError -> "Sync Error"
+                    settings.isDriveBackupConnected -> "Synced"
+                    else -> "Local Mode"
+                }
+                val statusSubtitle = when {
+                    isSyncing -> "Synchronizing vehicles & fuel logs..."
+                    hasError -> "Failed to reach cloud — saved locally"
+                    settings.isDriveBackupConnected -> "Connected & Up to Date"
+                    else -> "Local offline storage"
+                }
+
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -294,13 +325,13 @@ fun SettingsScreen(
                                     modifier = Modifier
                                         .size(40.dp)
                                         .clip(CircleShape)
-                                        .background(SuccessGreenContainer),
+                                        .background(badgeBg),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.CloudDone,
+                                        imageVector = if (isSyncing) Icons.Default.CloudSync else Icons.Default.CloudDone,
                                         contentDescription = null,
-                                        tint = SuccessGreen,
+                                        tint = badgeTint,
                                         modifier = Modifier.size(22.dp)
                                     )
                                 }
@@ -309,28 +340,39 @@ fun SettingsScreen(
 
                                 Column {
                                     Text(
-                                        text = "Google Drive Backup",
+                                        text = "Cloud Synchronization",
                                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
-                                        text = if (settings.isDriveBackupConnected) "Connected & Protected" else "Not Connected",
+                                        text = statusSubtitle,
                                         style = MaterialTheme.typography.bodySmall,
-                                        color = if (settings.isDriveBackupConnected) SuccessGreen else MaterialTheme.colorScheme.error
+                                        color = badgeTint
                                     )
                                 }
                             }
 
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
-                                color = SuccessGreenContainer
+                                color = badgeBg
                             ) {
-                                Text(
-                                    text = "Active",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                    color = SuccessGreen,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(badgeTint)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = badgeLabel,
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        color = badgeTint
+                                    )
+                                }
                             }
                         }
 
@@ -338,7 +380,7 @@ fun SettingsScreen(
 
                         if (settings.lastBackupTimestamp != null) {
                             Text(
-                                text = "Last backup: ${dateFormatter.format(Date(settings.lastBackupTimestamp))}",
+                                text = "Last synced: ${dateFormatter.format(Date(settings.lastBackupTimestamp))}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -353,22 +395,35 @@ fun SettingsScreen(
                             )
                         }
 
+                        if (uiState.syncErrorMessage != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = uiState.syncErrorMessage ?: "",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = OverdueRed
+                            )
+                        }
+
                         Spacer(modifier = Modifier.height(14.dp))
 
                         Button(
                             onClick = { viewModel.syncWithGoogleDrive() },
-                            enabled = !uiState.isSyncing,
+                            enabled = !isSyncing,
                             shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            if (uiState.isSyncing) {
+                            if (isSyncing) {
                                 CircularProgressIndicator(
                                     color = MaterialTheme.colorScheme.onPrimary,
                                     strokeWidth = 2.dp,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Syncing with Google Drive...")
+                                Text("Synchronizing...")
                             } else {
                                 Icon(
                                     imageVector = Icons.Default.Sync,
@@ -376,7 +431,7 @@ fun SettingsScreen(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Backup Now")
+                                Text("Sync Now")
                             }
                         }
                     }

@@ -35,12 +35,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.netcar.app.model.FillUp
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.FuelGreen
@@ -61,6 +61,8 @@ fun FillUpListScreen(
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
     val volUnit = uiState.userSettings.units.volUnit
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
 
     Scaffold(
         topBar = {
@@ -90,7 +92,7 @@ fun FillUpListScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Summary Header Card
-            item {
+            item(key = "summary_header", contentType = "header") {
                 Card(
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = FuelGreenContainer),
@@ -135,7 +137,7 @@ fun FillUpListScreen(
             }
 
             if (uiState.fillUps.isEmpty()) {
-                item {
+                item(key = "empty_state", contentType = "empty") {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -163,12 +165,18 @@ fun FillUpListScreen(
                     }
                 }
             } else {
-                items(uiState.fillUps, key = { it.id }) { fillUp ->
+                items(
+                    items = uiState.fillUps,
+                    key = { it.id },
+                    contentType = { "fillup_card" }
+                ) { fillUp ->
                     FillUpItemCard(
                         fillUp = fillUp,
                         currencySymbol = currencySymbol,
                         distUnit = distUnit,
                         volUnit = volUnit,
+                        dateFormatter = dateFormatter,
+                        numberFormat = numberFormat,
                         onDelete = { viewModel.deleteFillUp(fillUp.id) }
                     )
                 }
@@ -183,11 +191,10 @@ private fun FillUpItemCard(
     currencySymbol: String,
     distUnit: String,
     volUnit: String,
+    dateFormatter: SimpleDateFormat,
+    numberFormat: NumberFormat,
     onDelete: () -> Unit
 ) {
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-    val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
-
     Card(
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),

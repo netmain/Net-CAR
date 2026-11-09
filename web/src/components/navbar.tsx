@@ -71,13 +71,13 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-[#0B0F19] px-4 sm:px-6 shadow-lg">
+      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-[#090D16]/90 backdrop-blur-xl px-4 sm:px-6 shadow-lg shadow-black/20">
         {/* Brand & Active Vehicle */}
         <div className="flex items-center gap-3 sm:gap-4">
           {/* Mobile hamburger button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-300 hover:text-amber-400 hover:border-amber-500/50 transition"
+            className="md:hidden flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-300 hover:text-sky-400 hover:border-sky-500/50 transition"
             aria-label="Toggle menu"
           >
             {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -85,15 +85,15 @@ export function Navbar() {
 
           {/* High-Performance Crest Logo */}
           <Link href="/" className="flex items-center gap-2.5 group">
-            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 text-white shadow-md">
+            <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 via-blue-600 to-indigo-600 text-white shadow-md shadow-sky-500/20">
               <Car className="h-5 w-5" />
               <div className="absolute inset-0 rounded-xl border border-white/25 pointer-events-none" />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="font-black text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-amber-400 bg-clip-text text-transparent">
+              <span className="font-black text-lg tracking-tight bg-gradient-to-r from-white via-sky-100 to-sky-400 bg-clip-text text-transparent">
                 Net-CAR
               </span>
-              <span className="text-[9px] font-extrabold uppercase tracking-widest text-amber-500/80 -mt-1">
+              <span className="text-[9px] font-extrabold uppercase tracking-widest text-sky-400/90 -mt-1">
                 Telemetry OS
               </span>
             </div>
@@ -105,8 +105,8 @@ export function Navbar() {
               <label htmlFor="vehicle-select" className="sr-only">
                 {t.common.selectVehicle}
               </label>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-700/90 bg-[#121826] px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-200 hover:border-amber-500/60 transition max-w-[210px] sm:max-w-none">
-                <div className="h-2 w-2 rounded-full bg-emerald-400 shrink-0" />
+              <div className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-[#111827] px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-200 hover:border-sky-500/60 transition max-w-[210px] sm:max-w-none shadow-inner">
+                <div className="h-2 w-2 rounded-full bg-emerald-400 shrink-0 shadow-sm shadow-emerald-400/50" />
                 <select
                   ref={selectRef}
                   id="vehicle-select"
@@ -120,7 +120,7 @@ export function Navbar() {
                     <option
                       key={v.id}
                       value={v.id}
-                      className="bg-[#121826] text-slate-100 py-1"
+                      className="bg-[#111827] text-slate-100 py-1"
                     >
                       {v.make} {v.model} {v.plate ? `(${v.plate})` : ''}
                     </option>
@@ -130,7 +130,7 @@ export function Navbar() {
               <button
                 type="button"
                 onClick={() => setAddVehicleModalOpen(true)}
-                className="ml-2 flex items-center justify-center h-8 w-8 rounded-xl border border-slate-800 bg-slate-900/60 text-slate-400 hover:text-amber-400 hover:border-amber-500/40 transition shadow-sm cursor-pointer"
+                className="ml-2 flex items-center justify-center h-8 w-8 rounded-xl border border-slate-800 bg-slate-900/80 text-slate-400 hover:text-sky-400 hover:border-sky-500/40 transition shadow-sm cursor-pointer"
                 title={t.vehicles.addVehicle}
                 aria-label={t.vehicles.addVehicle}
               >
@@ -144,25 +144,50 @@ export function Navbar() {
         <div className="flex items-center gap-2 sm:gap-3">
           {/* Cloud Sync Status Indicator */}
           {user && !user.isDemo ? (
-            <div
-              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono font-bold text-emerald-400"
+            <Link
+              href="/settings"
+              className={`hidden sm:flex items-center gap-1.5 rounded-xl border px-2.5 py-1 text-[11px] font-mono font-bold transition ${
+                syncStatus === 'syncing'
+                  ? 'border-sky-500/40 bg-sky-500/15 text-sky-300'
+                  : syncStatus === 'error'
+                    ? 'border-rose-500/40 bg-rose-500/15 text-rose-300'
+                    : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/15'
+              }`}
               title={
-                lang === 'fr'
-                  ? 'Synchronisation Firebase Cloud active entre vos appareils'
-                  : 'Real-time Firebase Cloud sync active across devices'
+                syncStatus === 'syncing'
+                  ? lang === 'fr'
+                    ? 'Synchronisation Cloud en cours...'
+                    : 'Cloud synchronization in progress...'
+                  : lang === 'fr'
+                    ? 'Synchronisation Firebase Cloud active entre vos appareils'
+                    : 'Real-time Firebase Cloud sync active across devices'
               }
             >
               {syncStatus === 'syncing' ? (
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                <RefreshCw className="h-3.5 w-3.5 animate-spin text-sky-400" />
               ) : (
-                <Cloud className="h-3.5 w-3.5 text-emerald-400" />
+                <Cloud
+                  className={`h-3.5 w-3.5 ${
+                    syncStatus === 'error' ? 'text-rose-400' : 'text-emerald-400'
+                  }`}
+                />
               )}
-              <span>{syncStatus === 'syncing' ? 'Sync...' : 'Cloud Sync'}</span>
-            </div>
+              <span>
+                {syncStatus === 'syncing'
+                  ? lang === 'fr'
+                    ? 'Synchronisation...'
+                    : 'Syncing...'
+                  : syncStatus === 'error'
+                    ? lang === 'fr'
+                      ? 'Erreur Sync'
+                      : 'Sync Error'
+                    : 'Cloud Sync'}
+              </span>
+            </Link>
           ) : (
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-mono font-bold text-amber-300 hover:bg-amber-500/20 transition"
+              className="hidden sm:flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-mono font-bold text-amber-300 hover:bg-amber-500/20 transition cursor-pointer"
               title={
                 lang === 'fr'
                   ? 'Connectez-vous pour synchroniser vos véhicules entre vos appareils'

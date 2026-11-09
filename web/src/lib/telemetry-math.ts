@@ -1,4 +1,4 @@
-import { FillUp, Reminder, Units } from '../types';
+import type { FillUp, Reminder, Units } from '../types/index';
 
 export function calculateAverageEconomy(
   fillUps: Pick<FillUp, 'odometer' | 'volume'>[],

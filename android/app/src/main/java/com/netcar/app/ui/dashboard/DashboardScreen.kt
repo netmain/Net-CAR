@@ -95,7 +95,7 @@ fun DashboardScreen(
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
     val consUnit = uiState.userSettings.units.consUnit
-    val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
+    val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
 
     Column(
         modifier = modifier
@@ -540,8 +540,8 @@ private fun RecentFillUpCard(
     distUnit: String,
     volUnit: String
 ) {
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
-    val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
+    val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
+    val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
 
     Card(
         shape = RoundedCornerShape(16.dp),

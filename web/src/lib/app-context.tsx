@@ -32,6 +32,7 @@ import {
   serverTimestamp,
   query,
   where,
+  writeBatch,
 } from 'firebase/firestore';
 import {
   auth,
@@ -40,6 +41,19 @@ import {
   handleFirestoreError,
   testFirestoreConnection,
 } from './firebase';
+import { parseFuelioCsv, exportFuelioCsv } from './fuelio-csv';
+
+function reportFirestoreErrorSafely(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+) {
+  try {
+    handleFirestoreError(error, operationType, path);
+  } catch {
+    // Logged by handleFirestoreError; prevent uncaught exception from crashing UI
+  }
+}
 
 export type SyncStatus = 'synced' | 'syncing' | 'local' | 'error';
 
@@ -110,6 +124,16 @@ interface AppContextType {
   syncToCloudNow: () => Promise<{ success: boolean; error?: string; count?: number }>;
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
+  exportFuelioCsvForVehicle: (vehicleId?: string) => string;
+  importFuelioCsv: (
+    csvText: string,
+    targetVehicleId?: string
+  ) => Promise<{
+    success: boolean;
+    importedFillUps: number;
+    importedExpenses: number;
+    error?: string;
+  }>;
 }
 
 const defaultProfile: UserProfile = {
@@ -617,9 +641,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             );
           }
         }
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.WRITE, userDocPath);
+        reportFirestoreErrorSafely(error, OperationType.WRITE, userDocPath);
       }
 
       // Attach Real-Time Listeners for Multi-Device Auto-Sync
@@ -655,7 +681,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.GET, userDocPath);
+          reportFirestoreErrorSafely(error, OperationType.GET, userDocPath);
         }
       );
 
@@ -688,7 +714,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.LIST, vehiclesPath);
+          reportFirestoreErrorSafely(error, OperationType.LIST, vehiclesPath);
         }
       );
 
@@ -720,7 +746,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.LIST, fillupsPath);
+          reportFirestoreErrorSafely(error, OperationType.LIST, fillupsPath);
         }
       );
 
@@ -750,7 +776,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.LIST, expensesPath);
+          reportFirestoreErrorSafely(error, OperationType.LIST, expensesPath);
         }
       );
 
@@ -781,7 +807,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.LIST, servicesPath);
+          reportFirestoreErrorSafely(error, OperationType.LIST, servicesPath);
         }
       );
 
@@ -819,7 +845,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         },
         (error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.LIST, remindersPath);
+          reportFirestoreErrorSafely(error, OperationType.LIST, remindersPath);
         }
       );
     });
@@ -856,7 +882,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setLastSyncedAt(new Date().toISOString());
           })
           .catch((error) => {
-            handleFirestoreError(error, OperationType.UPDATE, userDocPath);
+            reportFirestoreErrorSafely(error, OperationType.UPDATE, userDocPath);
           });
       }
     },
@@ -882,7 +908,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           preferredLang: newLang,
           updatedAt: serverTimestamp(),
         }).catch((error) => {
-          handleFirestoreError(error, OperationType.UPDATE, userDocPath);
+          reportFirestoreErrorSafely(error, OperationType.UPDATE, userDocPath);
         });
       }
     },
@@ -949,7 +975,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.CREATE, path);
+        reportFirestoreErrorSafely(error, OperationType.CREATE, path);
       }
     }
 
@@ -989,7 +1015,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.UPDATE, path);
+        reportFirestoreErrorSafely(error, OperationType.UPDATE, path);
       }
     }
   };
@@ -1019,7 +1045,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.DELETE, path);
+        reportFirestoreErrorSafely(error, OperationType.DELETE, path);
       }
     }
   };
@@ -1061,7 +1087,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.CREATE, path);
+        reportFirestoreErrorSafely(error, OperationType.CREATE, path);
       }
     }
 
@@ -1093,7 +1119,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.DELETE, path);
+        reportFirestoreErrorSafely(error, OperationType.DELETE, path);
       }
     }
   };
@@ -1133,7 +1159,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.CREATE, path);
+        reportFirestoreErrorSafely(error, OperationType.CREATE, path);
       }
     }
     return id;
@@ -1156,7 +1182,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.DELETE, path);
+        reportFirestoreErrorSafely(error, OperationType.DELETE, path);
       }
     }
   };
@@ -1197,7 +1223,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.CREATE, path);
+        reportFirestoreErrorSafely(error, OperationType.CREATE, path);
       }
     }
 
@@ -1227,7 +1253,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.DELETE, path);
+        reportFirestoreErrorSafely(error, OperationType.DELETE, path);
       }
     }
   };
@@ -1277,7 +1303,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.CREATE, path);
+        reportFirestoreErrorSafely(error, OperationType.CREATE, path);
       }
     }
     return id;
@@ -1335,7 +1361,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.UPDATE, path);
+        reportFirestoreErrorSafely(error, OperationType.UPDATE, path);
       }
     }
   };
@@ -1357,7 +1383,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
         setSyncStatus('error');
-        handleFirestoreError(error, OperationType.DELETE, path);
+        reportFirestoreErrorSafely(error, OperationType.DELETE, path);
       }
     }
   };
@@ -1415,166 +1441,196 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSyncStatus('syncing');
     try {
       const userDocRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userDocRef);
-      const baseProfile = {
-        userId: uid,
-        name: (userProfile.name || fbUser.displayName || 'Pilot').slice(0, 200),
-        email: (fbUser.email || userProfile.email || 'driver@netcar.app').slice(0, 320),
-        preferredLang: lang || 'fr',
-        units: userProfile.units || 'metric',
-        currency: userProfile.currency || 'DZD',
-        activeVehicleId: activeVehicleId || vehicles[0]?.id || 'veh-1',
-        updatedAt: serverTimestamp(),
-      };
+      const validVehicles = vehicles.length > 0 ? vehicles : initialVehicles;
+      const defaultVehId = validVehicles[0]?.id || 'veh-1';
+      const validVehicleIds = new Set(validVehicles.map((v) => v.id));
 
-      if (!userSnap.exists()) {
-        await setDoc(userDocRef, stripUndefined({ ...baseProfile, createdAt: serverTimestamp() }));
-      } else {
-        await updateDoc(userDocRef, stripUndefined(baseProfile));
+      const baseProfile = stripUndefined({
+        userId: uid,
+        name: (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) || 'Pilot',
+        email:
+          (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
+          'driver@netcar.app',
+        preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
+        units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
+        currency: ['DZD', 'EUR', 'USD', 'CAD', 'GBP', 'MAD', 'CHF'].includes(userProfile.currency)
+          ? userProfile.currency
+          : 'DZD',
+        activeVehicleId: validVehicleIds.has(activeVehicleId) ? activeVehicleId : defaultVehId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+
+      // Step 1: Write user profile & all parent vehicles in an initial atomic batch
+      // so parentUserExists and parentVehicleExists are 100% satisfied for child records
+      const parentBatch = writeBatch(db);
+      parentBatch.set(userDocRef, baseProfile);
+
+      for (const v of validVehicles) {
+        parentBatch.set(
+          doc(db, 'users', uid, 'vehicles', v.id),
+          stripUndefined({
+            id: v.id,
+            userId: uid,
+            name: v.name ? v.name.slice(0, 100) : undefined,
+            make: (v.make || 'Vehicle').slice(0, 100),
+            model: (v.model || 'Model').slice(0, 100),
+            year: Math.min(2100, Math.max(1900, Number(v.year) || 2021)),
+            plate: v.plate ? v.plate.slice(0, 30) : undefined,
+            vin: v.vin ? v.vin.slice(0, 30) : undefined,
+            fuelType: ['gasoline', 'diesel', 'lpg', 'electric', 'hybrid', 'ethanol', 'cng'].includes(
+              v.fuelType
+            )
+              ? v.fuelType
+              : 'gasoline',
+            photoUrl: v.photoUrl ? v.photoUrl.slice(0, 2048) : undefined,
+            currentOdometer: Math.max(0, Number(v.currentOdometer) || 0),
+            notes: v.notes ? v.notes.slice(0, 5000) : undefined,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          })
+        );
       }
+
+      await parentBatch.commit();
       isCloudReadyRef.current = true;
 
-      const writePromises: Promise<void>[] = [];
-
-      for (const v of vehicles) {
-        writePromises.push(
-          setDoc(
-            doc(db, 'users', uid, 'vehicles', v.id),
-            stripUndefined({
-              id: v.id,
-              userId: uid,
-              name: v.name?.slice(0, 100),
-              make: v.make.slice(0, 100),
-              model: v.model.slice(0, 100),
-              year: Number(v.year),
-              plate: v.plate?.slice(0, 30),
-              vin: v.vin?.slice(0, 30),
-              fuelType: v.fuelType,
-              photoUrl: v.photoUrl?.slice(0, 2048),
-              currentOdometer: Number(v.currentOdometer) || 0,
-              notes: v.notes?.slice(0, 5000),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            })
-          )
-        );
-      }
+      // Step 2: Prepare all child operations and commit in chunks of 400
+      const childOps: Array<{ ref: ReturnType<typeof doc>; data: Record<string, any> }> = [];
 
       for (const f of fillUps) {
-        writePromises.push(
-          setDoc(
-            doc(db, 'users', uid, 'fillups', f.id),
-            stripUndefined({
-              id: f.id,
-              userId: uid,
-              vehicleId: f.vehicleId,
-              date: String(f.date),
-              odometer: Number(f.odometer),
-              volume: Number(f.volume),
-              pricePerUnit: Number(f.pricePerUnit),
-              totalCost: Number(f.totalCost),
-              fuelType: f.fuelType,
-              isFullTank: Boolean(f.isFullTank),
-              station: f.station?.slice(0, 200),
-              notes: f.notes?.slice(0, 5000),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            })
-          )
-        );
+        const targetVehId = validVehicleIds.has(f.vehicleId) ? f.vehicleId : defaultVehId;
+        const vol = Number(f.volume);
+        if (!Number.isFinite(vol) || vol <= 0) continue;
+        childOps.push({
+          ref: doc(db, 'users', uid, 'fillups', f.id),
+          data: stripUndefined({
+            id: f.id,
+            userId: uid,
+            vehicleId: targetVehId,
+            date: String(f.date || new Date().toISOString()).slice(0, 64),
+            odometer: Math.max(0, Number(f.odometer) || 0),
+            volume: vol,
+            pricePerUnit: Math.max(0, Number(f.pricePerUnit) || 0),
+            totalCost: Math.max(0, Number(f.totalCost) || 0),
+            fuelType: String(f.fuelType || 'gasoline').slice(0, 30),
+            isFullTank: Boolean(f.isFullTank),
+            station: f.station ? f.station.slice(0, 200) : undefined,
+            notes: f.notes ? f.notes.slice(0, 5000) : undefined,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        });
       }
 
       for (const e of expenses) {
-        writePromises.push(
-          setDoc(
-            doc(db, 'users', uid, 'expenses', e.id),
-            stripUndefined({
-              id: e.id,
-              userId: uid,
-              vehicleId: e.vehicleId,
-              date: String(e.date),
-              category: e.category,
-              amount: Number(e.amount),
-              description: e.description.slice(0, 500),
-              receiptUrl: e.receiptUrl?.slice(0, 2048),
-              odometer: e.odometer !== undefined ? Number(e.odometer) : undefined,
-              notes: e.notes?.slice(0, 5000),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            })
-          )
-        );
+        const targetVehId = validVehicleIds.has(e.vehicleId) ? e.vehicleId : defaultVehId;
+        const amt = Number(e.amount);
+        if (!Number.isFinite(amt) || amt <= 0) continue;
+        childOps.push({
+          ref: doc(db, 'users', uid, 'expenses', e.id),
+          data: stripUndefined({
+            id: e.id,
+            userId: uid,
+            vehicleId: targetVehId,
+            date: String(e.date || new Date().toISOString()).slice(0, 64),
+            category: String(e.category || 'other').slice(0, 100),
+            amount: amt,
+            description: (e.description || 'Expense').slice(0, 500),
+            receiptUrl: e.receiptUrl ? e.receiptUrl.slice(0, 2048) : undefined,
+            odometer:
+              e.odometer !== undefined && Number(e.odometer) >= 0 ? Number(e.odometer) : undefined,
+            notes: e.notes ? e.notes.slice(0, 5000) : undefined,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        });
       }
 
       for (const s of services) {
-        writePromises.push(
-          setDoc(
-            doc(db, 'users', uid, 'services', s.id),
-            stripUndefined({
-              id: s.id,
-              userId: uid,
-              vehicleId: s.vehicleId,
-              date: String(s.date),
-              type: s.type,
-              odometer: Number(s.odometer),
-              cost: Number(s.cost),
-              description: s.description.slice(0, 500),
-              parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
-              receiptUrl: s.receiptUrl?.slice(0, 2048),
-              notes: s.notes?.slice(0, 5000),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            })
-          )
-        );
+        const targetVehId = validVehicleIds.has(s.vehicleId) ? s.vehicleId : defaultVehId;
+        childOps.push({
+          ref: doc(db, 'users', uid, 'services', s.id),
+          data: stripUndefined({
+            id: s.id,
+            userId: uid,
+            vehicleId: targetVehId,
+            date: String(s.date || new Date().toISOString()).slice(0, 64),
+            type: String(s.type || 'other').slice(0, 100),
+            odometer: Math.max(0, Number(s.odometer) || 0),
+            cost: Math.max(0, Number(s.cost) || 0),
+            description: (s.description || 'Service').slice(0, 500),
+            parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
+            receiptUrl: s.receiptUrl ? s.receiptUrl.slice(0, 2048) : undefined,
+            notes: s.notes ? s.notes.slice(0, 5000) : undefined,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        });
       }
 
       for (const r of reminders) {
-        writePromises.push(
-          setDoc(
-            doc(db, 'users', uid, 'reminders', r.id),
-            stripUndefined({
-              id: r.id,
-              userId: uid,
-              vehicleId: r.vehicleId,
-              type: String(r.type),
-              title: r.title?.slice(0, 200),
-              intervalKm: r.intervalKm !== undefined ? Number(r.intervalKm) : undefined,
-              intervalDays: r.intervalDays !== undefined ? Number(r.intervalDays) : undefined,
-              lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate) : undefined,
-              lastServiceOdometer:
-                r.lastServiceOdometer !== undefined ? Number(r.lastServiceOdometer) : undefined,
-              nextDueDate: r.nextDueDate ? String(r.nextDueDate) : undefined,
-              nextDueOdometer:
-                r.nextDueOdometer !== undefined ? Number(r.nextDueOdometer) : undefined,
-              isRecurring: Boolean(r.isRecurring),
-              isActive: Boolean(r.isActive),
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            })
-          )
-        );
+        const targetVehId = validVehicleIds.has(r.vehicleId) ? r.vehicleId : defaultVehId;
+        childOps.push({
+          ref: doc(db, 'users', uid, 'reminders', r.id),
+          data: stripUndefined({
+            id: r.id,
+            userId: uid,
+            vehicleId: targetVehId,
+            type: String(r.type || 'other').slice(0, 100),
+            title: r.title ? r.title.slice(0, 200) : undefined,
+            intervalKm:
+              r.intervalKm !== undefined && Number(r.intervalKm) >= 0
+                ? Number(r.intervalKm)
+                : undefined,
+            intervalDays:
+              r.intervalDays !== undefined && Number(r.intervalDays) >= 0
+                ? Number(r.intervalDays)
+                : undefined,
+            lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate).slice(0, 64) : undefined,
+            lastServiceOdometer:
+              r.lastServiceOdometer !== undefined && Number(r.lastServiceOdometer) >= 0
+                ? Number(r.lastServiceOdometer)
+                : undefined,
+            nextDueDate: r.nextDueDate ? String(r.nextDueDate).slice(0, 64) : undefined,
+            nextDueOdometer:
+              r.nextDueOdometer !== undefined && Number(r.nextDueOdometer) >= 0
+                ? Number(r.nextDueOdometer)
+                : undefined,
+            isRecurring: Boolean(r.isRecurring),
+            isActive: Boolean(r.isActive),
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          }),
+        });
       }
 
-      await Promise.all(writePromises);
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < childOps.length; i += CHUNK_SIZE) {
+        const batch = writeBatch(db);
+        const chunk = childOps.slice(i, i + CHUNK_SIZE);
+        for (const item of chunk) {
+          batch.set(item.ref, item.data);
+        }
+        await batch.commit();
+      }
+
       const nowIso = new Date().toISOString();
       setSyncStatus('synced');
       setLastSyncedAt(nowIso);
       return {
         success: true,
-        count: writePromises.length,
+        count: validVehicles.length + childOps.length,
       };
     } catch (error) {
       setSyncStatus('error');
-      handleFirestoreError(error, OperationType.WRITE, `users/${uid}`);
+      reportFirestoreErrorSafely(error, OperationType.WRITE, `users/${uid}`);
       return {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : lang === 'fr'
-              ? 'Erreur de synchronisation Cloud.'
-              : 'Cloud synchronization failed.',
+          lang === 'fr'
+            ? 'Échec de synchronisation Cloud. Vérifiez votre connexion Internet et réessayez.'
+            : 'Cloud synchronization failed. Please check your internet connection and try again.',
       };
     }
   };
@@ -1620,6 +1676,188 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (e) {
       console.error('Failed to import backup:', e);
       return false;
+    }
+  };
+
+  const exportFuelioCsvForVehicle = (targetVehicleId?: string): string => {
+    const veh =
+      vehicles.find((v) => v.id === (targetVehicleId || activeVehicle?.id)) ||
+      activeVehicle ||
+      vehicles[0];
+    if (!veh) return '';
+    const vehFillUps = fillUps.filter((f) => f.vehicleId === veh.id);
+    const vehExpenses = expenses.filter((e) => e.vehicleId === veh.id);
+    return exportFuelioCsv(veh, vehFillUps, vehExpenses, userProfile.units);
+  };
+
+  const importFuelioCsv = async (
+    csvText: string,
+    targetVehicleId?: string
+  ): Promise<{
+    success: boolean;
+    importedFillUps: number;
+    importedExpenses: number;
+    error?: string;
+  }> => {
+    const targetVeh =
+      vehicles.find((v) => v.id === (targetVehicleId || activeVehicle?.id)) ||
+      activeVehicle ||
+      vehicles[0];
+
+    if (!targetVeh) {
+      return {
+        success: false,
+        importedFillUps: 0,
+        importedExpenses: 0,
+        error:
+          lang === 'fr'
+            ? 'Veuillez d’abord sélectionner ou ajouter un véhicule.'
+            : 'Please select or add a vehicle first.',
+      };
+    }
+
+    try {
+      const parsed = parseFuelioCsv(csvText, targetVeh.id, targetVeh.fuelType);
+      if (parsed.fillUps.length === 0 && parsed.expenses.length === 0) {
+        return {
+          success: false,
+          importedFillUps: 0,
+          importedExpenses: 0,
+          error:
+            lang === 'fr'
+              ? 'Aucune entrée carburant valide trouvée dans ce fichier CSV Fuelio.'
+              : 'No valid fuel entries found in this Fuelio CSV file.',
+        };
+      }
+
+      const nowMs = Date.now();
+      const nowIso = new Date().toISOString();
+
+      // Deduplicate against existing fill-ups for this vehicle by odometer + volume
+      const existingKeys = new Set(
+        fillUps
+          .filter((f) => f.vehicleId === targetVeh.id)
+          .map((f) => `${f.odometer}_${Number(f.volume).toFixed(2)}`)
+      );
+
+      const newFillUpItems: FillUp[] = [];
+      parsed.fillUps.forEach((f, idx) => {
+        const key = `${f.odometer}_${Number(f.volume).toFixed(2)}`;
+        if (!existingKeys.has(key)) {
+          existingKeys.add(key);
+          newFillUpItems.push({
+            ...f,
+            id: `f-csv-${nowMs}-${idx}`,
+            createdAt: nowIso,
+          });
+        }
+      });
+
+      const newExpenseItems: Expense[] = parsed.expenses.map((e, idx) => ({
+        ...e,
+        id: `e-csv-${nowMs}-${idx}`,
+        createdAt: nowIso,
+      }));
+
+      if (newFillUpItems.length > 0) {
+        setFillUps((prev) => {
+          const updated = [...newFillUpItems, ...prev];
+          saveToLocal('netcar_fillups', updated);
+          return updated;
+        });
+      }
+
+      if (newExpenseItems.length > 0) {
+        setExpenses((prev) => {
+          const updated = [...newExpenseItems, ...prev];
+          saveToLocal('netcar_expenses', updated);
+          return updated;
+        });
+      }
+
+      if (parsed.maxOdometer > targetVeh.currentOdometer) {
+        await updateVehicle(targetVeh.id, { currentOdometer: parsed.maxOdometer });
+      }
+
+      const currentUid = auth.currentUser?.uid;
+      if (currentUid && isCloudReadyRef.current) {
+        setSyncStatus('syncing');
+        try {
+          const ops: Array<{ ref: ReturnType<typeof doc>; data: Record<string, any> }> = [];
+          for (const f of newFillUpItems) {
+            ops.push({
+              ref: doc(db, 'users', currentUid, 'fillups', f.id),
+              data: stripUndefined({
+                id: f.id,
+                userId: currentUid,
+                vehicleId: f.vehicleId,
+                date: String(f.date).slice(0, 64),
+                odometer: Math.max(0, Number(f.odometer) || 0),
+                volume: Number(f.volume),
+                pricePerUnit: Math.max(0, Number(f.pricePerUnit) || 0),
+                totalCost: Math.max(0, Number(f.totalCost) || 0),
+                fuelType: String(f.fuelType || 'gasoline').slice(0, 30),
+                isFullTank: Boolean(f.isFullTank),
+                station: f.station?.slice(0, 200),
+                notes: f.notes?.slice(0, 5000),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              }),
+            });
+          }
+          for (const e of newExpenseItems) {
+            ops.push({
+              ref: doc(db, 'users', currentUid, 'expenses', e.id),
+              data: stripUndefined({
+                id: e.id,
+                userId: currentUid,
+                vehicleId: e.vehicleId,
+                date: String(e.date).slice(0, 64),
+                category: String(e.category || 'other').slice(0, 100),
+                amount: Number(e.amount),
+                description: (e.description || 'Expense').slice(0, 500),
+                odometer: e.odometer !== undefined ? Number(e.odometer) : undefined,
+                notes: e.notes?.slice(0, 5000),
+                createdAt: serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              }),
+            });
+          }
+
+          const CHUNK_SIZE = 400;
+          for (let i = 0; i < ops.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(db);
+            const chunk = ops.slice(i, i + CHUNK_SIZE);
+            for (const item of chunk) {
+              batch.set(item.ref, item.data);
+            }
+            await batch.commit();
+          }
+          setSyncStatus('synced');
+          setLastSyncedAt(new Date().toISOString());
+        } catch (cloudErr) {
+          setSyncStatus('error');
+          reportFirestoreErrorSafely(cloudErr, OperationType.WRITE, `users/${currentUid}/fillups`);
+        }
+      }
+
+      return {
+        success: true,
+        importedFillUps: newFillUpItems.length,
+        importedExpenses: newExpenseItems.length,
+      };
+    } catch (err) {
+      return {
+        success: false,
+        importedFillUps: 0,
+        importedExpenses: 0,
+        error:
+          err instanceof Error
+            ? err.message
+            : lang === 'fr'
+              ? 'Erreur lors de la lecture du fichier CSV Fuelio.'
+              : 'Failed to parse Fuelio CSV file.',
+      };
     }
   };
 
@@ -1805,6 +2043,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       syncToCloudNow,
       exportBackupJson,
       importBackupJson,
+      exportFuelioCsvForVehicle,
+      importFuelioCsv,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [

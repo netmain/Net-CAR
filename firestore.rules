@@ -191,9 +191,9 @@ service cloud.firestore {
                        isValidId(userId) &&
                        isValidUserProfile(incoming(), userId) &&
                        incoming().userId == existing().userId &&
-                       incoming().createdAt == existing().createdAt &&
+                       (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                        incoming().updatedAt == request.time &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'createdAt', 'updatedAt']);
 
       allow delete: if isOwner(userId) && isValidId(userId);
 
@@ -215,9 +215,9 @@ service cloud.firestore {
                          isValidVehicle(incoming(), userId, vehicleId) &&
                          incoming().id == existing().id &&
                          incoming().userId == existing().userId &&
-                         incoming().createdAt == existing().createdAt &&
+                         (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                          incoming().updatedAt == request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'make', 'model', 'year', 'plate', 'vin', 'fuelType', 'photoUrl', 'currentOdometer', 'notes', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['name', 'make', 'model', 'year', 'plate', 'vin', 'fuelType', 'photoUrl', 'currentOdometer', 'notes', 'createdAt', 'updatedAt']) &&
                          parentUserExists(userId);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(vehicleId) && parentUserExists(userId);
@@ -243,9 +243,9 @@ service cloud.firestore {
                          incoming().id == existing().id &&
                          incoming().userId == existing().userId &&
                          incoming().vehicleId == existing().vehicleId &&
-                         incoming().createdAt == existing().createdAt &&
+                         (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                          incoming().updatedAt == request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'odometer', 'volume', 'pricePerUnit', 'totalCost', 'fuelType', 'isFullTank', 'station', 'notes', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'odometer', 'volume', 'pricePerUnit', 'totalCost', 'fuelType', 'isFullTank', 'station', 'notes', 'createdAt', 'updatedAt']) &&
                          parentUserExists(userId);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(fillupId) && parentUserExists(userId);
@@ -271,9 +271,9 @@ service cloud.firestore {
                          incoming().id == existing().id &&
                          incoming().userId == existing().userId &&
                          incoming().vehicleId == existing().vehicleId &&
-                         incoming().createdAt == existing().createdAt &&
+                         (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                          incoming().updatedAt == request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'category', 'amount', 'description', 'receiptUrl', 'odometer', 'notes', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'category', 'amount', 'description', 'receiptUrl', 'odometer', 'notes', 'createdAt', 'updatedAt']) &&
                          parentUserExists(userId);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(expenseId) && parentUserExists(userId);
@@ -299,9 +299,9 @@ service cloud.firestore {
                          incoming().id == existing().id &&
                          incoming().userId == existing().userId &&
                          incoming().vehicleId == existing().vehicleId &&
-                         incoming().createdAt == existing().createdAt &&
+                         (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                          incoming().updatedAt == request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'type', 'odometer', 'cost', 'description', 'parts', 'receiptUrl', 'notes', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['date', 'type', 'odometer', 'cost', 'description', 'parts', 'receiptUrl', 'notes', 'createdAt', 'updatedAt']) &&
                          parentUserExists(userId);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(serviceId) && parentUserExists(userId);
@@ -327,9 +327,9 @@ service cloud.firestore {
                          incoming().id == existing().id &&
                          incoming().userId == existing().userId &&
                          incoming().vehicleId == existing().vehicleId &&
-                         incoming().createdAt == existing().createdAt &&
+                         (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                          incoming().updatedAt == request.time &&
-                         incoming().diff(existing()).affectedKeys().hasOnly(['type', 'title', 'intervalKm', 'intervalDays', 'lastServiceDate', 'lastServiceOdometer', 'nextDueDate', 'nextDueOdometer', 'isRecurring', 'isActive', 'updatedAt']) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly(['type', 'title', 'intervalKm', 'intervalDays', 'lastServiceDate', 'lastServiceOdometer', 'nextDueDate', 'nextDueOdometer', 'isRecurring', 'isActive', 'createdAt', 'updatedAt']) &&
                          parentUserExists(userId);
 
         allow delete: if isOwner(userId) && isValidId(userId) && isValidId(reminderId) && parentUserExists(userId);

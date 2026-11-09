@@ -14,6 +14,15 @@ echo [OK] Node.js found:
 node -v
 echo.
 
+if exist ".git" (
+  where git >nul 2>nul
+  if not errorlevel 1 (
+    echo [Git] Pulling latest code from GitHub...
+    git pull
+    echo.
+  )
+)
+
 if exist "node_modules" goto :check_build
 echo [Step 1] Installing dependencies...
 call npm install

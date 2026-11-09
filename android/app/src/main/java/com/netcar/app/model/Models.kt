@@ -46,6 +46,7 @@ enum class Units(val label: String, val distUnit: String, val volUnit: String, v
 }
 
 enum class SupportedCurrency(val code: String, val symbol: String) {
+    DZD("DZD", "DA"),
     EUR("EUR", "€"),
     USD("USD", "$"),
     CAD("CAD", "CA$"),

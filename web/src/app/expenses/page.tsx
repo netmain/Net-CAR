@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '@/lib/app-context';
 import { ExpenseCategory } from '@/types';
 import { 
@@ -78,39 +78,48 @@ export default function ExpensesPage() {
 
   const currencySymbol = userProfile.currency === 'EUR' ? '€' : userProfile.currency === 'USD' ? '$' : userProfile.currency;
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
+  const activeVehicleId = activeVehicle?.id;
 
-  // Filter expenses by active vehicle
-  const vehicleExpenses = expenses
-    .filter(e => !activeVehicle || e.vehicleId === activeVehicle.id)
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Filter expenses by active vehicle (memoized)
+  const vehicleExpenses = useMemo(() => {
+    return expenses
+      .filter((e) => !activeVehicleId || e.vehicleId === activeVehicleId)
+      .sort((a, b) => b.date.localeCompare(a.date));
+  }, [expenses, activeVehicleId]);
 
-  // Filter by category pill & search query
-  const filteredExpenses = vehicleExpenses.filter(e => {
-    const matchesCategory = selectedCategory === 'all' || e.category === selectedCategory;
-    const q = searchQuery.toLowerCase();
-    const matchesSearch = 
-      e.description.toLowerCase().includes(q) ||
-      (e.notes && e.notes.toLowerCase().includes(q)) ||
-      (t.categories[e.category] && t.categories[e.category].toLowerCase().includes(q));
-    return matchesCategory && matchesSearch;
-  });
+  // Filter by category pill & search query (memoized)
+  const filteredExpenses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return vehicleExpenses.filter((e) => {
+      const matchesCategory = selectedCategory === 'all' || e.category === selectedCategory;
+      if (!matchesCategory) return false;
+      if (!q) return true;
+      return (
+        e.description.toLowerCase().includes(q) ||
+        (e.notes && e.notes.toLowerCase().includes(q)) ||
+        (t.categories[e.category] && t.categories[e.category].toLowerCase().includes(q))
+      );
+    });
+  }, [vehicleExpenses, selectedCategory, searchQuery, t.categories]);
 
-  // Stats
-  const totalAmount = vehicleExpenses.reduce((acc, e) => acc + e.amount, 0);
-
-  // Calculate top category
-  const categoryTotals: Partial<Record<ExpenseCategory, number>> = {};
-  for (const exp of vehicleExpenses) {
-    categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
-  }
-  let topCategory: ExpenseCategory | null = null;
-  let topCategoryAmount = 0;
-  for (const [cat, sum] of Object.entries(categoryTotals)) {
-    if (sum > topCategoryAmount) {
-      topCategoryAmount = sum;
-      topCategory = cat as ExpenseCategory;
+  // Memoize stats
+  const { totalAmount, topCategory, topCategoryAmount } = useMemo(() => {
+    let total = 0;
+    const categoryTotals: Partial<Record<ExpenseCategory, number>> = {};
+    for (const exp of vehicleExpenses) {
+      total += exp.amount;
+      categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
     }
-  }
+    let bestCat: ExpenseCategory | null = null;
+    let bestAmount = 0;
+    for (const [cat, sum] of Object.entries(categoryTotals)) {
+      if ((sum || 0) > bestAmount) {
+        bestAmount = sum || 0;
+        bestCat = cat as ExpenseCategory;
+      }
+    }
+    return { totalAmount: total, topCategory: bestCat, topCategoryAmount: bestAmount };
+  }, [vehicleExpenses]);
 
   const handleOpenAdd = () => {
     setDate(new Date().toISOString().split('T')[0]);

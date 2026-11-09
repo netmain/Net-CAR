@@ -16,12 +16,14 @@ import {
   RefreshCw,
   LogIn,
   LogOut,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export default function SettingsPage() {
   const {
     user,
     userProfile,
+    activeVehicle,
     updatePreferences,
     lang,
     setLang,
@@ -32,6 +34,8 @@ export default function SettingsPage() {
     syncToCloudNow,
     exportBackupJson,
     importBackupJson,
+    exportFuelioCsvForVehicle,
+    importFuelioCsv,
     t,
   } = useApp();
 
@@ -83,19 +87,30 @@ export default function SettingsPage() {
     }
 
     setCloudSyncing(true);
-    const res = await syncToCloudNow();
-    setCloudSyncing(false);
-
-    if (res.success) {
+    try {
+      const res = await syncToCloudNow();
+      if (res.success) {
+        setCloudMessage({
+          text:
+            lang === 'fr'
+              ? `Synchronisation Cloud réussie (${res.count || 0} éléments sauvegardés sur Firebase pour ${user?.email}).`
+              : `Cloud sync complete (${res.count || 0} records saved to Firebase for ${user?.email}).`,
+        });
+        setTimeout(() => setCloudMessage(null), 6000);
+      } else if (res.error) {
+        setCloudMessage({ text: res.error, error: true });
+      }
+    } catch (err) {
+      console.error(err);
       setCloudMessage({
         text:
           lang === 'fr'
-            ? `Synchronisation Cloud réussie (${res.count || 0} éléments sauvegardés sur Firebase pour ${user?.email}).`
-            : `Cloud sync complete (${res.count || 0} records saved to Firebase for ${user?.email}).`,
+            ? 'La synchronisation Cloud a rencontré un problème. Vos données restent sauvegardées localement.'
+            : 'Cloud sync encountered an issue. Your data remains safely saved locally.',
+        error: true,
       });
-      setTimeout(() => setCloudMessage(null), 6000);
-    } else if (res.error) {
-      setCloudMessage({ text: res.error, error: true });
+    } finally {
+      setCloudSyncing(false);
     }
   };
 
@@ -123,6 +138,74 @@ export default function SettingsPage() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  // Fuelio CSV Export action
+  const handleExportFuelioCsv = () => {
+    if (!activeVehicle) return;
+    try {
+      const csvContent = exportFuelioCsvForVehicle(activeVehicle.id);
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const safeName = `${activeVehicle.make}_${activeVehicle.model}`.replace(/[^a-zA-Z0-9_-]/g, '_');
+      link.href = url;
+      link.download = `vehicle-fuelio-${safeName}-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      setRestoreMessage({
+        text:
+          lang === 'fr'
+            ? `Sauvegarde CSV Fuelio exportée pour ${activeVehicle.make} ${activeVehicle.model}.`
+            : `Fuelio CSV backup exported for ${activeVehicle.make} ${activeVehicle.model}.`,
+      });
+      setTimeout(() => setRestoreMessage(null), 6000);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Fuelio CSV Import action
+  const handleImportFuelioCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !activeVehicle) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = (event.target?.result as string) || '';
+        const res = await importFuelioCsv(content, activeVehicle.id);
+        if (res.success) {
+          setRestoreMessage({
+            text:
+              lang === 'fr'
+                ? `Import CSV Fuelio réussi : ${res.importedFillUps} plein(s) et ${res.importedExpenses} dépense(s) ajoutés à ${activeVehicle.make} ${activeVehicle.model} !`
+                : `Fuelio CSV imported: ${res.importedFillUps} fill-up(s) and ${res.importedExpenses} expense(s) added to ${activeVehicle.make} ${activeVehicle.model}!`,
+          });
+          setTimeout(() => setRestoreMessage(null), 7000);
+        } else {
+          setRestoreMessage({
+            text:
+              res.error ||
+              (lang === 'fr' ? 'Fichier CSV Fuelio invalide.' : 'Invalid Fuelio CSV file.'),
+            error: true,
+          });
+        }
+      } catch {
+        setRestoreMessage({
+          text:
+            lang === 'fr'
+              ? 'Échec de lecture du fichier CSV.'
+              : 'Failed to read CSV file.',
+          error: true,
+        });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   // Restore handler from file upload
@@ -498,6 +581,49 @@ export default function SettingsPage() {
                   className="hidden"
                 />
               </label>
+            </div>
+          </div>
+
+          {/* Card 3: Fuelio CSV Dual-Compatibility (Import / Export CSV) */}
+          <div className="rounded-xl border border-slate-800 p-5 bg-slate-900/60 flex flex-col justify-between md:col-span-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 font-mono font-bold text-slate-200 text-sm">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-400" />
+                  <span>
+                    {lang === 'fr'
+                      ? 'Compatibilité CSV Fuelio (Import / Export Bidirectionnel)'
+                      : 'Fuelio CSV Dual Compatibility (Import / Export)'}
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-400 font-sans max-w-2xl">
+                  {lang === 'fr'
+                    ? `Importez directement une sauvegarde CSV Fuelio (pleins "## Log" et dépenses "## Costs") sur le véhicule actif (${activeVehicle?.make || ''} ${activeVehicle?.model || ''}), ou exportez au même format CSV compatible Fuelio.`
+                    : `Import a Fuelio CSV backup ("## Log" fill-ups and "## Costs" expenses) into the active vehicle (${activeVehicle?.make || ''} ${activeVehicle?.model || ''}), or export in the exact same Fuelio-compatible CSV format.`}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleExportFuelioCsv}
+                  disabled={!activeVehicle}
+                  className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/90 px-3.5 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-50 transition cursor-pointer"
+                >
+                  <Download className="h-3.5 w-3.5 text-amber-400" />
+                  <span>{lang === 'fr' ? 'Exporter .CSV (Fuelio)' : 'Export .CSV (Fuelio)'}</span>
+                </button>
+
+                <label className="flex items-center justify-center gap-1.5 rounded-xl border border-slate-700 bg-slate-800/90 px-3.5 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-cyan-500/50 hover:text-cyan-300 cursor-pointer transition">
+                  <Upload className="h-3.5 w-3.5 text-cyan-400" />
+                  <span>{lang === 'fr' ? 'Importer .CSV (Fuelio)' : 'Import .CSV (Fuelio)'}</span>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={handleImportFuelioCsvFile}
+                    className="hidden"
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </div>
