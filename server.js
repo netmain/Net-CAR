@@ -14,9 +14,9 @@ const standaloneRootServer = path.join(standaloneRootDir, 'server.js');
 
 function copyDirIfMissing(src, dest) {
   try {
-    if (fs.existsSync(src) && !fs.existsSync(dest)) {
+    if (fs.existsSync(src)) {
       fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.cpSync(src, dest, { recursive: true });
+      fs.cpSync(src, dest, { recursive: true, force: true });
     }
   } catch (err) {
     console.warn(`[server.js] Warning copying ${src} -> ${dest}:`, err.message);

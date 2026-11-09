@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/app-context';
 import { SupportedCurrency, Units, SupportedLanguage } from '@/types';
+import { downloadVerifiedApk } from '@/lib/download-apk';
 import {
   Globe,
   Cloud,
@@ -51,6 +52,36 @@ export default function SettingsPage() {
   const [restoreMessage, setRestoreMessage] = useState<{ text: string; error?: boolean } | null>(
     null
   );
+  const [apkDownloading, setApkDownloading] = useState(false);
+  const [apkProgress, setApkProgress] = useState<string | null>(null);
+
+  const handleDownloadApkFile = async () => {
+    if (apkDownloading) return;
+    setApkDownloading(true);
+    setApkProgress('0%');
+    setRestoreMessage(null);
+    try {
+      const res = await downloadVerifiedApk((pct, dlMB, totalMB) => {
+        setApkProgress(`${pct}% (${dlMB} / ${totalMB} MB)`);
+      });
+      if (res.success) {
+        setRestoreMessage({
+          text:
+            lang === 'fr'
+              ? `Fichier Net-CAR.apk (${res.sizeMB} MB) vérifié et téléchargé avec succès !`
+              : `Verified Net-CAR.apk (${res.sizeMB} MB) downloaded successfully!`,
+        });
+      } else {
+        setRestoreMessage({
+          text: res.error || 'Failed to download Net-CAR.apk',
+          error: true,
+        });
+      }
+    } finally {
+      setApkDownloading(false);
+      setApkProgress(null);
+    }
+  };
 
   useEffect(() => {
     setName(userProfile.name || '');
@@ -645,14 +676,25 @@ export default function SettingsPage() {
                   : 'Download the compiled Android .APK featuring the new Material 3 Side Drawer main menu, modern dark telemetry theme, and Firebase Cloud synchronization.'}
               </p>
             </div>
-            <a
-              href="/Net-CAR.apk"
-              download="Net-CAR.apk"
-              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 transition shrink-0"
+            <button
+              type="button"
+              onClick={handleDownloadApkFile}
+              disabled={apkDownloading}
+              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 disabled:opacity-60 transition shrink-0 cursor-pointer"
             >
-              <Download className="h-4 w-4" />
-              <span>{lang === 'fr' ? 'Télécharger Net-CAR.apk' : 'Download Net-CAR.apk'}</span>
-            </a>
+              {apkDownloading ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              <span>
+                {apkDownloading
+                  ? apkProgress || 'Downloading...'
+                  : lang === 'fr'
+                    ? 'Télécharger Net-CAR.apk (22.3 MB)'
+                    : 'Download Net-CAR.apk (22.3 MB)'}
+              </span>
+            </button>
           </div>
         </div>
       </div>

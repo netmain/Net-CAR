@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/app-context';
+import { downloadVerifiedApk } from '@/lib/download-apk';
 import {
   LayoutDashboard,
   Car,
@@ -16,11 +17,28 @@ import {
   Radio,
   Cloud,
   Download,
+  RefreshCw,
 } from 'lucide-react';
 
 export function Sidebar() {
   const pathname = usePathname();
   const { t, lang, reminders, activeVehicle, user, syncStatus, setAuthModalOpen } = useApp();
+  const [apkDownloading, setApkDownloading] = useState(false);
+  const [apkProgressLabel, setApkProgressLabel] = useState<string | null>(null);
+
+  const handleDownloadApk = async () => {
+    if (apkDownloading) return;
+    setApkDownloading(true);
+    setApkProgressLabel('0%');
+    try {
+      await downloadVerifiedApk((pct, dlMB, totalMB) => {
+        setApkProgressLabel(`${pct}% (${dlMB}/${totalMB} MB)`);
+      });
+    } finally {
+      setApkDownloading(false);
+      setTimeout(() => setApkProgressLabel(null), 3000);
+    }
+  };
 
   const dueRemindersCount = reminders.filter(
     (r) => r.isActive && (!activeVehicle || r.vehicleId === activeVehicle.id)
@@ -98,14 +116,25 @@ export function Sidebar() {
 
       {/* Cloud & Telemetry Sync Widget + Android APK Download */}
       <div className="space-y-2.5 mx-1">
-        <a
-          href="/Net-CAR.apk"
-          download="Net-CAR.apk"
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono font-bold text-emerald-300 hover:bg-emerald-500/25 transition"
+        <button
+          type="button"
+          onClick={handleDownloadApk}
+          disabled={apkDownloading}
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono font-bold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-70 transition cursor-pointer"
         >
-          <Download className="h-3.5 w-3.5 text-emerald-400" />
-          <span>{lang === 'fr' ? 'Télécharger Android .APK' : 'Download Android .APK'}</span>
-        </a>
+          {apkDownloading ? (
+            <RefreshCw className="h-3.5 w-3.5 text-emerald-400 animate-spin" />
+          ) : (
+            <Download className="h-3.5 w-3.5 text-emerald-400" />
+          )}
+          <span>
+            {apkDownloading
+              ? apkProgressLabel || 'Downloading...'
+              : lang === 'fr'
+                ? 'Télécharger Android .APK (22.3 MB)'
+                : 'Download Android .APK (22.3 MB)'}
+          </span>
+        </button>
 
         <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-3.5 relative overflow-hidden shadow-lg">
           <div className="flex items-center justify-between">
