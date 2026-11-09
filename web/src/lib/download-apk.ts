@@ -1,8 +1,8 @@
-const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB chunks to bypass any proxy payload limits
+const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB chunks
 
-export async function downloadVerifiedApk(
+export async function prepareVerifiedApkBlob(
   onProgress?: (percent: number, downloadedMB: string, totalMB: string) => void
-): Promise<{ success: boolean; sizeMB?: string; error?: string }> {
+): Promise<{ success: boolean; blobUrl?: string; sizeMB?: string; error?: string }> {
   try {
     const infoRes = await fetch('/api/download-apk?info=1', {
       method: 'GET',
@@ -48,7 +48,7 @@ export async function downloadVerifiedApk(
       const arrayBuffer = await chunkRes.arrayBuffer();
       const bytes = new Uint8Array(arrayBuffer);
 
-      // Verify ZIP/APK magic header (PK\x03\x04) on the very first chunk
+      // Verify ZIP/APK magic header (PK\x03\x04) on the first chunk
       if (start === 0) {
         if (
           bytes.length < 4 ||
@@ -78,17 +78,11 @@ export async function downloadVerifiedApk(
       type: 'application/vnd.android.package-archive',
     });
 
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Net-CAR.apk';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    const blobUrl = URL.createObjectURL(blob);
 
     return {
       success: true,
+      blobUrl,
       sizeMB: totalMB,
     };
   } catch (err) {
