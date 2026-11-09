@@ -39,6 +39,7 @@ fun ReminderListScreen(
     viewModel: ReminderViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddReminder: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -48,8 +49,9 @@ fun ReminderListScreen(
         topBar = {
             TopBar(
                 title = "Service Reminders",
-                canNavigateBack = true,
-                onNavigateBack = onNavigateBack
+                canNavigateBack = onOpenDrawer == null,
+                onNavigateBack = onNavigateBack,
+                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {

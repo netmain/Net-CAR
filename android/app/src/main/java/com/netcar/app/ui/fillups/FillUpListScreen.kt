@@ -55,6 +55,7 @@ fun FillUpListScreen(
     viewModel: FillUpViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddFillUp: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -68,8 +69,9 @@ fun FillUpListScreen(
         topBar = {
             TopBar(
                 title = "Fuel History",
-                canNavigateBack = true,
-                onNavigateBack = onNavigateBack
+                canNavigateBack = onOpenDrawer == null,
+                onNavigateBack = onNavigateBack,
+                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {

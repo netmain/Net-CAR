@@ -8,7 +8,6 @@ import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Units
 import com.netcar.app.model.UserSettings
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -69,6 +68,73 @@ class SettingsViewModel @Inject constructor(
         repository.updateCurrency(currency)
     }
 
+    fun clearMessages() {
+        _syncMessage.value = null
+        _syncError.value = null
+    }
+
+    fun signInWithEmail(email: String, password: String) {
+        if (_isSyncing.value) return
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncMessage.value = null
+            _syncError.value = null
+            try {
+                val result = repository.signInWithEmailPassword(email, password)
+                result.fold(
+                    onSuccess = { msg -> _syncMessage.value = msg },
+                    onFailure = { err ->
+                        _syncError.value = err.localizedMessage
+                            ?: if (repository.userSettings.value.language == SupportedLanguage.FR)
+                                "Échec de la connexion Cloud. Vérifiez votre e-mail et mot de passe."
+                            else
+                                "Cloud sign-in failed. Check your email and password."
+                    }
+                )
+            } catch (t: Throwable) {
+                _syncError.value = t.localizedMessage ?: "Authentication error"
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    fun signUpWithEmail(email: String, password: String) {
+        if (_isSyncing.value) return
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncMessage.value = null
+            _syncError.value = null
+            try {
+                val result = repository.signUpWithEmailPassword(email, password)
+                result.fold(
+                    onSuccess = { msg -> _syncMessage.value = msg },
+                    onFailure = { err ->
+                        _syncError.value = err.localizedMessage
+                            ?: if (repository.userSettings.value.language == SupportedLanguage.FR)
+                                "Impossible de créer le compte Cloud."
+                            else
+                                "Could not create Cloud account."
+                    }
+                )
+            } catch (t: Throwable) {
+                _syncError.value = t.localizedMessage ?: "Account creation error"
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    fun signOut() {
+        repository.signOutCloud()
+        _syncError.value = null
+        _syncMessage.value = if (repository.userSettings.value.language == SupportedLanguage.FR) {
+            "Déconnecté du Cloud. Mode local actif."
+        } else {
+            "Signed out of Cloud. Local mode active."
+        }
+    }
+
     fun syncWithGoogleDrive() {
         if (_isSyncing.value) return
         viewModelScope.launch {
@@ -76,15 +142,19 @@ class SettingsViewModel @Inject constructor(
             _syncMessage.value = null
             _syncError.value = null
             try {
-                delay(900)
-                repository.triggerCloudBackup()
-                _syncMessage.value = if (repository.userSettings.value.language == SupportedLanguage.FR) {
-                    "Synchronisation Cloud terminée avec succès !"
-                } else {
-                    "Cloud synchronization completed successfully!"
-                }
-            } catch (e: Throwable) {
-                _syncError.value = e.localizedMessage ?: "Cloud sync failed. Saved locally."
+                val result = repository.syncWithCloud()
+                result.fold(
+                    onSuccess = { msg -> _syncMessage.value = msg },
+                    onFailure = { err ->
+                        _syncError.value = err.localizedMessage
+                            ?: if (repository.userSettings.value.language == SupportedLanguage.FR)
+                                "Synchronisation impossible : connectez d'abord votre compte."
+                            else
+                                "Sync failed: please sign in to your account first."
+                    }
+                )
+            } catch (t: Throwable) {
+                _syncError.value = t.localizedMessage ?: "Cloud sync failed."
             } finally {
                 _isSyncing.value = false
             }

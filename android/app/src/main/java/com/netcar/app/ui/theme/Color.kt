@@ -63,25 +63,25 @@ val OnErrorDark = Color(0xFF4C0519)
 val ErrorContainerDark = Color(0xFF881337)
 val OnErrorContainerDark = Color(0xFFFFE4E6)
 
-// Functional Category Colors for Net-CAR
+// Functional Category Colors for Net-CAR (Modern High-Contrast Telemetry Palette)
 val FuelGreen = Color(0xFF10B981)
-val FuelGreenContainer = Color(0xFFD1FAE5)
-val OnFuelGreen = Color(0xFFFFFFFF)
+val FuelGreenContainer = Color(0xFF064E3B)
+val OnFuelGreen = Color(0xFFECFDF5)
 
-val MaintenanceBlue = Color(0xFF0284C7)
-val MaintenanceBlueContainer = Color(0xFFE0F2FE)
-val OnMaintenanceBlue = Color(0xFFFFFFFF)
+val MaintenanceBlue = Color(0xFF38BDF8)
+val MaintenanceBlueContainer = Color(0xFF0C4A6E)
+val OnMaintenanceBlue = Color(0xFFE0F2FE)
 
 val ExpenseAmber = Color(0xFFF59E0B)
-val ExpenseAmberContainer = Color(0xFFFEF3C7)
-val OnExpenseAmber = Color(0xFFFFFFFF)
+val ExpenseAmberContainer = Color(0xFF78350F)
+val OnExpenseAmber = Color(0xFFFEF3C7)
 
-val OverdueRed = Color(0xFFE11D48)
-val OverdueRedContainer = Color(0xFFFFE4E6)
-val OnOverdueRed = Color(0xFFFFFFFF)
+val OverdueRed = Color(0xFFFB7185)
+val OverdueRedContainer = Color(0xFF881337)
+val OnOverdueRed = Color(0xFFFFE4E6)
 
 val WarningOrange = Color(0xFFF97316)
-val WarningOrangeContainer = Color(0xFFFFEDD5)
+val WarningOrangeContainer = Color(0xFF7C2D12)
 
 val SuccessGreen = Color(0xFF10B981)
-val SuccessGreenContainer = Color(0xFFD1FAE5)
+val SuccessGreenContainer = Color(0xFF064E3B)

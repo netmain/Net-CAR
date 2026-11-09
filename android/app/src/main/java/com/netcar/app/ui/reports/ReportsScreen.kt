@@ -58,6 +58,7 @@ import java.util.Locale
 fun ReportsScreen(
     viewModel: ReportsViewModel,
     onNavigateBack: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -70,8 +71,9 @@ fun ReportsScreen(
         topBar = {
             TopBar(
                 title = "Reports & Analytics",
-                canNavigateBack = true,
-                onNavigateBack = onNavigateBack
+                canNavigateBack = onOpenDrawer == null,
+                onNavigateBack = onNavigateBack,
+                onOpenDrawer = onOpenDrawer
             )
         },
         modifier = modifier

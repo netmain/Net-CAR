@@ -15,6 +15,7 @@ import {
   Settings,
   Radio,
   Cloud,
+  Download,
 } from 'lucide-react';
 
 export function Sidebar() {
@@ -95,57 +96,68 @@ export function Sidebar() {
         })}
       </div>
 
-      {/* Cloud & Telemetry Sync Widget */}
-      <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-3.5 mx-1 relative overflow-hidden shadow-lg">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-xs text-slate-200">
-            <Radio
-              className={`h-3.5 w-3.5 ${
+      {/* Cloud & Telemetry Sync Widget + Android APK Download */}
+      <div className="space-y-2.5 mx-1">
+        <a
+          href="/Net-CAR.apk"
+          download="Net-CAR.apk"
+          className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono font-bold text-emerald-300 hover:bg-emerald-500/25 transition"
+        >
+          <Download className="h-3.5 w-3.5 text-emerald-400" />
+          <span>{lang === 'fr' ? 'Télécharger Android .APK' : 'Download Android .APK'}</span>
+        </a>
+
+        <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-3.5 relative overflow-hidden shadow-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-xs text-slate-200">
+              <Radio
+                className={`h-3.5 w-3.5 ${
+                  isCloudConnected
+                    ? syncStatus === 'syncing'
+                      ? 'text-sky-400 animate-pulse'
+                      : syncStatus === 'error'
+                        ? 'text-rose-400'
+                        : 'text-emerald-400'
+                    : 'text-amber-400'
+                }`}
+              />
+              <span>{isCloudConnected ? 'Firebase Cloud Sync' : 'Telemetry Link'}</span>
+            </div>
+            <span
+              className={`h-2 w-2 rounded-full ${
                 isCloudConnected
                   ? syncStatus === 'syncing'
-                    ? 'text-sky-400 animate-pulse'
+                    ? 'bg-sky-400 animate-ping'
                     : syncStatus === 'error'
-                      ? 'text-rose-400'
-                      : 'text-emerald-400'
-                  : 'text-amber-400'
+                      ? 'bg-rose-400'
+                      : 'bg-emerald-400'
+                  : 'bg-amber-400'
               }`}
             />
-            <span>{isCloudConnected ? 'Firebase Cloud Sync' : 'Telemetry Link'}</span>
           </div>
-          <span
-            className={`h-2 w-2 rounded-full ${
-              isCloudConnected
-                ? syncStatus === 'syncing'
-                  ? 'bg-sky-400 animate-ping'
-                  : syncStatus === 'error'
-                    ? 'bg-rose-400'
-                    : 'bg-emerald-400'
-                : 'bg-amber-400'
-            }`}
-          />
-        </div>
-        <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed font-medium">
-          {isCloudConnected
-            ? syncStatus === 'syncing'
-              ? lang === 'fr'
-                ? `Synchronisation en cours pour ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'votre flotte'}...`
-                : `Synchronizing ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'your fleet'}...`
+          <p className="mt-1.5 text-[11px] text-slate-400 leading-relaxed font-medium">
+            {isCloudConnected
+              ? syncStatus === 'syncing'
+                ? lang === 'fr'
+                  ? `Synchronisation en cours pour ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'votre flotte'}...`
+                  : `Synchronizing ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'your fleet'}...`
+                : lang === 'fr'
+                  ? `Synchronisé et à jour pour ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'votre flotte'}.`
+                  : `Synced & up to date for ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'your fleet'}.`
               : lang === 'fr'
-                ? `Synchronisé et à jour pour ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'votre flotte'}.`
-                : `Synced & up to date for ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'your fleet'}.`
-            : lang === 'fr'
-              ? `Mode local pour ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'vos véhicules'}. Connectez-vous pour synchroniser vos appareils.`
-              : `Local mode for ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'your vehicles'}. Sign in to sync across devices.`}
-        </p>
-        {!isCloudConnected && (
-          <button
-            onClick={() => setAuthModalOpen(true)}
-            className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 px-3 py-1.5 text-[11px] font-mono font-bold text-sky-300 hover:bg-sky-500/25 transition cursor-pointer"
-          >
-            <Cloud className="h-3.5 w-3.5 text-sky-400" />
-            <span>{lang === 'fr' ? 'Connecter Gmail / Email' : 'Connect Gmail / Email'}</span>
-          </button>
-        )}
+                ? `Mode local pour ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'vos véhicules'}. Connectez-vous pour synchroniser vos appareils.`
+                : `Local mode for ${activeVehicle ? `${activeVehicle.make} ${activeVehicle.model}` : 'your vehicles'}. Sign in to sync across devices.`}
+          </p>
+          {!isCloudConnected && (
+            <button
+              onClick={() => setAuthModalOpen(true)}
+              className="mt-2.5 w-full flex items-center justify-center gap-1.5 rounded-xl bg-sky-500/15 border border-sky-500/30 px-3 py-1.5 text-[11px] font-mono font-bold text-sky-300 hover:bg-sky-500/25 transition cursor-pointer"
+            >
+              <Cloud className="h-3.5 w-3.5 text-sky-400" />
+              <span>{lang === 'fr' ? 'Connecter Gmail / Email' : 'Connect Gmail / Email'}</span>
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );

@@ -56,6 +56,7 @@ fun VehicleListScreen(
     viewModel: VehicleViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddVehicle: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -65,8 +66,9 @@ fun VehicleListScreen(
         topBar = {
             TopBar(
                 title = "My Vehicles",
-                canNavigateBack = true,
-                onNavigateBack = onNavigateBack
+                canNavigateBack = onOpenDrawer == null,
+                onNavigateBack = onNavigateBack,
+                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {

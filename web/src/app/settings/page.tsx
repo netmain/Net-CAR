@@ -17,6 +17,7 @@ import {
   LogIn,
   LogOut,
   FileSpreadsheet,
+  Smartphone,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -625,6 +626,33 @@ export default function SettingsPage() {
                 </label>
               </div>
             </div>
+          </div>
+
+          {/* Card 4: Download Compiled Android APK */}
+          <div className="rounded-xl border border-sky-500/30 p-5 bg-gradient-to-r from-sky-500/10 via-slate-900/80 to-emerald-500/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 md:col-span-2">
+            <div>
+              <div className="flex items-center gap-2 font-mono font-bold text-slate-100 text-sm">
+                <Smartphone className="h-4 w-4 text-sky-400" />
+                <span>
+                  {lang === 'fr'
+                    ? 'Application Mobile Android (Net-CAR v2.0.0 .APK)'
+                    : 'Android Mobile Application (Net-CAR v2.0.0 .APK)'}
+                </span>
+              </div>
+              <p className="mt-1.5 text-xs text-slate-300 font-sans max-w-2xl">
+                {lang === 'fr'
+                  ? 'Téléchargez le fichier .APK compilé pour Android avec le nouveau menu latéral (Side Drawer), le thème sombre moderne et la synchronisation Cloud Firebase.'
+                  : 'Download the compiled Android .APK featuring the new Material 3 Side Drawer main menu, modern dark telemetry theme, and Firebase Cloud synchronization.'}
+              </p>
+            </div>
+            <a
+              href="/Net-CAR.apk"
+              download="Net-CAR.apk"
+              className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 transition shrink-0"
+            >
+              <Download className="h-4 w-4" />
+              <span>{lang === 'fr' ? 'Télécharger Net-CAR.apk' : 'Download Net-CAR.apk'}</span>
+            </a>
           </div>
         </div>
       </div>

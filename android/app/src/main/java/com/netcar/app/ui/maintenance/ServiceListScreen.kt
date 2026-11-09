@@ -57,6 +57,7 @@ fun ServiceListScreen(
     viewModel: MaintenanceViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddService: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -67,8 +68,9 @@ fun ServiceListScreen(
         topBar = {
             TopBar(
                 title = "Maintenance & Services",
-                canNavigateBack = true,
-                onNavigateBack = onNavigateBack
+                canNavigateBack = onOpenDrawer == null,
+                onNavigateBack = onNavigateBack,
+                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {

@@ -59,6 +59,7 @@ fun ExpenseListScreen(
     viewModel: ExpenseViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddExpense: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -69,8 +70,9 @@ fun ExpenseListScreen(
         topBar = {
             TopBar(
                 title = "Expenses",
-                canNavigateBack = true,
-                onNavigateBack = onNavigateBack
+                canNavigateBack = onOpenDrawer == null,
+                onNavigateBack = onNavigateBack,
+                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {

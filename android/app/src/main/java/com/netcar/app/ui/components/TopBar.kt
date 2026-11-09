@@ -3,6 +3,7 @@ package com.netcar.app.ui.components
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -23,6 +24,7 @@ fun TopBar(
     modifier: Modifier = Modifier,
     canNavigateBack: Boolean = false,
     onNavigateBack: () -> Unit = {},
+    onOpenDrawer: (() -> Unit)? = null,
     scrollBehavior: TopAppBarScrollBehavior? = null,
     actions: @Composable RowScope.() -> Unit = {}
 ) {
@@ -36,7 +38,15 @@ fun TopBar(
             )
         },
         navigationIcon = {
-            if (canNavigateBack) {
+            if (onOpenDrawer != null) {
+                IconButton(onClick = onOpenDrawer) {
+                    Icon(
+                        imageVector = Icons.Default.Menu,
+                        contentDescription = "Open Main Menu",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            } else if (canNavigateBack) {
                 IconButton(onClick = onNavigateBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,

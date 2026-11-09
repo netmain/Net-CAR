@@ -89,6 +89,7 @@ fun DashboardScreen(
     onNavigateToFuel: () -> Unit,
     onNavigateToReports: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -104,6 +105,7 @@ fun DashboardScreen(
     ) {
         TopBar(
             title = "Net-CAR",
+            onOpenDrawer = onOpenDrawer,
             actions = {
                 IconButton(onClick = onNavigateToVehicles) {
                     Icon(

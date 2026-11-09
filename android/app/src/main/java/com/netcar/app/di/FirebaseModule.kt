@@ -1,5 +1,6 @@
 package com.netcar.app.di
 
+import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.ktx.auth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -17,13 +18,21 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object FirebaseModule {
 
+    const val FIRESTORE_DATABASE_ID = "ai-studio-netcar-2c09308f-f3de-41bd-ade5-c724c5d2f50d"
+
     @Provides
     @Singleton
     fun provideFirebaseAuth(): FirebaseAuth = Firebase.auth
 
     @Provides
     @Singleton
-    fun provideFirebaseFirestore(): FirebaseFirestore = Firebase.firestore
+    fun provideFirebaseFirestore(): FirebaseFirestore {
+        return runCatching {
+            FirebaseFirestore.getInstance(FirebaseApp.getInstance(), FIRESTORE_DATABASE_ID)
+        }.getOrElse {
+            Firebase.firestore
+        }
+    }
 
     @Provides
     @Singleton

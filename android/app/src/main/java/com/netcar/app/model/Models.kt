@@ -166,9 +166,11 @@ data class DashboardStats(
 )
 
 data class UserSettings(
-    val language: SupportedLanguage = SupportedLanguage.EN,
+    val language: SupportedLanguage = SupportedLanguage.FR,
     val units: Units = Units.METRIC,
-    val currency: SupportedCurrency = SupportedCurrency.EUR,
-    val isDriveBackupConnected: Boolean = true,
-    val lastBackupTimestamp: Long? = System.currentTimeMillis() - 86400000L
+    val currency: SupportedCurrency = SupportedCurrency.DZD,
+    val isDriveBackupConnected: Boolean = false,
+    val connectedEmail: String? = null,
+    val userId: String? = null,
+    val lastBackupTimestamp: Long? = null
 )
