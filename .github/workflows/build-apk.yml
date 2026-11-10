@@ -113,6 +113,44 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+      - name: Capture build metadata
+        id: meta
+        run: |
+          echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+          echo "version=1.0.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Publish versioned release (kept permanently)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Net-CAR v1.0.${{ github.run_number }} — ${{ steps.meta.outputs.date }}
+          body: |
+            Automated Android build from commit `${{ github.sha }}` (workflow run #${{ github.run_number }}).
+
+            - **Version:** `1.0.${{ github.run_number }}` (versionCode `${{ github.run_number }}`)
+            - **Build date:** ${{ steps.meta.outputs.date }}
+            - **Signing:** ${{ steps.signing.outputs.using_release_key == 'true' && 'release keystore' || 'CI debug key (uninstall the old app before updating)' }}
+
+            | Asset | Description |
+            |-------|-------------|
+            | `Net-CAR.apk` | Release build (recommended) |
+            | `Net-CAR-debug.apk` | Debug build (debuggable, for testing) |
+            | `checksums.txt` | SHA-256 checksums for both APKs |
+
+            Install on Android 8.0+ (API 26). If Android refuses to update an existing installation, uninstall the old app first.
+
+            > This versioned release is kept permanently. Previous versions remain listed on the
+            > [Releases page](https://github.com/${{ github.repository }}/releases), newest first.
+          prerelease: false
+          make_latest: false
+          fail_on_unmatched_files: true
+          overwrite_files: true
+          files: |
+            Net-CAR.apk
+            Net-CAR-debug.apk
+            checksums.txt
+
       - name: Publish APKs to GitHub Release
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
@@ -123,6 +161,7 @@ jobs:
             Automated Android build from commit `${{ github.sha }}` (workflow run #${{ github.run_number }}).
 
             - **Version:** `1.0.${{ github.run_number }}` (versionCode `${{ github.run_number }}`)
+            - **Build date:** ${{ steps.meta.outputs.date }}
             - **Signing:** ${{ steps.signing.outputs.using_release_key == 'true' && 'release keystore' || 'CI debug key (uninstall the old app before updating)' }}
 
             | Asset | Description |
@@ -132,6 +171,10 @@ jobs:
             | `checksums.txt` | SHA-256 checksums for both APKs |
 
             Install on Android 8.0+ (API 26). If Android refuses to update an existing installation, uninstall the old app first.
+
+            **Older versions:** every build also gets its own permanent release tagged
+            `v1.0.<run_number>` (see the [Releases page](https://github.com/${{ github.repository }}/releases)).
+            Use those if the latest build has a problem while a fix is prepared.
           prerelease: false
           make_latest: true
           fail_on_unmatched_files: true
