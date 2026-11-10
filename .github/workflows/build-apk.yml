@@ -30,8 +30,19 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Verify Android SDK
+        run: |
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          echo "Using Android SDK at $SDK_ROOT"
+          test -d "$SDK_ROOT" || { echo "::error::Android SDK not found on the runner."; exit 1; }
+          SDKMANAGER="$(find "$SDK_ROOT/cmdline-tools" -type f -name sdkmanager 2>/dev/null | head -n 1)"
+          if [ -n "$SDKMANAGER" ]; then
+            yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+            yes | "$SDKMANAGER" "platforms;android-34" "build-tools;34.0.0" > /tmp/sdk-install.log 2>&1 || true
+            tail -n 5 /tmp/sdk-install.log || true
+          fi
+          echo "Installed platforms:"; ls "$SDK_ROOT/platforms" 2>/dev/null || true
+          echo "Installed build-tools:"; ls "$SDK_ROOT/build-tools" 2>/dev/null || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
