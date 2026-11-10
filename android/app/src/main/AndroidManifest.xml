@@ -33,6 +33,10 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".notifications.ReminderAlarmReceiver"
+            android:exported="false" />
+
     </application>
 
 </manifest>

@@ -25,6 +25,7 @@ import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Units
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
+import com.netcar.app.notifications.ReminderNotificationHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -278,6 +279,23 @@ class NetCarRepository @Inject constructor(
 
     init {
         refreshAuthStatusSafely()
+        checkRemindersAndNotify(forceAllActive = false)
+    }
+
+    fun checkRemindersAndNotify(forceAllActive: Boolean = false): Int {
+        return runCatching {
+            ReminderNotificationHelper.checkAndNotifyDueReminders(
+                context = context,
+                vehicles = _vehicles.value,
+                reminders = _reminders.value,
+                isFr = _userSettings.value.language == SupportedLanguage.FR,
+                forceNotifyAllActive = forceAllActive
+            )
+        }.getOrDefault(0)
+    }
+
+    fun triggerReminderNotificationsNow(forceAllActive: Boolean = true): Int {
+        return checkRemindersAndNotify(forceAllActive = forceAllActive)
     }
 
     private fun refreshAuthStatusSafely() {
@@ -411,6 +429,7 @@ class NetCarRepository @Inject constructor(
             } else v
         }
         persistLocalData()
+        checkRemindersAndNotify(forceAllActive = false)
     }
 
     fun addFillUp(fillUp: FillUp) {
@@ -449,6 +468,7 @@ class NetCarRepository @Inject constructor(
     fun addReminder(reminder: Reminder) {
         _reminders.value = listOf(reminder) + _reminders.value
         persistLocalData()
+        checkRemindersAndNotify(forceAllActive = false)
     }
 
     fun toggleReminderCompleted(id: String) {
@@ -456,6 +476,7 @@ class NetCarRepository @Inject constructor(
             if (it.id == id) it.copy(isCompleted = !it.isCompleted) else it
         }
         persistLocalData()
+        checkRemindersAndNotify(forceAllActive = false)
     }
 
     fun deleteReminder(id: String) {
@@ -1135,6 +1156,7 @@ class NetCarRepository @Inject constructor(
                 lastBackupTimestamp = syncTime
             )
             persistLocalData()
+            checkRemindersAndNotify(forceAllActive = false)
 
             val msg = if (_userSettings.value.language == SupportedLanguage.FR) {
                 "Synchronisation Cloud réussie (${_vehicles.value.size} véhicules, ${_fillUps.value.size} pleins)"

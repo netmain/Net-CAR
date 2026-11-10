@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
 import com.netcar.app.model.Reminder
 import com.netcar.app.model.ServiceType
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -14,7 +15,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
-import java.util.Calendar
 import javax.inject.Inject
 
 data class ReminderUiState(
@@ -24,6 +24,7 @@ data class ReminderUiState(
     val selectedTab: Int = 0, // 0 = Active, 1 = Completed
     val overdueCount: Int = 0,
     val userSettings: UserSettings = UserSettings(),
+    val notificationFeedback: String? = null,
     val isLoading: Boolean = false
 )
 
@@ -46,13 +47,17 @@ class ReminderViewModel @Inject constructor(
     private val _selectedTab = MutableStateFlow(0)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
 
+    private val _notificationFeedback = MutableStateFlow<String?>(null)
+
     val uiState: StateFlow<ReminderUiState> = combine(
         repository.reminders,
         repository.vehicles,
         repository.selectedVehicleId,
         _selectedTab,
-        repository.userSettings
-    ) { reminders, vehicles, selectedId, tab, settings ->
+        combine(repository.userSettings, _notificationFeedback) { s, fb -> s to fb }
+    ) { reminders, vehicles, selectedId, tab, settingsAndFb ->
+        val settings = settingsAndFb.first
+        val feedback = settingsAndFb.second
         val selected = vehicles.find { it.id == selectedId } ?: vehicles.firstOrNull()
         val vehicleReminders = reminders.filter { it.vehicleId == selected?.id }
 
@@ -69,7 +74,8 @@ class ReminderViewModel @Inject constructor(
             selectedVehicle = selected,
             selectedTab = tab,
             overdueCount = overdue,
-            userSettings = settings
+            userSettings = settings,
+            notificationFeedback = feedback
         )
     }.stateIn(
         scope = viewModelScope,
@@ -98,6 +104,18 @@ class ReminderViewModel @Inject constructor(
 
     fun deleteReminder(id: String) {
         repository.deleteReminder(id)
+    }
+
+    fun triggerNativeNotificationsNow() {
+        val isFr = repository.userSettings.value.language == SupportedLanguage.FR
+        val sentCount = repository.triggerReminderNotificationsNow(forceAllActive = true)
+        _notificationFeedback.value = if (sentCount > 0) {
+            if (isFr) "$sentCount notification(s) native(s) envoyée(s) sur votre téléphone."
+            else "$sentCount native Android notification(s) sent to your phone."
+        } else {
+            if (isFr) "Aucun rappel actif à notifier pour le moment."
+            else "No active reminders to notify right now."
+        }
     }
 
     fun saveReminder(onSuccess: () -> Unit) {

@@ -4,11 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Handler
-import android.os.Looper
-import android.webkit.JavascriptInterface
+import android.os.Build
+import android.view.View
 import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -82,8 +80,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Units
@@ -96,13 +92,13 @@ import com.netcar.app.ui.theme.OverdueRed
 import com.netcar.app.ui.theme.OverdueRedContainer
 import com.netcar.app.ui.theme.SuccessGreen
 import com.netcar.app.ui.theme.SuccessGreenContainer
-import java.io.ByteArrayInputStream
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val GOOGLE_WEB_CLIENT_ID =
     "1033623803537-9aqcjj37isscfde2aq3dp1t0nhj2hict.apps.googleusercontent.com"
@@ -187,20 +183,6 @@ fun SettingsScreen(
         }
     }
 
-    if (uiState.showGoogleOAuthDialog) {
-        GoogleOAuthDialog(
-            emailHint = uiState.googleOAuthEmailHint ?: emailInput,
-            isFr = isFr,
-            onDismiss = { viewModel.dismissGoogleOAuthDialog() },
-            onIdTokenReceived = { idToken ->
-                viewModel.completeGoogleSignInWithIdToken(idToken, emailInput)
-            },
-            onError = { errMsg ->
-                viewModel.onGoogleOAuthError(errMsg)
-            }
-        )
-    }
-
     Scaffold(
         topBar = {
             TopBar(
@@ -212,6 +194,24 @@ fun SettingsScreen(
         },
         modifier = modifier
     ) { padding ->
+        if (uiState.showGoogleOAuthDialog) {
+            GoogleOAuthInlineView(
+                emailHint = uiState.googleOAuthEmailHint ?: emailInput,
+                isFr = isFr,
+                onDismiss = { viewModel.dismissGoogleOAuthDialog() },
+                onIdTokenReceived = { idToken ->
+                    viewModel.completeGoogleSignInWithIdToken(idToken, emailInput)
+                },
+                onError = { errMsg ->
+                    viewModel.onGoogleOAuthError(errMsg)
+                },
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            )
+            return@Scaffold
+        }
+
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -976,15 +976,16 @@ fun SettingsScreen(
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
-private fun GoogleOAuthDialog(
+private fun GoogleOAuthInlineView(
     emailHint: String?,
     isFr: Boolean,
     onDismiss: () -> Unit,
     onIdTokenReceived: (String) -> Unit,
-    onError: (String) -> Unit
+    onError: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     var isLoading by remember { mutableStateOf(true) }
-    var hasCompleted by remember { mutableStateOf(false) }
+    val delivered = remember { AtomicBoolean(false) }
 
     val oauthUrl = remember(emailHint) {
         val nonce = UUID.randomUUID().toString()
@@ -1004,179 +1005,168 @@ private fun GoogleOAuthDialog(
         }
     }
 
-    fun deliverTokenOnce(token: String) {
-        if (!hasCompleted && token.isNotBlank()) {
-            hasCompleted = true
-            Handler(Looper.getMainLooper()).post {
-                onIdTokenReceived(token)
+    val deliverOnce: (String) -> Unit = remember(onIdTokenReceived) {
+        { token: String ->
+            if (token.isNotBlank() && delivered.compareAndSet(false, true)) {
+                runCatching { onIdTokenReceived(token) }
             }
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+    Surface(
+        modifier = modifier.padding(12.dp),
+        shape = RoundedCornerShape(22.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 4.dp
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(12.dp),
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surface
-        ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Dialog Header
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Surface(
-                            shape = CircleShape,
-                            color = Color(0xFF4285F4),
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = "G",
-                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                    color = Color.White
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Header
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(0xFF4285F4),
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = if (isFr) "Connexion Google Cloud" else "Google Cloud Sign-In",
-                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "accounts.google.com",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = "G",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                color = Color.White
                             )
                         }
                     }
-
-                    IconButton(onClick = onDismiss) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Close",
-                            tint = MaterialTheme.colorScheme.onSurface
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(
+                            text = if (isFr) "Connexion Google Cloud" else "Google Cloud Sign-In",
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "accounts.google.com",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                Box(modifier = Modifier.weight(1f)) {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            WebView(ctx).apply {
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+
+            Box(modifier = Modifier.weight(1f)) {
+                AndroidView(
+                    modifier = Modifier.fillMaxSize(),
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            runCatching {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                                }
                                 settings.javaScriptEnabled = true
                                 settings.domStorageEnabled = true
-                                // Use standard Chrome Mobile UA so Google OAuth allows embedded sign-in
+                                settings.saveFormData = false
                                 val rawUa = settings.userAgentString ?: ""
                                 val cleanUa = rawUa
                                     .replace("; wv", "")
                                     .replace(Regex("Version/\\d+\\.\\d+\\s*"), "")
                                 settings.userAgentString = cleanUa.ifBlank {
-                                    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36"
+                                    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
                                 }
 
-                                addJavascriptInterface(
-                                    object {
-                                        @JavascriptInterface
-                                        fun onOAuthCallback(urlOrHash: String?) {
-                                            extractIdTokenFromUrl(urlOrHash)?.let { deliverTokenOnce(it) }
-                                        }
-                                    },
-                                    "NetCarOAuthBridge"
-                                )
-
                                 webViewClient = object : WebViewClient() {
-                                    override fun shouldInterceptRequest(
-                                        view: WebView?,
-                                        request: WebResourceRequest?
-                                    ): WebResourceResponse? {
-                                        val reqUrl = request?.url?.toString() ?: return null
-                                        extractIdTokenFromUrl(reqUrl)?.let { deliverTokenOnce(it) }
-
-                                        if (reqUrl.startsWith(FIREBASE_AUTH_HANDLER_URL)) {
-                                            val bridgeHtml = """
-                                                <!DOCTYPE html>
-                                                <html>
-                                                <head><meta name="viewport" content="width=device-width, initial-scale=1"/></head>
-                                                <body style="background:#0B1120;color:#F8FAFC;font-family:sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;">
-                                                  <p style="font-size:16px;font-weight:bold;">Connexion Google réussie, synchronisation...</p>
-                                                  <script>
-                                                    try {
-                                                      if (window.NetCarOAuthBridge) {
-                                                        window.NetCarOAuthBridge.onOAuthCallback(window.location.href);
-                                                      }
-                                                    } catch (e) {}
-                                                  </script>
-                                                </body>
-                                                </html>
-                                            """.trimIndent()
-                                            return WebResourceResponse(
-                                                "text/html",
-                                                "UTF-8",
-                                                ByteArrayInputStream(bridgeHtml.toByteArray(Charsets.UTF_8))
-                                            )
-                                        }
-                                        return super.shouldInterceptRequest(view, request)
-                                    }
-
                                     override fun shouldOverrideUrlLoading(
                                         view: WebView?,
                                         request: WebResourceRequest?
                                     ): Boolean {
-                                        val url = request?.url?.toString() ?: return false
-                                        extractIdTokenFromUrl(url)?.let {
-                                            deliverTokenOnce(it)
-                                            return true
-                                        }
-                                        return false
+                                        return runCatching {
+                                            val url = request?.url?.toString() ?: return@runCatching false
+                                            val token = extractIdTokenFromUrl(url)
+                                            if (!token.isNullOrBlank()) {
+                                                view?.stopLoading()
+                                                deliverOnce(token)
+                                                true
+                                            } else {
+                                                false
+                                            }
+                                        }.getOrDefault(false)
                                     }
 
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                                         super.onPageStarted(view, url, favicon)
-                                        isLoading = true
-                                        extractIdTokenFromUrl(url)?.let { deliverTokenOnce(it) }
+                                        runCatching {
+                                            isLoading = true
+                                            val token = extractIdTokenFromUrl(url)
+                                            if (!token.isNullOrBlank()) {
+                                                view?.stopLoading()
+                                                deliverOnce(token)
+                                            }
+                                        }
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         super.onPageFinished(view, url)
-                                        isLoading = false
-                                        extractIdTokenFromUrl(url)?.let { deliverTokenOnce(it) }
-                                        if (url != null && url.startsWith(FIREBASE_AUTH_HANDLER_URL)) {
-                                            view?.evaluateJavascript(
-                                                "(function(){ if(window.NetCarOAuthBridge) window.NetCarOAuthBridge.onOAuthCallback(window.location.href); })();",
-                                                null
-                                            )
+                                        runCatching {
+                                            isLoading = false
+                                            val token = extractIdTokenFromUrl(url)
+                                            if (!token.isNullOrBlank()) {
+                                                deliverOnce(token)
+                                                return@runCatching
+                                            }
+                                            if (url != null && url.startsWith(FIREBASE_AUTH_HANDLER_URL)) {
+                                                view?.evaluateJavascript(
+                                                    "(function(){ return window.location.href || ''; })()"
+                                                ) { rawResult ->
+                                                    runCatching {
+                                                        val unquoted = rawResult
+                                                            ?.trim()
+                                                            ?.removeSurrounding("\"")
+                                                            ?.replace("\\u0026", "&")
+                                                            ?.replace("\\/", "/")
+                                                            ?: ""
+                                                        extractIdTokenFromUrl(unquoted)?.let { jsToken ->
+                                                            deliverOnce(jsToken)
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
 
                                 loadUrl(oauthUrl)
+                            }.onFailure { err ->
+                                onError(
+                                    err.localizedMessage
+                                        ?: if (isFr) "Impossible d'ouvrir la page Google Sign-In."
+                                        else "Unable to open Google Sign-In page."
+                                )
                             }
                         }
-                    )
+                    }
+                )
 
-                    if (isLoading) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp),
-                            contentAlignment = Alignment.TopCenter
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(28.dp))
-                        }
+                if (isLoading) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        contentAlignment = Alignment.TopCenter
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
                     }
                 }
             }
