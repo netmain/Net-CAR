@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/app-context';
+import { downloadAndPrepareApkBlob } from '@/lib/download-apk';
 import {
   LayoutDashboard,
   Car,
@@ -16,11 +17,35 @@ import {
   Radio,
   Cloud,
   Download,
+  RefreshCw,
+  CheckCircle2,
 } from 'lucide-react';
 
 export function Sidebar() {
   const pathname = usePathname();
   const { t, lang, reminders, activeVehicle, user, syncStatus, setAuthModalOpen } = useApp();
+  const [apkLoading, setApkLoading] = useState(false);
+  const [apkProgress, setApkProgress] = useState<string | null>(null);
+  const [apkBlobUrl, setApkBlobUrl] = useState<string | null>(null);
+  const [apkSizeMB, setApkSizeMB] = useState<string | null>(null);
+
+  const handleSidebarApkClick = async () => {
+    if (apkLoading) return;
+    setApkLoading(true);
+    setApkProgress('0%');
+    try {
+      const res = await downloadAndPrepareApkBlob((pct, dlMB, totalMB) => {
+        setApkProgress(`${pct}% (${dlMB}/${totalMB} MB)`);
+      });
+      if (res.success && res.blobUrl) {
+        setApkBlobUrl(res.blobUrl);
+        setApkSizeMB(res.sizeMB || null);
+      }
+    } finally {
+      setApkLoading(false);
+      setApkProgress(null);
+    }
+  };
 
   const dueRemindersCount = reminders.filter(
     (r) => r.isActive && (!activeVehicle || r.vehicleId === activeVehicle.id)
@@ -96,20 +121,42 @@ export function Sidebar() {
         })}
       </div>
 
-      {/* Cloud & Telemetry Sync Widget + Direct Android APK Download */}
+      {/* Cloud & Telemetry Sync Widget + Verified Android APK Download */}
       <div className="space-y-2.5 mx-1">
-        <a
-          href="/api/download-apk"
-          download="Net-CAR.apk"
-          className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono font-bold text-emerald-300 hover:bg-emerald-500/25 transition cursor-pointer"
-        >
-          <Download className="h-3.5 w-3.5 text-emerald-400" />
-          <span>
-            {lang === 'fr'
-              ? 'Télécharger Android .APK (22.3 MB)'
-              : 'Download Android .APK (22.3 MB)'}
-          </span>
-        </a>
+        {apkBlobUrl ? (
+          <a
+            href={apkBlobUrl}
+            download="Net-CAR.apk"
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-400 bg-emerald-500 px-3 py-2 text-[11px] font-mono font-bold text-slate-950 shadow-md hover:bg-emerald-400 transition cursor-pointer"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-slate-950 shrink-0" />
+            <span>
+              {lang === 'fr'
+                ? `Enregistrer Net-CAR.apk (${apkSizeMB || ''} MB)`
+                : `Save Net-CAR.apk (${apkSizeMB || ''} MB)`}
+            </span>
+          </a>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSidebarApkClick}
+            disabled={apkLoading}
+            className="w-full flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3 py-2 text-[11px] font-mono font-bold text-emerald-300 hover:bg-emerald-500/25 disabled:opacity-70 transition cursor-pointer"
+          >
+            {apkLoading ? (
+              <RefreshCw className="h-3.5 w-3.5 text-emerald-400 animate-spin shrink-0" />
+            ) : (
+              <Download className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+            )}
+            <span>
+              {apkLoading
+                ? apkProgress || 'Préparation APK...'
+                : lang === 'fr'
+                  ? 'Télécharger Android .APK'
+                  : 'Download Android .APK'}
+            </span>
+          </button>
+        )}
 
         <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-3.5 relative overflow-hidden shadow-lg">
           <div className="flex items-center justify-between">

@@ -1,27 +1,39 @@
-const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB chunks
+const CHUNK_SIZE = 1536 * 1024; // 1.5 MB binary chunks (~2 MB base64 JSON)
 
-export async function prepareVerifiedApkBlob(
+function base64ToUint8Array(base64: string): Uint8Array {
+  const binaryString = window.atob(base64);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes;
+}
+
+export async function downloadAndPrepareApkBlob(
   onProgress?: (percent: number, downloadedMB: string, totalMB: string) => void
 ): Promise<{ success: boolean; blobUrl?: string; sizeMB?: string; error?: string }> {
   try {
-    const infoRes = await fetch('/api/download-apk?info=1', {
-      method: 'GET',
+    const infoRes = await fetch('/api/download-apk', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'info' }),
       cache: 'no-store',
     });
 
     if (!infoRes.ok) {
       return {
         success: false,
-        error: `APK server endpoint returned HTTP ${infoRes.status}`,
+        error: `Le serveur APK a répondu HTTP ${infoRes.status}`,
       };
     }
 
     const info = await infoRes.json();
     const totalSize: number = Number(info?.size || 0);
-    if (!totalSize || totalSize < 1_000_000) {
+    if (!totalSize || totalSize < 500_000) {
       return {
         success: false,
-        error: 'Invalid APK size reported by server.',
+        error: info?.error || 'Taille APK invalide sur le serveur.',
       };
     }
 
@@ -33,22 +45,31 @@ export async function prepareVerifiedApkBlob(
       const start = received;
       const end = Math.min(totalSize, start + CHUNK_SIZE);
 
-      const chunkRes = await fetch(`/api/download-apk?start=${start}&end=${end}`, {
-        method: 'GET',
+      const chunkRes = await fetch('/api/download-apk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'chunk', start, end }),
         cache: 'no-store',
       });
 
       if (!chunkRes.ok) {
         return {
           success: false,
-          error: `Failed downloading APK chunk (${start}-${end}): HTTP ${chunkRes.status}`,
+          error: `Échec du téléchargement du segment (${start}-${end}) : HTTP ${chunkRes.status}`,
         };
       }
 
-      const arrayBuffer = await chunkRes.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
+      const payload = await chunkRes.json();
+      if (!payload?.chunkBase64) {
+        return {
+          success: false,
+          error: payload?.error || 'Réponse JSON APK invalide.',
+        };
+      }
 
-      // Verify ZIP/APK magic header (PK\x03\x04) on the first chunk
+      const bytes = base64ToUint8Array(payload.chunkBase64);
+
+      // Verify ZIP/APK magic header (PK\x03\x04) on the very first chunk
       if (start === 0) {
         if (
           bytes.length < 4 ||
@@ -59,7 +80,7 @@ export async function prepareVerifiedApkBlob(
         ) {
           return {
             success: false,
-            error: 'Downloaded data is not a valid APK binary archive.',
+            error: "Les données reçues ne correspondent pas à une archive APK valide.",
           };
         }
       }
@@ -79,6 +100,18 @@ export async function prepareVerifiedApkBlob(
     });
 
     const blobUrl = URL.createObjectURL(blob);
+
+    // Attempt immediate automatic save if transient user activation is still active
+    try {
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = 'Net-CAR.apk';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      // If browser blocked automatic click, the caller also renders a direct <a href={blobUrl}> button
+    }
 
     return {
       success: true,

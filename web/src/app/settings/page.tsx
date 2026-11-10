@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/lib/app-context';
 import { SupportedCurrency, Units, SupportedLanguage } from '@/types';
-import { prepareVerifiedApkBlob } from '@/lib/download-apk';
+import { downloadAndPrepareApkBlob } from '@/lib/download-apk';
 import {
   Globe,
   Cloud,
@@ -55,28 +55,34 @@ export default function SettingsPage() {
   const [apkDownloading, setApkDownloading] = useState(false);
   const [apkProgress, setApkProgress] = useState<string | null>(null);
   const [readyApkBlobUrl, setReadyApkBlobUrl] = useState<string | null>(null);
-  const [readyApkSizeMB, setReadyApkSizeMB] = useState<string>('22.3');
+  const [readyApkSizeMB, setReadyApkSizeMB] = useState<string>('4.1');
+  const [apkStatusMessage, setApkStatusMessage] = useState<{
+    text: string;
+    error?: boolean;
+  } | null>(null);
 
   const handlePrepareApkBlob = async () => {
     if (apkDownloading) return;
     setApkDownloading(true);
     setApkProgress('0%');
-    setRestoreMessage(null);
+    setApkStatusMessage(null);
     try {
-      const res = await prepareVerifiedApkBlob((pct, dlMB, totalMB) => {
-        setApkProgress(`${pct}% (${dlMB} / ${totalMB} MB)`);
-      });
+      const res = await downloadAndPrepareApkBlob(
+        (pct: number, dlMB: string, totalMB: string) => {
+          setApkProgress(`${pct}% (${dlMB} / ${totalMB} MB)`);
+        }
+      );
       if (res.success && res.blobUrl) {
         setReadyApkBlobUrl(res.blobUrl);
         if (res.sizeMB) setReadyApkSizeMB(res.sizeMB);
-        setRestoreMessage({
+        setApkStatusMessage({
           text:
             lang === 'fr'
-              ? `APK (${res.sizeMB} MB) chargé et vérifié en mémoire ! Cliquez maintenant sur le bouton vert « Enregistrer Net-CAR.apk » ci-dessous.`
-              : `APK (${res.sizeMB} MB) loaded and verified in memory! Now click the green "Save Net-CAR.apk" button below.`,
+              ? `APK vérifié (${res.sizeMB} MB) prêt ! Si l'enregistrement n'a pas démarré automatiquement, cliquez sur le bouton vert « 2. Enregistrer Net-CAR.apk (${res.sizeMB} MB) » ci-dessus.`
+              : `Verified APK (${res.sizeMB} MB) ready! If saving did not start automatically, click the green "2. Save Net-CAR.apk (${res.sizeMB} MB)" button above.`,
         });
       } else {
-        setRestoreMessage({
+        setApkStatusMessage({
           text: res.error || 'Failed to prepare Net-CAR.apk',
           error: true,
         });
@@ -664,71 +670,78 @@ export default function SettingsPage() {
           </div>
 
           {/* Card 4: Download Compiled Android APK */}
-          <div className="rounded-xl border border-sky-500/30 p-5 bg-gradient-to-r from-sky-500/10 via-slate-900/80 to-emerald-500/10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 md:col-span-2">
-            <div>
-              <div className="flex items-center gap-2 font-mono font-bold text-slate-100 text-sm">
-                <Smartphone className="h-4 w-4 text-sky-400" />
-                <span>
-                  {lang === 'fr'
-                    ? 'Application Mobile Android (Net-CAR v2.0.0 .APK)'
-                    : 'Android Mobile Application (Net-CAR v2.0.0 .APK)'}
-                </span>
-              </div>
-              <p className="mt-1.5 text-xs text-slate-300 font-sans max-w-2xl">
-                {lang === 'fr'
-                  ? 'Téléchargez le fichier .APK compilé pour Android avec le nouveau menu latéral (Side Drawer), le thème sombre moderne et la synchronisation Cloud Firebase.'
-                  : 'Download the compiled Android .APK featuring the new Material 3 Side Drawer main menu, modern dark telemetry theme, and Firebase Cloud synchronization.'}
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-              <a
-                href="/api/download-apk"
-                download="Net-CAR.apk"
-                className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 transition shrink-0 cursor-pointer"
-              >
-                <Download className="h-4 w-4" />
-                <span>
-                  {lang === 'fr'
-                    ? 'Télécharger Net-CAR.apk (Direct)'
-                    : 'Download Net-CAR.apk (Direct)'}
-                </span>
-              </a>
-
-              {readyApkBlobUrl ? (
-                <a
-                  href={readyApkBlobUrl}
-                  download="Net-CAR.apk"
-                  className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400 bg-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:bg-emerald-400 transition shrink-0 cursor-pointer"
-                >
-                  <CheckCircle2 className="h-4 w-4" />
+          <div className="rounded-xl border border-sky-500/30 p-5 bg-gradient-to-r from-sky-500/10 via-slate-900/80 to-emerald-500/10 flex flex-col gap-4 md:col-span-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 font-mono font-bold text-slate-100 text-sm">
+                  <Smartphone className="h-4 w-4 text-sky-400" />
                   <span>
                     {lang === 'fr'
-                      ? `Enregistrer Net-CAR.apk (${readyApkSizeMB} MB)`
-                      : `Save Net-CAR.apk (${readyApkSizeMB} MB)`}
+                      ? 'Application Mobile Android (Net-CAR v2.0.0 .APK)'
+                      : 'Android Mobile Application (Net-CAR v2.0.0 .APK)'}
                   </span>
-                </a>
-              ) : (
+                </div>
+                <p className="mt-1.5 text-xs text-slate-300 font-sans max-w-2xl">
+                  {lang === 'fr'
+                    ? 'Téléchargez le fichier .APK compilé pour Android avec le nouveau menu latéral (Side Drawer), le thème sombre moderne et la synchronisation Cloud Firebase.'
+                    : 'Download the compiled Android .APK featuring the new Material 3 Side Drawer main menu, modern dark telemetry theme, and Firebase Cloud synchronization.'}
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                 <button
                   type="button"
                   onClick={handlePrepareApkBlob}
                   disabled={apkDownloading}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-slate-700 bg-slate-800/90 px-3.5 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-sky-500/50 hover:text-sky-300 disabled:opacity-60 transition shrink-0 cursor-pointer"
+                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-sky-500 to-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:opacity-95 disabled:opacity-60 transition shrink-0 cursor-pointer"
                 >
                   {apkDownloading ? (
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin text-sky-400" />
+                    <RefreshCw className="h-4 w-4 animate-spin" />
                   ) : (
-                    <HardDrive className="h-3.5 w-3.5 text-sky-400" />
+                    <Download className="h-4 w-4" />
                   )}
                   <span>
                     {apkDownloading
-                      ? apkProgress || 'Chargement...'
+                      ? apkProgress || 'Préparation APK...'
                       : lang === 'fr'
-                        ? 'Alternative : Charger en mémoire (Blob)'
-                        : 'Alternative: Load in Memory (Blob)'}
+                        ? '1. Préparer & Télécharger Net-CAR.apk'
+                        : '1. Prepare & Download Net-CAR.apk'}
                   </span>
                 </button>
-              )}
+
+                {readyApkBlobUrl && (
+                  <a
+                    href={readyApkBlobUrl}
+                    download="Net-CAR.apk"
+                    className="flex items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-400 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-lg hover:bg-emerald-300 transition shrink-0 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>
+                      {lang === 'fr'
+                        ? `2. Enregistrer Net-CAR.apk (${readyApkSizeMB} MB)`
+                        : `2. Save Net-CAR.apk (${readyApkSizeMB} MB)`}
+                    </span>
+                  </a>
+                )}
+              </div>
             </div>
+
+            {apkStatusMessage && (
+              <div
+                className={`flex items-center gap-2 rounded-xl p-3 text-xs font-mono font-semibold ${
+                  apkStatusMessage.error
+                    ? 'bg-red-500/15 border border-red-500/30 text-red-300'
+                    : 'bg-emerald-500/15 border border-emerald-500/30 text-emerald-300'
+                }`}
+              >
+                {apkStatusMessage.error ? (
+                  <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                )}
+                <span>{apkStatusMessage.text}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
