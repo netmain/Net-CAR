@@ -1,14 +1,7 @@
 package com.netcar.app.ui.settings
 
-import android.annotation.SuppressLint
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
-import android.os.Build
-import android.view.View
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -33,7 +26,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
@@ -52,12 +44,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -79,7 +69,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Units
@@ -92,32 +81,9 @@ import com.netcar.app.ui.theme.OverdueRed
 import com.netcar.app.ui.theme.OverdueRedContainer
 import com.netcar.app.ui.theme.SuccessGreen
 import com.netcar.app.ui.theme.SuccessGreenContainer
-import java.net.URLDecoder
-import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.UUID
-import java.util.concurrent.atomic.AtomicBoolean
-
-private const val GOOGLE_WEB_CLIENT_ID =
-    "1033623803537-9aqcjj37isscfde2aq3dp1t0nhj2hict.apps.googleusercontent.com"
-private const val FIREBASE_AUTH_HANDLER_URL =
-    "https://axiomatic-serenity-8lvvl.firebaseapp.com/__/auth/handler"
-
-private fun extractIdTokenFromUrl(rawUrl: String?): String? {
-    if (rawUrl.isNullOrBlank()) return null
-    val fragmentOrQuery = rawUrl.substringAfter('#', "") + "&" + rawUrl.substringAfter('?', "").substringBefore('#')
-    for (part in fragmentOrQuery.split('&')) {
-        if (part.startsWith("id_token=")) {
-            val encoded = part.removePrefix("id_token=").trim()
-            if (encoded.isNotEmpty()) {
-                return runCatching { URLDecoder.decode(encoded, "UTF-8") }.getOrDefault(encoded)
-            }
-        }
-    }
-    return null
-}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -194,24 +160,6 @@ fun SettingsScreen(
         },
         modifier = modifier
     ) { padding ->
-        if (uiState.showGoogleOAuthDialog) {
-            GoogleOAuthInlineView(
-                emailHint = uiState.googleOAuthEmailHint ?: emailInput,
-                isFr = isFr,
-                onDismiss = { viewModel.dismissGoogleOAuthDialog() },
-                onIdTokenReceived = { idToken ->
-                    viewModel.completeGoogleSignInWithIdToken(idToken, emailInput)
-                },
-                onError = { errMsg ->
-                    viewModel.onGoogleOAuthError(errMsg)
-                },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-            )
-            return@Scaffold
-        }
-
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
@@ -373,9 +321,9 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (!isConnected) {
-                            // Primary Action: Sign in with Google (OAuth ID Token Flow - No SHA-1 / INVALID_APP_ID restriction)
+                            // Primary Action: Sign in with Google via system browser + deep-link callback (Zero WebView, No SHA-1 restriction)
                             Button(
-                                onClick = { viewModel.openGoogleOAuthDialog(emailInput) },
+                                onClick = { viewModel.startExternalGoogleSignIn(context, emailInput) },
                                 enabled = !isSyncing,
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(
@@ -490,9 +438,9 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     if (isCreateAccountMode) {
-                                        viewModel.signUpWithEmail(emailInput, passwordInput)
+                                        viewModel.signUpWithEmail(context, emailInput, passwordInput)
                                     } else {
-                                        viewModel.signInWithEmail(emailInput, passwordInput)
+                                        viewModel.signInWithEmail(context, emailInput, passwordInput)
                                     }
                                 },
                                 enabled = !isSyncing,
@@ -723,18 +671,25 @@ fun SettingsScreen(
 
                         OutlinedButton(
                             onClick = {
-                                val (fileName, csvContent) = viewModel.exportActiveVehicleCsv()
-                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "text/csv"
-                                    putExtra(Intent.EXTRA_SUBJECT, fileName)
-                                    putExtra(Intent.EXTRA_TEXT, csvContent)
-                                }
-                                context.startActivity(
-                                    Intent.createChooser(
+                                runCatching {
+                                    val (fileName, csvContent) = viewModel.exportActiveVehicleCsv()
+                                    val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/csv"
+                                        putExtra(Intent.EXTRA_SUBJECT, fileName)
+                                        putExtra(Intent.EXTRA_TEXT, csvContent)
+                                    }
+                                    val chooser = Intent.createChooser(
                                         sendIntent,
                                         if (isFr) "Partager la sauvegarde CSV" else "Share CSV Backup"
+                                    ).apply {
+                                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    }
+                                    context.applicationContext.startActivity(chooser)
+                                }.onFailure { err ->
+                                    viewModel.reportCsvError(
+                                        err.localizedMessage ?: if (isFr) "Impossible d'ouvrir le menu de partage." else "Unable to open share menu."
                                     )
-                                )
+                                }
                             },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
@@ -960,213 +915,13 @@ fun SettingsScreen(
 
                         Text(
                             text = if (isFr) {
-                                "Version 2.1.0 • Synchronisation Cloud multi-appareils (Web & Android) + Import/Export CSV Fuelio."
+                                "Version 2.2.0 • Synchronisation Cloud multi-appareils (Web & Android) + Rappels natifs + Import/Export CSV Fuelio."
                             } else {
-                                "Version 2.1.0 • Multi-device Cloud Sync (Web & Android) + Fuelio CSV Import/Export."
+                                "Version 2.2.0 • Multi-device Cloud Sync (Web & Android) + Native Reminders + Fuelio CSV Import/Export."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-private fun GoogleOAuthInlineView(
-    emailHint: String?,
-    isFr: Boolean,
-    onDismiss: () -> Unit,
-    onIdTokenReceived: (String) -> Unit,
-    onError: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var isLoading by remember { mutableStateOf(true) }
-    val delivered = remember { AtomicBoolean(false) }
-
-    val oauthUrl = remember(emailHint) {
-        val nonce = UUID.randomUUID().toString()
-        val encodedRedirect = URLEncoder.encode(FIREBASE_AUTH_HANDLER_URL, "UTF-8")
-        val encodedScope = URLEncoder.encode("openid email profile", "UTF-8")
-        val base = "https://accounts.google.com/o/oauth2/v2/auth" +
-            "?client_id=$GOOGLE_WEB_CLIENT_ID" +
-            "&redirect_uri=$encodedRedirect" +
-            "&response_type=id_token" +
-            "&scope=$encodedScope" +
-            "&prompt=select_account" +
-            "&nonce=$nonce"
-        if (!emailHint.isNullOrBlank() && emailHint.contains("@")) {
-            "$base&login_hint=${URLEncoder.encode(emailHint.trim(), "UTF-8")}"
-        } else {
-            base
-        }
-    }
-
-    val deliverOnce: (String) -> Unit = remember(onIdTokenReceived) {
-        { token: String ->
-            if (token.isNotBlank() && delivered.compareAndSet(false, true)) {
-                runCatching { onIdTokenReceived(token) }
-            }
-        }
-    }
-
-    Surface(
-        modifier = modifier.padding(12.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 4.dp
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Surface(
-                        shape = CircleShape,
-                        color = Color(0xFF4285F4),
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = "G",
-                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
-                                color = Color.White
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Text(
-                            text = if (isFr) "Connexion Google Cloud" else "Google Cloud Sign-In",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "accounts.google.com",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            Box(modifier = Modifier.weight(1f)) {
-                AndroidView(
-                    modifier = Modifier.fillMaxSize(),
-                    factory = { ctx ->
-                        WebView(ctx).apply {
-                            runCatching {
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
-                                }
-                                settings.javaScriptEnabled = true
-                                settings.domStorageEnabled = true
-                                settings.saveFormData = false
-                                val rawUa = settings.userAgentString ?: ""
-                                val cleanUa = rawUa
-                                    .replace("; wv", "")
-                                    .replace(Regex("Version/\\d+\\.\\d+\\s*"), "")
-                                settings.userAgentString = cleanUa.ifBlank {
-                                    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36"
-                                }
-
-                                webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(
-                                        view: WebView?,
-                                        request: WebResourceRequest?
-                                    ): Boolean {
-                                        return runCatching {
-                                            val url = request?.url?.toString() ?: return@runCatching false
-                                            val token = extractIdTokenFromUrl(url)
-                                            if (!token.isNullOrBlank()) {
-                                                view?.stopLoading()
-                                                deliverOnce(token)
-                                                true
-                                            } else {
-                                                false
-                                            }
-                                        }.getOrDefault(false)
-                                    }
-
-                                    override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                        super.onPageStarted(view, url, favicon)
-                                        runCatching {
-                                            isLoading = true
-                                            val token = extractIdTokenFromUrl(url)
-                                            if (!token.isNullOrBlank()) {
-                                                view?.stopLoading()
-                                                deliverOnce(token)
-                                            }
-                                        }
-                                    }
-
-                                    override fun onPageFinished(view: WebView?, url: String?) {
-                                        super.onPageFinished(view, url)
-                                        runCatching {
-                                            isLoading = false
-                                            val token = extractIdTokenFromUrl(url)
-                                            if (!token.isNullOrBlank()) {
-                                                deliverOnce(token)
-                                                return@runCatching
-                                            }
-                                            if (url != null && url.startsWith(FIREBASE_AUTH_HANDLER_URL)) {
-                                                view?.evaluateJavascript(
-                                                    "(function(){ return window.location.href || ''; })()"
-                                                ) { rawResult ->
-                                                    runCatching {
-                                                        val unquoted = rawResult
-                                                            ?.trim()
-                                                            ?.removeSurrounding("\"")
-                                                            ?.replace("\\u0026", "&")
-                                                            ?.replace("\\/", "/")
-                                                            ?: ""
-                                                        extractIdTokenFromUrl(unquoted)?.let { jsToken ->
-                                                            deliverOnce(jsToken)
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                loadUrl(oauthUrl)
-                            }.onFailure { err ->
-                                onError(
-                                    err.localizedMessage
-                                        ?: if (isFr) "Impossible d'ouvrir la page Google Sign-In."
-                                        else "Unable to open Google Sign-In page."
-                                )
-                            }
-                        }
-                    }
-                )
-
-                if (isLoading) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        contentAlignment = Alignment.TopCenter
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(28.dp))
                     }
                 }
             }

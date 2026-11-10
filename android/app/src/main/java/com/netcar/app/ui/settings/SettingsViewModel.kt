@@ -1,7 +1,9 @@
 package com.netcar.app.ui.settings
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.netcar.app.MainActivity
 import com.netcar.app.data.NetCarRepository
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
@@ -24,8 +26,7 @@ data class SettingsUiState(
     val isSyncing: Boolean = false,
     val syncSuccessMessage: String? = null,
     val syncErrorMessage: String? = null,
-    val showGoogleOAuthDialog: Boolean = false,
-    val googleOAuthEmailHint: String? = null,
+    val isWaitingForBrowserAuth: Boolean = false,
     val csvStatusMessage: String? = null,
     val csvIsError: Boolean = false
 )
@@ -44,8 +45,7 @@ class SettingsViewModel @Inject constructor(
     private val _syncError = MutableStateFlow<String?>(null)
     val syncError: StateFlow<String?> = _syncError.asStateFlow()
 
-    private val _showGoogleOAuthDialog = MutableStateFlow(false)
-    private val _googleOAuthEmailHint = MutableStateFlow<String?>(null)
+    private val _isWaitingForBrowserAuth = MutableStateFlow(false)
 
     private val _csvStatusMessage = MutableStateFlow<String?>(null)
     private val _csvIsError = MutableStateFlow(false)
@@ -54,33 +54,31 @@ class SettingsViewModel @Inject constructor(
         repository.userSettings,
         repository.vehicles,
         repository.selectedVehicleId,
-        _isSyncing,
+        combine(_isSyncing, repository.externalAuthLoading) { a, b -> a || b },
         combine(
-            _syncMessage,
-            _syncError,
-            _showGoogleOAuthDialog,
-            _googleOAuthEmailHint,
+            combine(_syncMessage, repository.externalAuthMessage) { localMsg, extMsg -> extMsg ?: localMsg },
+            combine(_syncError, repository.externalAuthError) { localErr, extErr -> extErr ?: localErr },
+            _isWaitingForBrowserAuth,
             combine(_csvStatusMessage, _csvIsError) { msg, isErr -> msg to isErr }
-        ) { syncMsg, syncErr, showDialog, hint, csvStatus ->
-             AuthAndCsvExtraState(
+        ) { syncMsg, syncErr, waitingBrowser, csvStatus ->
+            AuthAndCsvExtraState(
                 syncMessage = syncMsg,
                 syncError = syncErr,
-                showGoogleOAuthDialog = showDialog,
-                googleOAuthEmailHint = hint,
+                isWaitingForBrowserAuth = waitingBrowser,
                 csvMessage = csvStatus.first,
                 csvIsError = csvStatus.second
             )
         }
     ) { settings, vehicles, selectedId, syncing, extra ->
         val activeVehicle = vehicles.find { it.id == selectedId } ?: vehicles.firstOrNull()
+        val isNowConnected = settings.isDriveBackupConnected && !settings.connectedEmail.isNullOrBlank()
         SettingsUiState(
             settings = settings,
             activeVehicle = activeVehicle,
             isSyncing = syncing,
             syncSuccessMessage = extra.syncMessage,
             syncErrorMessage = extra.syncError,
-            showGoogleOAuthDialog = extra.showGoogleOAuthDialog,
-            googleOAuthEmailHint = extra.googleOAuthEmailHint,
+            isWaitingForBrowserAuth = extra.isWaitingForBrowserAuth && !isNowConnected,
             csvStatusMessage = extra.csvMessage,
             csvIsError = extra.csvIsError
         )
@@ -93,8 +91,7 @@ class SettingsViewModel @Inject constructor(
     private data class AuthAndCsvExtraState(
         val syncMessage: String?,
         val syncError: String?,
-        val showGoogleOAuthDialog: Boolean,
-        val googleOAuthEmailHint: String?,
+        val isWaitingForBrowserAuth: Boolean,
         val csvMessage: String?,
         val csvIsError: Boolean
     )
@@ -115,58 +112,61 @@ class SettingsViewModel @Inject constructor(
         _syncMessage.value = null
         _syncError.value = null
         _csvStatusMessage.value = null
+        repository.clearExternalAuthStatus()
     }
 
-    fun openGoogleOAuthDialog(emailHint: String? = null) {
-        _syncMessage.value = null
+    fun startExternalGoogleSignIn(context: Context, emailHint: String? = null) {
+        val isFr = repository.userSettings.value.language == SupportedLanguage.FR
         _syncError.value = null
-        _googleOAuthEmailHint.value = emailHint?.trim()?.takeIf { it.isNotBlank() }
-        _showGoogleOAuthDialog.value = true
+        repository.clearExternalAuthStatus()
+        val url = repository.buildExternalGoogleOAuthUrl(emailHint)
+        val launched = MainActivity.launchExternalUrl(context, url)
+        if (launched) {
+            _isWaitingForBrowserAuth.value = true
+            _syncMessage.value = if (isFr) {
+                "Navigateur ouvert : sélectionnez votre compte Google pour synchroniser automatiquement Net-CAR."
+            } else {
+                "Browser opened: select your Google account to automatically sync Net-CAR."
+            }
+        } else {
+            _syncError.value = if (isFr) {
+                "Impossible d'ouvrir le navigateur système sur cet appareil."
+            } else {
+                "Unable to open system browser on this device."
+            }
+        }
     }
 
-    fun dismissGoogleOAuthDialog() {
-        _showGoogleOAuthDialog.value = false
-    }
-
-    fun onGoogleOAuthError(message: String) {
-        _showGoogleOAuthDialog.value = false
-        _isSyncing.value = false
-        _syncError.value = message
-    }
-
-    fun completeGoogleSignInWithIdToken(idToken: String, emailHint: String? = null) {
-        _showGoogleOAuthDialog.value = false
-        if (_isSyncing.value) return
+    fun completeGoogleSignInFromCallbackInput(rawInput: String) {
+        if (rawInput.isBlank()) return
         viewModelScope.launch {
             _isSyncing.value = true
-            _syncMessage.value = null
             _syncError.value = null
+            _syncMessage.value = null
             try {
-                val result = repository.signInWithGoogleIdToken(idToken, emailHint ?: _googleOAuthEmailHint.value)
-                result.fold(
-                    onSuccess = { msg -> _syncMessage.value = msg },
+                val res = repository.completeOAuthFromCallbackUri(rawInput)
+                res.fold(
+                    onSuccess = { msg ->
+                        _isWaitingForBrowserAuth.value = false
+                        _syncMessage.value = msg
+                    },
                     onFailure = { err ->
                         _syncError.value = err.localizedMessage
-                            ?: if (repository.userSettings.value.language == SupportedLanguage.FR)
-                                "Échec de la connexion Google."
-                            else
-                                "Google sign-in failed."
                     }
                 )
-            } catch (t: Throwable) {
-                _syncError.value = t.localizedMessage ?: "Google authentication error"
             } finally {
                 _isSyncing.value = false
             }
         }
     }
 
-    fun signInWithEmail(email: String, password: String) {
+    fun signInWithEmail(context: Context, email: String, password: String) {
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
             _syncMessage.value = null
             _syncError.value = null
+            repository.clearExternalAuthStatus()
             try {
                 val result = repository.signInWithEmailPassword(email, password)
                 result.fold(
@@ -174,7 +174,7 @@ class SettingsViewModel @Inject constructor(
                     onFailure = { err ->
                         if (err is NetCarRepository.GoogleOAuthFallbackRequiredException) {
                             _isSyncing.value = false
-                            openGoogleOAuthDialog(err.emailHint)
+                            startExternalGoogleSignIn(context, err.emailHint)
                             return@launch
                         }
                         _syncError.value = err.localizedMessage
@@ -192,12 +192,13 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun signUpWithEmail(email: String, password: String) {
+    fun signUpWithEmail(context: Context, email: String, password: String) {
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
             _syncMessage.value = null
             _syncError.value = null
+            repository.clearExternalAuthStatus()
             try {
                 val result = repository.signUpWithEmailPassword(email, password)
                 result.fold(
@@ -205,7 +206,7 @@ class SettingsViewModel @Inject constructor(
                     onFailure = { err ->
                         if (err is NetCarRepository.GoogleOAuthFallbackRequiredException) {
                             _isSyncing.value = false
-                            openGoogleOAuthDialog(err.emailHint)
+                            startExternalGoogleSignIn(context, err.emailHint)
                             return@launch
                         }
                         _syncError.value = err.localizedMessage
@@ -225,6 +226,7 @@ class SettingsViewModel @Inject constructor(
 
     fun signOut() {
         repository.signOutCloud()
+        _isWaitingForBrowserAuth.value = false
         _syncError.value = null
         _syncMessage.value = if (repository.userSettings.value.language == SupportedLanguage.FR) {
             "Déconnecté du Cloud. Mode local actif."

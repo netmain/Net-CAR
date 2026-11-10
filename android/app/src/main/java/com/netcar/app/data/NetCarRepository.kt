@@ -32,6 +32,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.net.URLDecoder
+import java.net.URLEncoder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -277,9 +279,108 @@ class NetCarRepository @Inject constructor(
     private val _userSettings = MutableStateFlow(loadSettings())
     val userSettings: StateFlow<UserSettings> = _userSettings.asStateFlow()
 
+    private val _externalAuthLoading = MutableStateFlow(false)
+    val externalAuthLoading: StateFlow<Boolean> = _externalAuthLoading.asStateFlow()
+
+    private val _externalAuthMessage = MutableStateFlow<String?>(null)
+    val externalAuthMessage: StateFlow<String?> = _externalAuthMessage.asStateFlow()
+
+    private val _externalAuthError = MutableStateFlow<String?>(null)
+    val externalAuthError: StateFlow<String?> = _externalAuthError.asStateFlow()
+
+    @Volatile
+    private var pendingOAuthEmailHint: String? = null
+
     init {
         refreshAuthStatusSafely()
         checkRemindersAndNotify(forceAllActive = false)
+    }
+
+    fun clearExternalAuthStatus() {
+        _externalAuthMessage.value = null
+        _externalAuthError.value = null
+        _externalAuthLoading.value = false
+    }
+
+    fun buildExternalGoogleOAuthUrl(emailHint: String? = null): String {
+        val cleanHint = emailHint?.trim()?.takeIf { it.isNotBlank() && it.contains("@") }
+        pendingOAuthEmailHint = cleanHint
+        val base = "https://axiomatic-serenity-8lvvl.firebaseapp.com/__/auth/handler" +
+            "?apiKey=AIzaSyDy28X7_hNYpn3BmxjdzUHOzmmAnITMUC4" +
+            "&authType=signInViaRedirect" +
+            "&providerId=google.com" +
+            "&ibi=com.netcar.app" +
+            "&clientId=1033623803537-9aqcjj37isscfde2aq3dp1t0nhj2hict.apps.googleusercontent.com" +
+            "&appId=1:1033623803537:web:cade975943dc5c1084d130" +
+            "&appDisplayName=Net-CAR"
+        return if (cleanHint != null) {
+            val customJson = """{"prompt":"select_account","login_hint":"$cleanHint"}"""
+            "$base&customParameters=${URLEncoder.encode(customJson, "UTF-8")}"
+        } else {
+            val customJson = """{"prompt":"select_account"}"""
+            "$base&customParameters=${URLEncoder.encode(customJson, "UTF-8")}"
+        }
+    }
+
+    fun extractIdTokenFromDeepLink(rawInput: String?): String? {
+        if (rawInput.isNullOrBlank()) return null
+        val trimmed = rawInput.trim()
+        // If user pasted a raw JWT id_token directly (3 base64url segments separated by dots)
+        if (!trimmed.contains("://") && !trimmed.contains(" ") && trimmed.count { it == '.' } == 2 && trimmed.startsWith("eyJ")) {
+            return trimmed
+        }
+        var current = trimmed
+        repeat(5) {
+            val match = Regex("""(?:[?#&]|^)id_token=([^&#\s]+)""").find(current)
+            if (match != null) {
+                val rawToken = match.groupValues.getOrNull(1) ?: ""
+                val decodedToken = runCatching { URLDecoder.decode(rawToken, "UTF-8") }.getOrDefault(rawToken)
+                if (decodedToken.count { it == '.' } >= 2) {
+                    return decodedToken
+                }
+            }
+            val next = runCatching { URLDecoder.decode(current, "UTF-8") }.getOrDefault(current)
+            if (next == current) return null
+            current = next
+        }
+        return null
+    }
+
+    suspend fun completeOAuthFromCallbackUri(rawUriOrToken: String): Result<String> {
+        _externalAuthLoading.value = true
+        _externalAuthError.value = null
+        _externalAuthMessage.value = null
+        return try {
+            val idToken = extractIdTokenFromDeepLink(rawUriOrToken)
+            if (idToken.isNullOrBlank()) {
+                val isFr = _userSettings.value.language == SupportedLanguage.FR
+                val err = IllegalArgumentException(
+                    if (isFr) "Jeton Google introuvable dans le lien de retour."
+                    else "Google ID token not found in callback link."
+                )
+                _externalAuthError.value = err.message
+                Result.failure(err)
+            } else {
+                val res = signInWithGoogleIdToken(idToken, pendingOAuthEmailHint)
+                res.fold(
+                    onSuccess = { msg ->
+                        _externalAuthMessage.value = msg
+                        _externalAuthError.value = null
+                        Result.success(msg)
+                    },
+                    onFailure = { err ->
+                        _externalAuthError.value = err.localizedMessage ?: "Google Sign-In error"
+                        Result.failure(err)
+                    }
+                )
+            }
+        } catch (t: Throwable) {
+            val friendly = formatFriendlyAuthError(t)
+            _externalAuthError.value = friendly.localizedMessage
+            Result.failure(friendly)
+        } finally {
+            _externalAuthLoading.value = false
+        }
     }
 
     fun checkRemindersAndNotify(forceAllActive: Boolean = false): Int {
