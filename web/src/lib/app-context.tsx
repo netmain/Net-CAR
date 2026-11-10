@@ -573,145 +573,203 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const userDocRef = doc(db, 'users', uid);
 
       try {
-        const userSnap = await getDoc(userDocRef);
         const currentSavedActiveId =
           localStorage.getItem('netcar_active_vehicle_id') || activeVehicleId || 'veh-1';
 
+        const validVehicles = vehicles.length > 0 ? vehicles : initialVehicles;
+        const defaultVehId = validVehicles[0]?.id || 'veh-1';
+        const validVehicleIds = new Set(validVehicles.map((v) => v.id));
+
+        const baseUserDoc = stripUndefined({
+          userId: uid,
+          name: (displayName || 'Pilot').trim().slice(0, 200) || 'Pilot',
+          email: (email || 'driver@netcar.app').trim().slice(0, 320) || 'driver@netcar.app',
+          preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
+          units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
+          currency: ['DZD', 'EUR', 'USD', 'CAD', 'GBP', 'MAD', 'CHF'].includes(userProfile.currency)
+            ? userProfile.currency
+            : 'DZD',
+          activeVehicleId: validVehicleIds.has(currentSavedActiveId)
+            ? currentSavedActiveId
+            : defaultVehId,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        const userSnap = await getDoc(userDocRef);
         if (!userSnap.exists()) {
-          // Initialize user profile document in Firestore
-          const initialUserDoc = stripUndefined({
-            userId: uid,
-            name: displayName.slice(0, 200),
-            email: email.slice(0, 320),
-            preferredLang: lang || 'fr',
-            units: userProfile.units || 'metric',
-            currency: userProfile.currency || 'DZD',
-            activeVehicleId: currentSavedActiveId,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          await setDoc(userDocRef, initialUserDoc);
+          await setDoc(userDocRef, baseUserDoc);
         }
         isCloudReadyRef.current = true;
 
-        // Check if user has any vehicles in Firestore yet; if not, seed initial/local garage
+        // Check existing vehicles in Firestore and push any local vehicles not yet in Cloud
         const vehiclesColRef = collection(db, 'users', uid, 'vehicles');
         const existingVehSnap = await getDocs(query(vehiclesColRef, where('userId', '==', uid)));
-        if (existingVehSnap.empty) {
-          const seedVehicles = vehicles.length > 0 ? vehicles : initialVehicles;
-          for (const v of seedVehicles) {
-            const vRef = doc(db, 'users', uid, 'vehicles', v.id);
-            await setDoc(
-              vRef,
+        const remoteVehIds = new Set(existingVehSnap.docs.map((d) => d.data().id || d.id));
+
+        const parentBatch = writeBatch(db);
+        let parentOpsCount = 0;
+
+        for (const v of validVehicles) {
+          validVehicleIds.add(v.id);
+          if (!remoteVehIds.has(v.id)) {
+            parentBatch.set(
+              doc(db, 'users', uid, 'vehicles', v.id),
               stripUndefined({
                 id: v.id,
                 userId: uid,
-                name: v.name?.slice(0, 100),
-                make: v.make.slice(0, 100),
-                model: v.model.slice(0, 100),
-                year: Number(v.year),
-                plate: v.plate?.slice(0, 30),
-                vin: v.vin?.slice(0, 30),
-                fuelType: v.fuelType,
-                photoUrl: v.photoUrl?.slice(0, 2048),
-                currentOdometer: Number(v.currentOdometer) || 0,
-                notes: v.notes?.slice(0, 5000),
+                name: v.name ? v.name.slice(0, 100) : undefined,
+                make: (v.make || 'Vehicle').slice(0, 100),
+                model: (v.model || 'Model').slice(0, 100),
+                year: Math.min(2100, Math.max(1900, Number(v.year) || 2021)),
+                plate: v.plate ? v.plate.slice(0, 30) : undefined,
+                vin: v.vin ? v.vin.slice(0, 30) : undefined,
+                fuelType: [
+                  'gasoline',
+                  'diesel',
+                  'lpg',
+                  'electric',
+                  'hybrid',
+                  'ethanol',
+                  'cng',
+                ].includes(v.fuelType)
+                  ? v.fuelType
+                  : 'gasoline',
+                photoUrl: v.photoUrl ? v.photoUrl.slice(0, 2048) : undefined,
+                currentOdometer: Math.max(0, Number(v.currentOdometer) || 0),
+                notes: v.notes ? v.notes.slice(0, 5000) : undefined,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               })
             );
+            parentOpsCount++;
           }
+        }
+
+        if (parentOpsCount > 0) {
+          await parentBatch.commit();
+        }
+        for (const rId of remoteVehIds) {
+          validVehicleIds.add(rId);
+        }
+
+        if (existingVehSnap.empty) {
+          const childBatch = writeBatch(db);
+          let childCount = 0;
 
           for (const f of fillUps) {
-            const fRef = doc(db, 'users', uid, 'fillups', f.id);
-            await setDoc(
-              fRef,
+            const targetVehId = validVehicleIds.has(f.vehicleId) ? f.vehicleId : defaultVehId;
+            childBatch.set(
+              doc(db, 'users', uid, 'fillups', f.id),
               stripUndefined({
                 id: f.id,
                 userId: uid,
-                vehicleId: f.vehicleId,
-                date: String(f.date),
-                odometer: Number(f.odometer),
-                volume: Number(f.volume),
-                pricePerUnit: Number(f.pricePerUnit),
-                totalCost: Number(f.totalCost),
-                fuelType: f.fuelType,
+                vehicleId: targetVehId,
+                date: String(f.date || new Date().toISOString()).slice(0, 64),
+                odometer: Math.max(0, Number(f.odometer) || 0),
+                volume: Math.max(0, Number(f.volume) || 0),
+                pricePerUnit: Math.max(0, Number(f.pricePerUnit) || 0),
+                totalCost: Math.max(0, Number(f.totalCost) || 0),
+                fuelType: String(f.fuelType || 'gasoline').slice(0, 30),
                 isFullTank: Boolean(f.isFullTank),
-                station: f.station?.slice(0, 200),
-                notes: f.notes?.slice(0, 5000),
+                station: f.station ? f.station.slice(0, 200) : undefined,
+                notes: f.notes ? f.notes.slice(0, 5000) : undefined,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               })
             );
+            childCount++;
           }
 
           for (const e of expenses) {
-            const eRef = doc(db, 'users', uid, 'expenses', e.id);
-            await setDoc(
-              eRef,
+            const targetVehId = validVehicleIds.has(e.vehicleId) ? e.vehicleId : defaultVehId;
+            childBatch.set(
+              doc(db, 'users', uid, 'expenses', e.id),
               stripUndefined({
                 id: e.id,
                 userId: uid,
-                vehicleId: e.vehicleId,
-                date: String(e.date),
-                category: e.category,
-                amount: Number(e.amount),
-                description: e.description.slice(0, 500),
-                receiptUrl: e.receiptUrl?.slice(0, 2048),
-                odometer: e.odometer !== undefined ? Number(e.odometer) : undefined,
-                notes: e.notes?.slice(0, 5000),
+                vehicleId: targetVehId,
+                date: String(e.date || new Date().toISOString()).slice(0, 64),
+                category: String(e.category || 'other').slice(0, 100),
+                amount: Math.max(0, Number(e.amount) || 0),
+                description: (e.description || e.category || 'Expense').slice(0, 500),
+                receiptUrl: e.receiptUrl ? e.receiptUrl.slice(0, 2048) : undefined,
+                odometer:
+                  e.odometer !== undefined && Number(e.odometer) >= 0
+                    ? Number(e.odometer)
+                    : undefined,
+                notes: e.notes ? e.notes.slice(0, 5000) : undefined,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               })
             );
+            childCount++;
           }
 
           for (const s of services) {
-            const sRef = doc(db, 'users', uid, 'services', s.id);
-            await setDoc(
-              sRef,
+            const targetVehId = validVehicleIds.has(s.vehicleId) ? s.vehicleId : defaultVehId;
+            childBatch.set(
+              doc(db, 'users', uid, 'services', s.id),
               stripUndefined({
                 id: s.id,
                 userId: uid,
-                vehicleId: s.vehicleId,
-                date: String(s.date),
-                type: s.type,
-                odometer: Number(s.odometer),
-                cost: Number(s.cost),
-                description: s.description.slice(0, 500),
+                vehicleId: targetVehId,
+                date: String(s.date || new Date().toISOString()).slice(0, 64),
+                type: String(s.type || 'other').slice(0, 100),
+                odometer: Math.max(0, Number(s.odometer) || 0),
+                cost: Math.max(0, Number(s.cost) || 0),
+                description: (s.description || s.type || 'Service').slice(0, 500),
                 parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
-                receiptUrl: s.receiptUrl?.slice(0, 2048),
-                notes: s.notes?.slice(0, 5000),
+                receiptUrl: s.receiptUrl ? s.receiptUrl.slice(0, 2048) : undefined,
+                notes: s.notes ? s.notes.slice(0, 5000) : undefined,
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               })
             );
+            childCount++;
           }
 
           for (const r of reminders) {
-            const rRef = doc(db, 'users', uid, 'reminders', r.id);
-            await setDoc(
-              rRef,
+            const targetVehId = validVehicleIds.has(r.vehicleId) ? r.vehicleId : defaultVehId;
+            childBatch.set(
+              doc(db, 'users', uid, 'reminders', r.id),
               stripUndefined({
                 id: r.id,
                 userId: uid,
-                vehicleId: r.vehicleId,
-                type: String(r.type),
-                title: r.title?.slice(0, 200),
-                intervalKm: r.intervalKm !== undefined ? Number(r.intervalKm) : undefined,
-                intervalDays: r.intervalDays !== undefined ? Number(r.intervalDays) : undefined,
-                lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate) : undefined,
+                vehicleId: targetVehId,
+                type: String(r.type || 'other').slice(0, 100),
+                title: r.title ? r.title.slice(0, 200) : undefined,
+                intervalKm:
+                  r.intervalKm !== undefined && Number(r.intervalKm) >= 0
+                    ? Number(r.intervalKm)
+                    : undefined,
+                intervalDays:
+                  r.intervalDays !== undefined && Number(r.intervalDays) >= 0
+                    ? Number(r.intervalDays)
+                    : undefined,
+                lastServiceDate: r.lastServiceDate
+                  ? String(r.lastServiceDate).slice(0, 64)
+                  : undefined,
                 lastServiceOdometer:
-                  r.lastServiceOdometer !== undefined ? Number(r.lastServiceOdometer) : undefined,
-                nextDueDate: r.nextDueDate ? String(r.nextDueDate) : undefined,
+                  r.lastServiceOdometer !== undefined && Number(r.lastServiceOdometer) >= 0
+                    ? Number(r.lastServiceOdometer)
+                    : undefined,
+                nextDueDate: r.nextDueDate ? String(r.nextDueDate).slice(0, 64) : undefined,
                 nextDueOdometer:
-                  r.nextDueOdometer !== undefined ? Number(r.nextDueOdometer) : undefined,
+                  r.nextDueOdometer !== undefined && Number(r.nextDueOdometer) >= 0
+                    ? Number(r.nextDueOdometer)
+                    : undefined,
                 isRecurring: Boolean(r.isRecurring),
                 isActive: Boolean(r.isActive),
                 createdAt: serverTimestamp(),
                 updatedAt: serverTimestamp(),
               })
             );
+            childCount++;
+          }
+
+          if (childCount > 0) {
+            await childBatch.commit();
           }
         }
         setSyncStatus('synced');
@@ -1995,14 +2053,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   };
 
+  const signInWithGoogle = async (
+    loginHint?: string
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const provider = new GoogleAuthProvider();
+      const customParams: Record<string, string> = { prompt: 'select_account' };
+      if (loginHint && loginHint.includes('@')) {
+        customParams.login_hint = loginHint.trim();
+      }
+      provider.setCustomParameters(customParams);
+      const cred = await signInWithPopup(auth, provider);
+      if (cred.user) {
+        const fbUser = cred.user;
+        const email = fbUser.email || loginHint || 'driver@netcar.app';
+        const displayName = fbUser.displayName || email.split('@')[0] || 'Pilot';
+        setUser({
+          uid: fbUser.uid,
+          email,
+          displayName,
+          photoURL: fbUser.photoURL || undefined,
+          isDemo: false,
+        });
+      }
+      return { success: true };
+    } catch (err: any) {
+      const formatted = formatAuthError(err, lang);
+      return { success: false, error: formatted.error };
+    }
+  };
+
   const signInWithEmail = async (
     email: string,
     pass: string
   ): Promise<{ success: boolean; error?: string; consoleUrl?: string }> => {
     try {
-      await signInWithEmailAndPassword(auth, email, pass);
+      const cred = await signInWithEmailAndPassword(auth, email, pass);
+      if (cred.user) {
+        const fbUser = cred.user;
+        const resolvedEmail = fbUser.email || email;
+        setUser({
+          uid: fbUser.uid,
+          email: resolvedEmail,
+          displayName: fbUser.displayName || resolvedEmail.split('@')[0] || 'Pilot',
+          photoURL: fbUser.photoURL || undefined,
+          isDemo: false,
+        });
+      }
       return { success: true };
     } catch (err: any) {
+      const code = (err?.code || '').toLowerCase();
+      if (code.includes('operation-not-allowed') || code.includes('configuration-not-found')) {
+        const googleRes = await signInWithGoogle(email);
+        if (googleRes.success) {
+          return { success: true };
+        }
+      }
       const formatted = formatAuthError(err, lang);
       return { success: false, ...formatted };
     }
@@ -2022,22 +2128,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Ignore display name update errors
         }
       }
+      if (cred.user) {
+        const fbUser = cred.user;
+        const resolvedEmail = fbUser.email || email;
+        setUser({
+          uid: fbUser.uid,
+          email: resolvedEmail,
+          displayName: name || fbUser.displayName || resolvedEmail.split('@')[0] || 'Pilot',
+          photoURL: fbUser.photoURL || undefined,
+          isDemo: false,
+        });
+      }
       return { success: true };
     } catch (err: any) {
+      const code = (err?.code || '').toLowerCase();
+      if (code.includes('operation-not-allowed') || code.includes('configuration-not-found')) {
+        const googleRes = await signInWithGoogle(email);
+        if (googleRes.success) {
+          return { success: true };
+        }
+      }
       const formatted = formatAuthError(err, lang);
       return { success: false, ...formatted };
-    }
-  };
-
-  const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
-      return { success: true };
-    } catch (err: any) {
-      const formatted = formatAuthError(err, lang);
-      return { success: false, error: formatted.error };
     }
   };
 

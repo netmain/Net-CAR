@@ -46,6 +46,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.compose.material3.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,6 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -73,6 +79,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SettingsScreen(
@@ -85,6 +97,8 @@ fun SettingsScreen(
     val settings = uiState.settings
     val isFr = settings.language == SupportedLanguage.FR
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
 
     var emailInput by remember { mutableStateOf(settings.connectedEmail ?: "") }
     var passwordInput by remember { mutableStateOf("") }
@@ -262,6 +276,61 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(16.dp))
 
                         if (!isConnected) {
+                            // Primary Action: Sign in with Google (OAuth)
+                            Button(
+                                onClick = { viewModel.signInWithGoogle(activity) },
+                                enabled = !isSyncing,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White,
+                                    contentColor = Color(0xFF0F172A)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF4285F4),
+                                    modifier = Modifier.size(22.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = "G",
+                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.ExtraBold),
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Text(
+                                    text = if (isSyncing) {
+                                        if (isFr) "Connexion Google..." else "Connecting with Google..."
+                                    } else {
+                                        if (isFr) "Continuer avec Google (Recommandé)" else "Continue with Google (Recommended)"
+                                    },
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(14.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Divider(modifier = Modifier.weight(1f))
+                                Text(
+                                    text = if (isFr) "OU EMAIL / MOT DE PASSE" else "OR EMAIL / PASSWORD",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Divider(modifier = Modifier.weight(1f))
+                            }
+
+                            Spacer(modifier = Modifier.height(12.dp))
+
                             // Mode Switcher: Sign In vs Create Account
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -324,9 +393,9 @@ fun SettingsScreen(
                             Button(
                                 onClick = {
                                     if (isCreateAccountMode) {
-                                        viewModel.signUpWithEmail(emailInput, passwordInput)
+                                        viewModel.signUpWithEmail(emailInput, passwordInput, activity)
                                     } else {
-                                        viewModel.signInWithEmail(emailInput, passwordInput)
+                                        viewModel.signInWithEmail(emailInput, passwordInput, activity)
                                     }
                                 },
                                 enabled = !isSyncing,

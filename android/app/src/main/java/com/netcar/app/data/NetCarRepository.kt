@@ -1,9 +1,13 @@
 package com.netcar.app.data
 
+import android.app.Activity
 import android.content.Context
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.auth.FirebaseAuthException
+import com.google.firebase.auth.GoogleAuthProvider
+import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
@@ -486,10 +490,136 @@ class NetCarRepository @Inject constructor(
         persistLocalData()
     }
 
-    suspend fun signInWithEmailPassword(email: String, password: String): Result<String> =
+    private fun isOperationNotAllowedError(t: Throwable): Boolean {
+        val cause = t.cause ?: t
+        if (cause is FirebaseAuthException &&
+            (cause.errorCode.equals("ERROR_OPERATION_NOT_ALLOWED", ignoreCase = true) ||
+                cause.errorCode.equals("ERROR_CONFIGURATION_NOT_FOUND", ignoreCase = true))
+        ) {
+            return true
+        }
+        val msg = (t.message ?: "") + " " + (cause.message ?: "")
+        return msg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
+            msg.contains("operation is not allowed", ignoreCase = true) ||
+            msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true)
+    }
+
+    private fun formatFriendlyAuthError(t: Throwable): Exception {
+        val isFr = _userSettings.value.language == SupportedLanguage.FR
+        val cause = t.cause ?: t
+        val msg = ((t.message ?: "") + " " + (cause.message ?: "")).lowercase(Locale.US)
+
+        val friendly = when {
+            isOperationNotAllowedError(t) -> if (isFr) {
+                "Le mode Email/Mot de passe n'est pas activé sur Firebase. Utilisez le bouton « Continuer avec Google » ci-dessus (recommandé) ou activez Email/Password dans Firebase Console > Authentication."
+            } else {
+                "Email/Password sign-in is not enabled in Firebase. Please tap 'Continue with Google' above (recommended) or enable Email/Password in Firebase Console > Authentication."
+            }
+            msg.contains("email-already-in-use") || msg.contains("already in use") -> if (isFr) {
+                "Cette adresse e-mail possède déjà un compte. Basculez sur « Se connecter » ou utilisez « Continuer avec Google »."
+            } else {
+                "This email is already registered. Switch to 'Sign In' or tap 'Continue with Google'."
+            }
+            msg.contains("invalid-credential") || msg.contains("wrong-password") || msg.contains("user-not-found") -> if (isFr) {
+                "Identifiants incorrects. Vérifiez votre mot de passe, créez un compte ou utilisez « Continuer avec Google »."
+            } else {
+                "Invalid email or password. Check your password, create an account, or tap 'Continue with Google'."
+            }
+            msg.contains("network") -> if (isFr) {
+                "Erreur réseau. Vérifiez votre connexion Internet et réessayez."
+            } else {
+                "Network error. Please check your internet connection and try again."
+            }
+            else -> cause.localizedMessage ?: if (isFr) "Erreur d'authentification Cloud." else "Cloud authentication error."
+        }
+        return IllegalStateException(friendly)
+    }
+
+    suspend fun signInWithGoogle(activity: Activity, loginHint: String? = null): Result<String> =
         withContext(Dispatchers.IO) {
             try {
-                val cleanEmail = email.trim()
+                val auth = FirebaseAuth.getInstance()
+                val providerBuilder = OAuthProvider.newBuilder("google.com")
+                val params = hashMapOf("prompt" to "select_account")
+                if (!loginHint.isNullOrBlank() && loginHint.contains("@")) {
+                    params["login_hint"] = loginHint.trim()
+                }
+                providerBuilder.addCustomParameters(params)
+
+                val authTask = withContext(Dispatchers.Main) {
+                    auth.pendingAuthResult ?: auth.startActivityForSignInWithProvider(activity, providerBuilder.build())
+                }
+                val authResult = Tasks.await(authTask, 120, TimeUnit.SECONDS)
+                val user = authResult.user
+                    ?: return@withContext Result.failure(IllegalStateException("Google authentication failed"))
+
+                val resolvedEmail = user.email ?: loginHint ?: "driver@netcar.app"
+                _userSettings.value = _userSettings.value.copy(
+                    isDriveBackupConnected = true,
+                    connectedEmail = resolvedEmail,
+                    userId = user.uid
+                )
+                persistLocalData()
+
+                val syncRes = syncWithCloud()
+                syncRes.fold(
+                    onSuccess = { msg -> Result.success(msg) },
+                    onFailure = {
+                        val fallbackMsg = if (_userSettings.value.language == SupportedLanguage.FR) {
+                            "Connecté avec Google ($resolvedEmail)"
+                        } else {
+                            "Signed in with Google ($resolvedEmail)"
+                        }
+                        Result.success(fallbackMsg)
+                    }
+                )
+            } catch (t: Throwable) {
+                Result.failure(formatFriendlyAuthError(t))
+            }
+        }
+
+    suspend fun signInWithGoogleIdToken(idToken: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val auth = FirebaseAuth.getInstance()
+                val credential = GoogleAuthProvider.getCredential(idToken, null)
+                val authResult = Tasks.await(auth.signInWithCredential(credential), 20, TimeUnit.SECONDS)
+                val user = authResult.user
+                    ?: return@withContext Result.failure(IllegalStateException("Google authentication failed"))
+
+                val resolvedEmail = user.email ?: "driver@netcar.app"
+                _userSettings.value = _userSettings.value.copy(
+                    isDriveBackupConnected = true,
+                    connectedEmail = resolvedEmail,
+                    userId = user.uid
+                )
+                persistLocalData()
+
+                val syncRes = syncWithCloud()
+                syncRes.fold(
+                    onSuccess = { msg -> Result.success(msg) },
+                    onFailure = {
+                        val fallbackMsg = if (_userSettings.value.language == SupportedLanguage.FR) {
+                            "Connecté avec Google ($resolvedEmail)"
+                        } else {
+                            "Signed in with Google ($resolvedEmail)"
+                        }
+                        Result.success(fallbackMsg)
+                    }
+                )
+            } catch (t: Throwable) {
+                Result.failure(formatFriendlyAuthError(t))
+            }
+        }
+
+    suspend fun signInWithEmailPassword(
+        email: String,
+        password: String,
+        activity: Activity? = null
+    ): Result<String> =
+        withContext(Dispatchers.IO) {
+            val cleanEmail = email.trim()
+            try {
                 if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
                     return@withContext Result.failure(
                         IllegalArgumentException(
@@ -527,17 +657,34 @@ class NetCarRepository @Inject constructor(
                 )
                 persistLocalData()
 
-                // Perform immediate cloud sync after signing in
-                syncWithCloud()
+                val syncRes = syncWithCloud()
+                syncRes.fold(
+                    onSuccess = { msg -> Result.success(msg) },
+                    onFailure = {
+                        val fallbackMsg = if (_userSettings.value.language == SupportedLanguage.FR) {
+                            "Connecté au compte Cloud (${user.email ?: cleanEmail})"
+                        } else {
+                            "Connected to Cloud account (${user.email ?: cleanEmail})"
+                        }
+                        Result.success(fallbackMsg)
+                    }
+                )
             } catch (t: Throwable) {
-                Result.failure(t)
+                if (isOperationNotAllowedError(t) && activity != null) {
+                    return@withContext signInWithGoogle(activity, loginHint = cleanEmail)
+                }
+                Result.failure(formatFriendlyAuthError(t))
             }
         }
 
-    suspend fun signUpWithEmailPassword(email: String, password: String): Result<String> =
+    suspend fun signUpWithEmailPassword(
+        email: String,
+        password: String,
+        activity: Activity? = null
+    ): Result<String> =
         withContext(Dispatchers.IO) {
+            val cleanEmail = email.trim()
             try {
-                val cleanEmail = email.trim()
                 if (cleanEmail.isBlank() || !cleanEmail.contains("@")) {
                     return@withContext Result.failure(
                         IllegalArgumentException(
@@ -575,10 +722,23 @@ class NetCarRepository @Inject constructor(
                 )
                 persistLocalData()
 
-                // Perform immediate cloud sync after account creation
-                syncWithCloud()
+                val syncRes = syncWithCloud()
+                syncRes.fold(
+                    onSuccess = { msg -> Result.success(msg) },
+                    onFailure = {
+                        val fallbackMsg = if (_userSettings.value.language == SupportedLanguage.FR) {
+                            "Compte Cloud créé et connecté (${user.email ?: cleanEmail})"
+                        } else {
+                            "Cloud account created and signed in (${user.email ?: cleanEmail})"
+                        }
+                        Result.success(fallbackMsg)
+                    }
+                )
             } catch (t: Throwable) {
-                Result.failure(t)
+                if (isOperationNotAllowedError(t) && activity != null) {
+                    return@withContext signInWithGoogle(activity, loginHint = cleanEmail)
+                }
+                Result.failure(formatFriendlyAuthError(t))
             }
         }
 
@@ -588,6 +748,11 @@ class NetCarRepository @Inject constructor(
         }.getOrElse {
             FirebaseFirestore.getInstance()
         }
+    }
+
+    private fun sanitizeDocId(rawId: String, prefix: String): String {
+        val cleaned = rawId.replace(Regex("[^a-zA-Z0-9_\\-]"), "-").take(120)
+        return cleaned.ifBlank { "$prefix-${System.currentTimeMillis()}" }
     }
 
     private fun formatIsoDate(epochMillis: Long): String {
@@ -614,7 +779,7 @@ class NetCarRepository @Inject constructor(
     suspend fun syncWithCloud(): Result<String> = withContext(Dispatchers.IO) {
         try {
             val fbUser = runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull()
-            if (fbUser == null || fbUser.isAnonymous || fbUser.email.isNullOrBlank()) {
+            if (fbUser == null || fbUser.isAnonymous) {
                 _userSettings.value = _userSettings.value.copy(
                     isDriveBackupConnected = false,
                     connectedEmail = null,
@@ -623,35 +788,32 @@ class NetCarRepository @Inject constructor(
                 return@withContext Result.failure(
                     IllegalStateException(
                         if (_userSettings.value.language == SupportedLanguage.FR)
-                            "Non connecté : veuillez vous connecter avec votre e-mail et mot de passe avant de synchroniser."
+                            "Non connecté : veuillez vous connecter avec Google ou Email avant de synchroniser."
                         else
-                            "Not signed in: please sign in with your email and password before syncing."
+                            "Not signed in: please sign in with Google or Email before syncing."
                     )
                 )
             }
 
             val uid = fbUser.uid
-            val email = fbUser.email ?: "driver@netcar.app"
-            val displayName = (fbUser.displayName?.takeIf { it.isNotBlank() } ?: email.substringBefore("@")).take(200)
+            val email = (fbUser.email?.takeIf { it.isNotBlank() } ?: _userSettings.value.connectedEmail ?: "driver@netcar.app").take(320)
+            val displayName = (fbUser.displayName?.takeIf { it.isNotBlank() } ?: email.substringBefore("@")).ifBlank { "Pilot" }.take(200)
             val db = getFirestoreSafely()
 
             // 1. Ensure parent user profile document exists in /users/{uid}
             val userDocRef = db.collection("users").document(uid)
-            val userSnap = Tasks.await(userDocRef.get(), 15, TimeUnit.SECONDS)
-            if (!userSnap.exists()) {
-                val userDoc = hashMapOf<String, Any>(
-                    "userId" to uid,
-                    "name" to displayName,
-                    "email" to email.take(320),
-                    "preferredLang" to _userSettings.value.language.code,
-                    "units" to if (_userSettings.value.units == Units.METRIC) "metric" else "imperial",
-                    "currency" to _userSettings.value.currency.code,
-                    "createdAt" to FieldValue.serverTimestamp(),
-                    "updatedAt" to FieldValue.serverTimestamp()
-                )
-                _selectedVehicleId.value?.let { userDoc["activeVehicleId"] = it.take(128) }
-                Tasks.await(userDocRef.set(userDoc), 15, TimeUnit.SECONDS)
-            }
+            val userDoc = hashMapOf<String, Any>(
+                "userId" to uid,
+                "name" to displayName,
+                "email" to email,
+                "preferredLang" to _userSettings.value.language.code,
+                "units" to if (_userSettings.value.units == Units.METRIC) "metric" else "imperial",
+                "currency" to _userSettings.value.currency.code,
+                "createdAt" to FieldValue.serverTimestamp(),
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+            _selectedVehicleId.value?.let { userDoc["activeVehicleId"] = sanitizeDocId(it, "veh") }
+            Tasks.await(userDocRef.set(userDoc), 15, TimeUnit.SECONDS)
 
             // 2. Sync Vehicles (/users/{uid}/vehicles)
             val vehiclesCol = userDocRef.collection("vehicles")
@@ -688,9 +850,10 @@ class NetCarRepository @Inject constructor(
             // Push any local vehicles not yet on remote
             val mergedVehicles = remoteVehicles.toMutableList()
             for (localV in _vehicles.value) {
-                if (localV.id !in remoteVehicleIds) {
+                val cleanVehId = sanitizeDocId(localV.id, "veh")
+                if (cleanVehId !in remoteVehicleIds) {
                     val vMap = hashMapOf<String, Any>(
-                        "id" to localV.id,
+                        "id" to cleanVehId,
                         "userId" to uid,
                         "make" to localV.make.ifBlank { "Vehicle" }.take(100),
                         "model" to localV.model.ifBlank { "Model" }.take(100),
@@ -705,9 +868,9 @@ class NetCarRepository @Inject constructor(
                     if (localV.vin.isNotBlank()) vMap["vin"] = localV.vin.take(30)
                     if (localV.notes.isNotBlank()) vMap["notes"] = localV.notes.take(5000)
 
-                    Tasks.await(vehiclesCol.document(localV.id).set(vMap), 15, TimeUnit.SECONDS)
-                    mergedVehicles.add(localV)
-                    remoteVehicleIds.add(localV.id)
+                    Tasks.await(vehiclesCol.document(cleanVehId).set(vMap), 15, TimeUnit.SECONDS)
+                    mergedVehicles.add(localV.copy(id = cleanVehId))
+                    remoteVehicleIds.add(cleanVehId)
                 }
             }
             if (mergedVehicles.isNotEmpty()) {
@@ -716,6 +879,7 @@ class NetCarRepository @Inject constructor(
                     _selectedVehicleId.value = mergedVehicles.first().id
                 }
             }
+            val defaultVehicleId = remoteVehicleIds.firstOrNull() ?: "veh-1"
 
             // 3. Sync Fill-Ups (/users/{uid}/fillups)
             val fillupsCol = userDocRef.collection("fillups")
@@ -736,7 +900,7 @@ class NetCarRepository @Inject constructor(
                 remoteFillUps.add(
                     FillUp(
                         id = id,
-                        vehicleId = (data["vehicleId"] as? String) ?: (_selectedVehicleId.value ?: "veh-1"),
+                        vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
                         odometer = (data["odometer"] as? Number)?.toInt() ?: 0,
                         volume = (data["volume"] as? Number)?.toDouble() ?: 0.0,
@@ -752,14 +916,16 @@ class NetCarRepository @Inject constructor(
 
             val mergedFillUps = remoteFillUps.toMutableList()
             for (localF in _fillUps.value) {
-                if (localF.id !in remoteFillIds && localF.vehicleId in remoteVehicleIds && localF.volume > 0) {
+                val cleanFillId = sanitizeDocId(localF.id, "f")
+                val targetVehId = if (localF.vehicleId in remoteVehicleIds) localF.vehicleId else defaultVehicleId
+                if (cleanFillId !in remoteFillIds && targetVehId in remoteVehicleIds && localF.volume >= 0) {
                     val fMap = hashMapOf<String, Any>(
-                        "id" to localF.id,
+                        "id" to cleanFillId,
                         "userId" to uid,
-                        "vehicleId" to localF.vehicleId,
+                        "vehicleId" to targetVehId,
                         "date" to formatIsoDate(localF.date),
                         "odometer" to localF.odometer.coerceAtLeast(0),
-                        "volume" to localF.volume,
+                        "volume" to localF.volume.coerceAtLeast(0.0),
                         "pricePerUnit" to localF.pricePerUnit.coerceAtLeast(0.0),
                         "totalCost" to localF.totalCost.coerceAtLeast(0.0),
                         "fuelType" to localF.fuelType.name.lowercase(Locale.US),
@@ -771,8 +937,8 @@ class NetCarRepository @Inject constructor(
                     if (localF.notes.isNotBlank()) fMap["notes"] = localF.notes.take(5000)
 
                     runCatching {
-                        Tasks.await(fillupsCol.document(localF.id).set(fMap), 15, TimeUnit.SECONDS)
-                        mergedFillUps.add(localF)
+                        Tasks.await(fillupsCol.document(cleanFillId).set(fMap), 15, TimeUnit.SECONDS)
+                        mergedFillUps.add(localF.copy(id = cleanFillId, vehicleId = targetVehId))
                     }
                 }
             }
@@ -799,7 +965,7 @@ class NetCarRepository @Inject constructor(
                 remoteExpenses.add(
                     Expense(
                         id = id,
-                        vehicleId = (data["vehicleId"] as? String) ?: (_selectedVehicleId.value ?: "veh-1"),
+                        vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
                         category = cat,
                         amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
@@ -812,15 +978,17 @@ class NetCarRepository @Inject constructor(
 
             val mergedExpenses = remoteExpenses.toMutableList()
             for (localE in _expenses.value) {
-                if (localE.id !in remoteExpIds && localE.vehicleId in remoteVehicleIds && localE.amount > 0) {
+                val cleanExpId = sanitizeDocId(localE.id, "e")
+                val targetVehId = if (localE.vehicleId in remoteVehicleIds) localE.vehicleId else defaultVehicleId
+                if (cleanExpId !in remoteExpIds && targetVehId in remoteVehicleIds && localE.amount >= 0) {
                     val eMap = hashMapOf<String, Any>(
-                        "id" to localE.id,
+                        "id" to cleanExpId,
                         "userId" to uid,
-                        "vehicleId" to localE.vehicleId,
+                        "vehicleId" to targetVehId,
                         "date" to formatIsoDate(localE.date),
                         "category" to localE.category.name.lowercase(Locale.US),
-                        "amount" to localE.amount,
-                        "description" to localE.description.ifBlank { localE.category.displayName }.take(500),
+                        "amount" to localE.amount.coerceAtLeast(0.0),
+                        "description" to localE.description.ifBlank { localE.category.displayName }.ifBlank { "Expense" }.take(500),
                         "createdAt" to FieldValue.serverTimestamp(),
                         "updatedAt" to FieldValue.serverTimestamp()
                     )
@@ -828,13 +996,77 @@ class NetCarRepository @Inject constructor(
                     if (localE.notes.isNotBlank()) eMap["notes"] = localE.notes.take(5000)
 
                     runCatching {
-                        Tasks.await(expensesCol.document(localE.id).set(eMap), 15, TimeUnit.SECONDS)
-                        mergedExpenses.add(localE)
+                        Tasks.await(expensesCol.document(cleanExpId).set(eMap), 15, TimeUnit.SECONDS)
+                        mergedExpenses.add(localE.copy(id = cleanExpId, vehicleId = targetVehId))
                     }
                 }
             }
             if (mergedExpenses.isNotEmpty()) {
                 _expenses.value = mergedExpenses.sortedByDescending { it.date }
+            }
+
+            // 5. Sync Services (/users/{uid}/services)
+            val servicesCol = userDocRef.collection("services")
+            val remoteSvcSnap = Tasks.await(
+                servicesCol.whereEqualTo("userId", uid).get(),
+                15,
+                TimeUnit.SECONDS
+            )
+            val remoteServices = mutableListOf<ServiceRecord>()
+            val remoteSvcIds = mutableSetOf<String>()
+
+            for (doc in remoteSvcSnap.documents) {
+                val data = doc.data ?: continue
+                val id = (data["id"] as? String) ?: doc.id
+                remoteSvcIds.add(id)
+                val typeStr = (data["type"] as? String)?.uppercase(Locale.US)?.replace("-", "_") ?: "OTHER"
+                val svcType = runCatching { ServiceType.valueOf(typeStr) }.getOrDefault(ServiceType.OTHER)
+                val rawParts = (data["parts"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+                remoteServices.add(
+                    ServiceRecord(
+                        id = id,
+                        vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
+                        date = parseIsoDate(data["date"]),
+                        type = svcType,
+                        odometer = (data["odometer"] as? Number)?.toInt() ?: 0,
+                        cost = (data["cost"] as? Number)?.toDouble() ?: 0.0,
+                        description = (data["description"] as? String) ?: "",
+                        parts = rawParts,
+                        notes = (data["notes"] as? String) ?: ""
+                    )
+                )
+            }
+
+            val mergedServices = remoteServices.toMutableList()
+            for (localS in _serviceRecords.value) {
+                val cleanSvcId = sanitizeDocId(localS.id, "s")
+                val targetVehId = if (localS.vehicleId in remoteVehicleIds) localS.vehicleId else defaultVehicleId
+                if (cleanSvcId !in remoteSvcIds && targetVehId in remoteVehicleIds) {
+                    val sMap = hashMapOf<String, Any>(
+                        "id" to cleanSvcId,
+                        "userId" to uid,
+                        "vehicleId" to targetVehId,
+                        "date" to formatIsoDate(localS.date),
+                        "type" to localS.type.name.lowercase(Locale.US),
+                        "odometer" to localS.odometer.coerceAtLeast(0),
+                        "cost" to localS.cost.coerceAtLeast(0.0),
+                        "description" to localS.description.ifBlank { localS.type.displayName }.ifBlank { "Service" }.take(500),
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                    if (localS.parts.isNotEmpty()) {
+                        sMap["parts"] = localS.parts.take(50).map { it.take(200) }
+                    }
+                    if (localS.notes.isNotBlank()) sMap["notes"] = localS.notes.take(5000)
+
+                    runCatching {
+                        Tasks.await(servicesCol.document(cleanSvcId).set(sMap), 15, TimeUnit.SECONDS)
+                        mergedServices.add(localS.copy(id = cleanSvcId, vehicleId = targetVehId))
+                    }
+                }
+            }
+            if (mergedServices.isNotEmpty()) {
+                _serviceRecords.value = mergedServices.sortedByDescending { it.date }
             }
 
             val syncTime = System.currentTimeMillis()
@@ -854,7 +1086,7 @@ class NetCarRepository @Inject constructor(
             }
             Result.success(msg)
         } catch (t: Throwable) {
-            Result.failure(t)
+            Result.failure(formatFriendlyAuthError(t))
         }
     }
 }

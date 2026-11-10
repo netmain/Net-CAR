@@ -1,5 +1,6 @@
 package com.netcar.app.ui.settings
 
+import android.app.Activity
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
@@ -73,14 +74,47 @@ class SettingsViewModel @Inject constructor(
         _syncError.value = null
     }
 
-    fun signInWithEmail(email: String, password: String) {
+    fun signInWithGoogle(activity: Activity?) {
+        if (_isSyncing.value) return
+        if (activity == null) {
+            _syncError.value = if (repository.userSettings.value.language == SupportedLanguage.FR)
+                "Impossible d'ouvrir la fenêtre Google Sign-In."
+            else
+                "Could not open Google Sign-In window."
+            return
+        }
+        viewModelScope.launch {
+            _isSyncing.value = true
+            _syncMessage.value = null
+            _syncError.value = null
+            try {
+                val result = repository.signInWithGoogle(activity)
+                result.fold(
+                    onSuccess = { msg -> _syncMessage.value = msg },
+                    onFailure = { err ->
+                        _syncError.value = err.localizedMessage
+                            ?: if (repository.userSettings.value.language == SupportedLanguage.FR)
+                                "Échec de la connexion Google."
+                            else
+                                "Google sign-in failed."
+                    }
+                )
+            } catch (t: Throwable) {
+                _syncError.value = t.localizedMessage ?: "Google authentication error"
+            } finally {
+                _isSyncing.value = false
+            }
+        }
+    }
+
+    fun signInWithEmail(email: String, password: String, activity: Activity? = null) {
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
             _syncMessage.value = null
             _syncError.value = null
             try {
-                val result = repository.signInWithEmailPassword(email, password)
+                val result = repository.signInWithEmailPassword(email, password, activity)
                 result.fold(
                     onSuccess = { msg -> _syncMessage.value = msg },
                     onFailure = { err ->
@@ -99,14 +133,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun signUpWithEmail(email: String, password: String) {
+    fun signUpWithEmail(email: String, password: String, activity: Activity? = null) {
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
             _syncMessage.value = null
             _syncError.value = null
             try {
-                val result = repository.signUpWithEmailPassword(email, password)
+                val result = repository.signUpWithEmailPassword(email, password, activity)
                 result.fold(
                     onSuccess = { msg -> _syncMessage.value = msg },
                     onFailure = { err ->
