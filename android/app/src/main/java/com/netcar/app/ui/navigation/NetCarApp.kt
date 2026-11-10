@@ -13,10 +13,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 import com.netcar.app.ui.dashboard.DashboardScreen
 import com.netcar.app.ui.dashboard.DashboardViewModel
 import com.netcar.app.ui.expenses.AddExpenseScreen
@@ -199,11 +201,25 @@ fun NetCarApp() {
                         viewModel = reminderViewModel,
                         onNavigateBack = { navController.popBackStack() },
                         onOpenDrawer = openDrawer,
-                        onNavigateToAddReminder = { navController.navigate(Screen.AddReminder.route) }
+                        onNavigateToAddReminder = {
+                            navController.navigate(Screen.AddReminder.createRoute())
+                        },
+                        onEditReminder = { reminderId ->
+                            navController.navigate(Screen.AddReminder.createRoute(reminderId))
+                        }
                     )
                 }
 
-                composable(Screen.AddReminder.route) {
+                composable(
+                    route = Screen.AddReminder.route,
+                    arguments = listOf(
+                        navArgument(Screen.AddReminder.ARG_REMINDER_ID) {
+                            type = NavType.StringType
+                            nullable = true
+                            defaultValue = null
+                        }
+                    )
+                ) {
                     val reminderViewModel: ReminderViewModel = hiltViewModel()
                     AddReminderScreen(
                         viewModel = reminderViewModel,

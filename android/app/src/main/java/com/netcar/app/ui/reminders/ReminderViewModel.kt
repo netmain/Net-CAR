@@ -1,5 +1,6 @@
 package com.netcar.app.ui.reminders
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
@@ -29,20 +30,27 @@ data class ReminderUiState(
 )
 
 data class AddReminderFormState(
+    val editingReminderId: String? = null,
     val title: String = "",
     val type: ServiceType = ServiceType.OIL_CHANGE,
     val intervalKm: String = "15000",
     val intervalDays: String = "365",
     val dueOdometer: String = "",
+    val dueDateMillis: Long? = null,
     val dueDaysInFuture: String = "90",
+    val lastServiceOdometer: String = "",
+    val lastServiceDateMillis: Long? = null,
     val isRecurring: Boolean = true,
     val errorMessage: String? = null
 )
 
 @HiltViewModel
 class ReminderViewModel @Inject constructor(
-    private val repository: NetCarRepository
+    private val repository: NetCarRepository,
+    savedStateHandle: SavedStateHandle
 ) : ViewModel() {
+
+    private var originalReminder: Reminder? = null
 
     private val _selectedTab = MutableStateFlow(0)
     val selectedTab: StateFlow<Int> = _selectedTab.asStateFlow()
@@ -86,6 +94,13 @@ class ReminderViewModel @Inject constructor(
     private val _formState = MutableStateFlow(AddReminderFormState())
     val formState: StateFlow<AddReminderFormState> = _formState.asStateFlow()
 
+    init {
+        val reminderId = savedStateHandle.get<String>("reminderId")
+        if (!reminderId.isNullOrBlank()) {
+            loadReminderForEdit(reminderId)
+        }
+    }
+
     fun selectTab(tab: Int) {
         _selectedTab.value = tab
     }
@@ -95,8 +110,29 @@ class ReminderViewModel @Inject constructor(
     fun updateIntervalKm(km: String) = _formState.apply { value = value.copy(intervalKm = km) }
     fun updateIntervalDays(days: String) = _formState.apply { value = value.copy(intervalDays = days) }
     fun updateDueOdometer(odo: String) = _formState.apply { value = value.copy(dueOdometer = odo) }
+    fun updateDueDate(millis: Long?) = _formState.apply { value = value.copy(dueDateMillis = millis) }
     fun updateDueDays(days: String) = _formState.apply { value = value.copy(dueDaysInFuture = days) }
+    fun updateLastServiceOdometer(odo: String) = _formState.apply { value = value.copy(lastServiceOdometer = odo) }
+    fun updateLastServiceDate(millis: Long?) = _formState.apply { value = value.copy(lastServiceDateMillis = millis) }
     fun updateIsRecurring(recurring: Boolean) = _formState.apply { value = value.copy(isRecurring = recurring) }
+
+    private fun loadReminderForEdit(id: String) {
+        val reminder = repository.reminders.value.find { it.id == id } ?: return
+        originalReminder = reminder
+        _formState.value = AddReminderFormState(
+            editingReminderId = reminder.id,
+            title = reminder.title,
+            type = reminder.type,
+            intervalKm = reminder.intervalKm?.toString() ?: "",
+            intervalDays = reminder.intervalDays?.toString() ?: "",
+            dueOdometer = reminder.nextDueOdometer?.toString() ?: "",
+            dueDateMillis = reminder.nextDueDate,
+            dueDaysInFuture = "",
+            lastServiceOdometer = reminder.lastServiceOdometer?.toString() ?: "",
+            lastServiceDateMillis = reminder.lastServiceDate,
+            isRecurring = reminder.isRecurring
+        )
+    }
 
     fun toggleComplete(id: String) {
         repository.toggleReminderCompleted(id)
@@ -120,34 +156,69 @@ class ReminderViewModel @Inject constructor(
 
     fun saveReminder(onSuccess: () -> Unit) {
         val state = _formState.value
-        val vehicle = uiState.value.selectedVehicle ?: return
+        val original = originalReminder
+        val isEditing = state.editingReminderId != null
+        val vehicle = uiState.value.selectedVehicle
+        val vehicleId = original?.vehicleId ?: vehicle?.id ?: return
 
         val title = if (state.title.isNotBlank()) state.title.trim() else state.type.displayName
 
         val intervalKmInt = state.intervalKm.toIntOrNull()
         val intervalDaysInt = state.intervalDays.toIntOrNull()
 
-        val nextDueOdo = state.dueOdometer.toIntOrNull()
-            ?: if (intervalKmInt != null) vehicle.currentOdometer + intervalKmInt else null
+        val nextDueOdo = when {
+            state.dueOdometer.isNotBlank() -> state.dueOdometer.toIntOrNull()
+            isEditing -> null
+            intervalKmInt != null -> (vehicle?.currentOdometer ?: 0) + intervalKmInt
+            else -> null
+        }
 
-        val daysFuture = state.dueDaysInFuture.toLongOrNull() ?: 90L
-        val nextDueDate = System.currentTimeMillis() + (daysFuture * 86400000L)
+        val nextDueDate = when {
+            state.dueDateMillis != null -> state.dueDateMillis
+            isEditing -> null
+            else -> {
+                val daysFuture = state.dueDaysInFuture.toLongOrNull() ?: 90L
+                System.currentTimeMillis() + (daysFuture * 86400000L)
+            }
+        }
 
-        val reminder = Reminder(
-            vehicleId = vehicle.id,
+        if (isEditing && nextDueOdo == null && nextDueDate == null) {
+            val isFr = repository.userSettings.value.language == SupportedLanguage.FR
+            _formState.value = state.copy(
+                errorMessage = if (isFr) {
+                    "Indiquez une date d'échéance ou un kilométrage cible."
+                } else {
+                    "Provide a due date or a target odometer."
+                }
+            )
+            return
+        }
+
+        val lastServiceOdometer = state.lastServiceOdometer.toIntOrNull()
+            ?: if (isEditing) original?.lastServiceOdometer else vehicle?.currentOdometer
+        val lastServiceDate = state.lastServiceDateMillis
+            ?: if (isEditing) original?.lastServiceDate else System.currentTimeMillis()
+
+        val reminder = (original ?: Reminder(vehicleId = vehicleId, title = title)).copy(
+            vehicleId = vehicleId,
             title = title,
             type = state.type,
             intervalKm = intervalKmInt,
             intervalDays = intervalDaysInt,
-            lastServiceOdometer = vehicle.currentOdometer,
-            lastServiceDate = System.currentTimeMillis(),
+            lastServiceDate = lastServiceDate,
+            lastServiceOdometer = lastServiceOdometer,
             nextDueOdometer = nextDueOdo,
             nextDueDate = nextDueDate,
             isRecurring = state.isRecurring,
-            isCompleted = false
+            isCompleted = original?.isCompleted ?: false
         )
 
-        repository.addReminder(reminder)
+        if (isEditing) {
+            repository.updateReminder(reminder)
+        } else {
+            repository.addReminder(reminder)
+        }
+        originalReminder = null
         _formState.value = AddReminderFormState()
         onSuccess()
     }

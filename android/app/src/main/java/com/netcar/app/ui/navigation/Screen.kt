@@ -11,7 +11,16 @@ sealed class Screen(val route: String, val title: String) {
     data object Maintenance : Screen("maintenance", "Maintenance")
     data object AddService : Screen("add_service", "Log Service")
     data object Reminders : Screen("reminders", "Reminders")
-    data object AddReminder : Screen("add_reminder", "Add Reminder")
+    data object AddReminder : Screen("add_reminder?reminderId={reminderId}", "Reminder") {
+        const val ARG_REMINDER_ID = "reminderId"
+
+        fun createRoute(reminderId: String? = null): String =
+            if (reminderId.isNullOrBlank()) {
+                "add_reminder"
+            } else {
+                "add_reminder?reminderId=${android.net.Uri.encode(reminderId)}"
+            }
+    }
     data object Reports : Screen("reports", "Reports")
     data object Settings : Screen("settings", "Settings")
 }

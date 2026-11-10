@@ -572,17 +572,56 @@ class NetCarRepository @Inject constructor(
         checkRemindersAndNotify(forceAllActive = false)
     }
 
+    fun updateReminder(reminder: Reminder) {
+        _reminders.value = _reminders.value.map {
+            if (it.id == reminder.id) reminder else it
+        }
+        markReminderPendingUpdate(reminder.id)
+        persistLocalData()
+        checkRemindersAndNotify(forceAllActive = false)
+    }
+
     fun toggleReminderCompleted(id: String) {
         _reminders.value = _reminders.value.map {
             if (it.id == id) it.copy(isCompleted = !it.isCompleted) else it
         }
+        markReminderPendingUpdate(id)
         persistLocalData()
         checkRemindersAndNotify(forceAllActive = false)
     }
 
     fun deleteReminder(id: String) {
         _reminders.value = _reminders.value.filter { it.id != id }
+        markReminderPendingDelete(id)
         persistLocalData()
+    }
+
+    private fun markReminderPendingUpdate(localId: String) {
+        val docId = sanitizeDocId(localId, "r")
+        val updates = prefs.getStringSet(KEY_PENDING_REMINDER_UPDATES, emptySet())
+            .orEmpty().toMutableSet()
+        val deletes = prefs.getStringSet(KEY_PENDING_REMINDER_DELETES, emptySet())
+            .orEmpty().toMutableSet()
+        deletes.remove(docId)
+        updates.add(docId)
+        prefs.edit()
+            .putStringSet(KEY_PENDING_REMINDER_UPDATES, updates)
+            .putStringSet(KEY_PENDING_REMINDER_DELETES, deletes)
+            .apply()
+    }
+
+    private fun markReminderPendingDelete(localId: String) {
+        val docId = sanitizeDocId(localId, "r")
+        val updates = prefs.getStringSet(KEY_PENDING_REMINDER_UPDATES, emptySet())
+            .orEmpty().toMutableSet()
+        val deletes = prefs.getStringSet(KEY_PENDING_REMINDER_DELETES, emptySet())
+            .orEmpty().toMutableSet()
+        updates.remove(docId)
+        deletes.add(docId)
+        prefs.edit()
+            .putStringSet(KEY_PENDING_REMINDER_UPDATES, updates)
+            .putStringSet(KEY_PENDING_REMINDER_DELETES, deletes)
+            .apply()
     }
 
     fun updateLanguage(language: SupportedLanguage) {
@@ -1004,6 +1043,53 @@ class NetCarRepository @Inject constructor(
         return null
     }
 
+    private fun buildReminderCreateMap(
+        uid: String,
+        docId: String,
+        reminder: Reminder,
+        vehicleId: String
+    ): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "id" to docId,
+            "userId" to uid,
+            "vehicleId" to vehicleId,
+            "type" to serviceTypeToCloud(reminder.type),
+            "isRecurring" to reminder.isRecurring,
+            "isActive" to !reminder.isCompleted,
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (reminder.title.isNotBlank()) map["title"] = reminder.title.take(200)
+        reminder.intervalKm?.let { map["intervalKm"] = it.coerceAtLeast(0) }
+        reminder.intervalDays?.let { map["intervalDays"] = it.coerceAtLeast(0) }
+        reminder.lastServiceDate?.let { map["lastServiceDate"] = formatIsoDate(it) }
+        reminder.lastServiceOdometer?.let { map["lastServiceOdometer"] = it.coerceAtLeast(0) }
+        reminder.nextDueDate?.let { map["nextDueDate"] = formatIsoDate(it) }
+        reminder.nextDueOdometer?.let { map["nextDueOdometer"] = it.coerceAtLeast(0) }
+        return map
+    }
+
+    private fun buildReminderUpdateMap(
+        reminder: Reminder,
+        vehicleId: String
+    ): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "vehicleId" to vehicleId,
+            "type" to serviceTypeToCloud(reminder.type),
+            "isRecurring" to reminder.isRecurring,
+            "isActive" to !reminder.isCompleted,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        map["title"] = if (reminder.title.isNotBlank()) reminder.title.take(200) else FieldValue.delete()
+        map["intervalKm"] = reminder.intervalKm?.coerceAtLeast(0) ?: FieldValue.delete()
+        map["intervalDays"] = reminder.intervalDays?.coerceAtLeast(0) ?: FieldValue.delete()
+        map["lastServiceDate"] = reminder.lastServiceDate?.let { formatIsoDate(it) } ?: FieldValue.delete()
+        map["lastServiceOdometer"] = reminder.lastServiceOdometer?.coerceAtLeast(0) ?: FieldValue.delete()
+        map["nextDueDate"] = reminder.nextDueDate?.let { formatIsoDate(it) } ?: FieldValue.delete()
+        map["nextDueOdometer"] = reminder.nextDueOdometer?.coerceAtLeast(0) ?: FieldValue.delete()
+        return map
+    }
+
     suspend fun syncWithCloud(): Result<String> = withContext(Dispatchers.IO) {
         try {
             val fbUser = runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull()
@@ -1329,37 +1415,78 @@ class NetCarRepository @Inject constructor(
                 )
             }
 
-            val mergedReminders = remoteReminders.toMutableList()
-            for (localR in _reminders.value) {
-                val cleanRemId = sanitizeDocId(localR.id, "r")
-                val targetVehId = if (localR.vehicleId in remoteVehicleIds) localR.vehicleId else defaultVehicleId
-                if (cleanRemId !in remoteRemIds && targetVehId in remoteVehicleIds) {
-                    val rMap = hashMapOf<String, Any>(
-                        "id" to cleanRemId,
-                        "userId" to uid,
-                        "vehicleId" to targetVehId,
-                        "type" to serviceTypeToCloud(localR.type),
-                        "isRecurring" to localR.isRecurring,
-                        "isActive" to !localR.isCompleted,
-                        "createdAt" to FieldValue.serverTimestamp(),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                    if (localR.title.isNotBlank()) rMap["title"] = localR.title.take(200)
-                    localR.intervalKm?.let { rMap["intervalKm"] = it.coerceAtLeast(0) }
-                    localR.intervalDays?.let { rMap["intervalDays"] = it.coerceAtLeast(0) }
-                    localR.lastServiceDate?.let { rMap["lastServiceDate"] = formatIsoDate(it) }
-                    localR.lastServiceOdometer?.let { rMap["lastServiceOdometer"] = it.coerceAtLeast(0) }
-                    localR.nextDueDate?.let { rMap["nextDueDate"] = formatIsoDate(it) }
-                    localR.nextDueOdometer?.let { rMap["nextDueOdometer"] = it.coerceAtLeast(0) }
+            val pendingReminderUpdates = prefs
+                .getStringSet(KEY_PENDING_REMINDER_UPDATES, emptySet())
+                .orEmpty().toMutableSet()
+            val pendingReminderDeletes = prefs
+                .getStringSet(KEY_PENDING_REMINDER_DELETES, emptySet())
+                .orEmpty().toMutableSet()
 
-                    runCatching {
-                        Tasks.await(remindersCol.document(cleanRemId).set(rMap), 15, TimeUnit.SECONDS)
-                        mergedReminders.add(localR.copy(id = cleanRemId, vehicleId = targetVehId))
-                    }
+            val mergedRemindersById = remoteReminders.associateBy { it.id }.toMutableMap()
+
+            // Push local deletions to the cloud (and hide them locally even if a push fails).
+            for (docId in pendingReminderDeletes.toList()) {
+                mergedRemindersById.remove(docId)
+                remoteRemIds.remove(docId)
+                val deleted = runCatching {
+                    Tasks.await(remindersCol.document(docId).delete(), 15, TimeUnit.SECONDS)
+                    true
+                }.getOrDefault(false)
+                if (deleted) {
+                    pendingReminderDeletes.remove(docId)
                 }
             }
-            if (mergedReminders.isNotEmpty()) {
-                _reminders.value = mergedReminders
+
+            for (localR in _reminders.value) {
+                val cleanRemId = sanitizeDocId(localR.id, "r")
+                if (cleanRemId in pendingReminderDeletes) continue
+                val targetVehId = if (localR.vehicleId in remoteVehicleIds) localR.vehicleId else defaultVehicleId
+                if (targetVehId !in remoteVehicleIds) continue
+
+                if (cleanRemId in remoteRemIds) {
+                    // Remote wins unless the user edited this reminder locally since the last sync.
+                    if (cleanRemId in pendingReminderUpdates) {
+                        val updated = runCatching {
+                            Tasks.await(
+                                remindersCol.document(cleanRemId)
+                                    .update(buildReminderUpdateMap(localR, targetVehId)),
+                                15,
+                                TimeUnit.SECONDS
+                            )
+                            true
+                        }.getOrDefault(false)
+                        if (updated) pendingReminderUpdates.remove(cleanRemId)
+                        mergedRemindersById[cleanRemId] = localR.copy(id = cleanRemId, vehicleId = targetVehId)
+                    }
+                } else {
+                    val created = runCatching {
+                        Tasks.await(
+                            remindersCol.document(cleanRemId)
+                                .set(buildReminderCreateMap(uid, cleanRemId, localR, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
+                    }.getOrDefault(false)
+                    if (created) {
+                        remoteRemIds.add(cleanRemId)
+                        pendingReminderUpdates.remove(cleanRemId)
+                    }
+                    mergedRemindersById[cleanRemId] = localR.copy(id = cleanRemId, vehicleId = targetVehId)
+                }
+            }
+
+            // Drop pending edits for reminders that no longer exist locally.
+            val localReminderIds = _reminders.value.map { sanitizeDocId(it.id, "r") }.toSet()
+            pendingReminderUpdates.retainAll(localReminderIds)
+
+            prefs.edit()
+                .putStringSet(KEY_PENDING_REMINDER_UPDATES, pendingReminderUpdates)
+                .putStringSet(KEY_PENDING_REMINDER_DELETES, pendingReminderDeletes)
+                .apply()
+
+            if (mergedRemindersById.isNotEmpty()) {
+                _reminders.value = mergedRemindersById.values.toList()
             }
 
             val syncTime = System.currentTimeMillis()
@@ -1382,5 +1509,10 @@ class NetCarRepository @Inject constructor(
         } catch (t: Throwable) {
             Result.failure(formatFriendlyAuthError(t))
         }
+    }
+
+    private companion object {
+        const val KEY_PENDING_REMINDER_UPDATES = "pending_reminder_updates"
+        const val KEY_PENDING_REMINDER_DELETES = "pending_reminder_deletes"
     }
 }

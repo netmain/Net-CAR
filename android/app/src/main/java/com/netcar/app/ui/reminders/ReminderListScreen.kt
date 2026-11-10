@@ -57,6 +57,7 @@ fun ReminderListScreen(
     viewModel: ReminderViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddReminder: () -> Unit,
+    onEditReminder: (String) -> Unit,
     onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -273,7 +274,9 @@ fun ReminderListScreen(
                         ReminderCard(
                             reminder = reminder,
                             currentOdometer = currentOdo,
-                            onComplete = { viewModel.toggleComplete(reminder.id) }
+                            onComplete = { viewModel.toggleComplete(reminder.id) },
+                            onClick = { onEditReminder(reminder.id) },
+                            onEdit = { onEditReminder(reminder.id) }
                         )
                     }
                 }

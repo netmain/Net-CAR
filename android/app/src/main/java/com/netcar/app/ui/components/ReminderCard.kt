@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Warning
@@ -59,7 +60,8 @@ fun ReminderCard(
     currentOdometer: Int,
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    onEdit: (() -> Unit)? = null
 ) {
     val now = System.currentTimeMillis()
     val isOverdue = reminder.isOverdue(currentOdometer, now)
@@ -228,33 +230,51 @@ fun ReminderCard(
                     }
                 }
 
-                // Complete action button
-                if (!reminder.isCompleted) {
-                    FilledIconButton(
-                        onClick = onComplete,
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                        ),
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Mark Complete",
-                            modifier = Modifier.size(18.dp)
-                        )
+                // Edit / complete actions
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (onEdit != null) {
+                        OutlinedIconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Reminder",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
-                } else {
-                    OutlinedIconButton(
-                        onClick = onComplete,
-                        modifier = Modifier.size(36.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Completed",
-                            tint = SuccessGreen,
-                            modifier = Modifier.size(18.dp)
-                        )
+
+                    if (!reminder.isCompleted) {
+                        FilledIconButton(
+                            onClick = onComplete,
+                            colors = IconButtonDefaults.filledIconButtonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            ),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Mark Complete",
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
+                        OutlinedIconButton(
+                            onClick = onComplete,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Completed",
+                                tint = SuccessGreen,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
                     }
                 }
             }
