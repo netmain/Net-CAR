@@ -508,7 +508,7 @@ class NetCarRepository @Inject constructor(
     }
 
     fun addVehicle(vehicle: Vehicle) {
-        _vehicles.value = _vehicles.value + vehicle
+        _vehicles.value = _vehicles.value + vehicle.copy(updatedAt = localMutationTimestamp())
         if (_selectedVehicleId.value == null) {
             _selectedVehicleId.value = vehicle.id
         }
@@ -516,6 +516,7 @@ class NetCarRepository @Inject constructor(
     }
 
     fun deleteVehicle(vehicleId: String) {
+        markPendingDelete("vehicles", vehicleId)
         _vehicles.value = _vehicles.value.filter { it.id != vehicleId }
         if (_selectedVehicleId.value == vehicleId) {
             _selectedVehicleId.value = _vehicles.value.firstOrNull()?.id
@@ -526,7 +527,7 @@ class NetCarRepository @Inject constructor(
     fun updateVehicleOdometer(vehicleId: String, newOdometer: Int) {
         _vehicles.value = _vehicles.value.map { v ->
             if (v.id == vehicleId && newOdometer > v.currentOdometer) {
-                v.copy(currentOdometer = newOdometer)
+                v.copy(currentOdometer = newOdometer, updatedAt = localMutationTimestamp())
             } else v
         }
         persistLocalData()
@@ -534,47 +535,50 @@ class NetCarRepository @Inject constructor(
     }
 
     fun addFillUp(fillUp: FillUp) {
-        _fillUps.value = listOf(fillUp) + _fillUps.value
+        _fillUps.value = listOf(fillUp.copy(updatedAt = localMutationTimestamp())) + _fillUps.value
         updateVehicleOdometer(fillUp.vehicleId, fillUp.odometer)
         persistLocalData()
     }
 
     fun deleteFillUp(id: String) {
+        markPendingDelete("fillups", id)
         _fillUps.value = _fillUps.value.filter { it.id != id }
         persistLocalData()
     }
 
     fun addExpense(expense: Expense) {
-        _expenses.value = listOf(expense) + _expenses.value
+        _expenses.value = listOf(expense.copy(updatedAt = localMutationTimestamp())) + _expenses.value
         expense.odometer?.let { updateVehicleOdometer(expense.vehicleId, it) }
         persistLocalData()
     }
 
     fun deleteExpense(id: String) {
+        markPendingDelete("expenses", id)
         _expenses.value = _expenses.value.filter { it.id != id }
         persistLocalData()
     }
 
     fun addServiceRecord(service: ServiceRecord) {
-        _serviceRecords.value = listOf(service) + _serviceRecords.value
+        _serviceRecords.value = listOf(service.copy(updatedAt = localMutationTimestamp())) + _serviceRecords.value
         updateVehicleOdometer(service.vehicleId, service.odometer)
         persistLocalData()
     }
 
     fun deleteServiceRecord(id: String) {
+        markPendingDelete("services", id)
         _serviceRecords.value = _serviceRecords.value.filter { it.id != id }
         persistLocalData()
     }
 
     fun addReminder(reminder: Reminder) {
-        _reminders.value = listOf(reminder) + _reminders.value
+        _reminders.value = listOf(reminder.copy(updatedAt = localMutationTimestamp())) + _reminders.value
         persistLocalData()
         checkRemindersAndNotify(forceAllActive = false)
     }
 
     fun updateReminder(reminder: Reminder) {
         _reminders.value = _reminders.value.map {
-            if (it.id == reminder.id) reminder else it
+            if (it.id == reminder.id) reminder.copy(updatedAt = localMutationTimestamp()) else it
         }
         markReminderPendingUpdate(reminder.id)
         persistLocalData()
@@ -583,7 +587,7 @@ class NetCarRepository @Inject constructor(
 
     fun toggleReminderCompleted(id: String) {
         _reminders.value = _reminders.value.map {
-            if (it.id == id) it.copy(isCompleted = !it.isCompleted) else it
+            if (it.id == id) it.copy(isCompleted = !it.isCompleted, updatedAt = localMutationTimestamp()) else it
         }
         markReminderPendingUpdate(id)
         persistLocalData()
@@ -591,8 +595,8 @@ class NetCarRepository @Inject constructor(
     }
 
     fun deleteReminder(id: String) {
-        _reminders.value = _reminders.value.filter { it.id != id }
         markReminderPendingDelete(id)
+        _reminders.value = _reminders.value.filter { it.id != id }
         persistLocalData()
     }
 
@@ -1043,6 +1047,347 @@ class NetCarRepository @Inject constructor(
         return null
     }
 
+    private fun parseTimestampMillis(raw: Any?): Long = when (raw) {
+        null -> 0L
+        is com.google.firebase.Timestamp -> raw.seconds * 1000L + raw.nanoseconds / 1_000_000L
+        is Number -> raw.toLong()
+        is String -> parseIsoDateOrNull(raw) ?: 0L
+        is Map<*, *> -> {
+            val seconds = (raw["seconds"] as? Number)?.toLong() ?: 0L
+            val nanos = (raw["nanoseconds"] as? Number)?.toLong() ?: 0L
+            seconds * 1000L + nanos / 1_000_000L
+        }
+        else -> 0L
+    }
+
+    private fun idPrefixFor(collection: String): String = when (collection) {
+        "vehicles" -> "veh"
+        "fillups" -> "f"
+        "expenses" -> "e"
+        "services" -> "s"
+        "reminders" -> "r"
+        else -> "x"
+    }
+
+    private fun pendingDeletesKey(collection: String): String =
+        if (collection == "reminders") KEY_PENDING_REMINDER_DELETES
+        else "pending_deletes_$collection"
+
+    private fun markPendingDelete(collection: String, rawId: String) {
+        val key = pendingDeletesKey(collection)
+        val set = prefs.getStringSet(key, emptySet()).orEmpty().toMutableSet()
+        set.add(sanitizeDocId(rawId, idPrefixFor(collection)))
+        prefs.edit().putStringSet(key, set).apply()
+    }
+
+    private fun readPendingDeletes(collection: String): MutableSet<String> =
+        prefs.getStringSet(pendingDeletesKey(collection), emptySet()).orEmpty().toMutableSet()
+
+    private fun writePendingDeletes(collection: String, ids: Set<String>) {
+        prefs.edit().putStringSet(pendingDeletesKey(collection), ids).apply()
+    }
+
+    private fun syncedIdsKey(collection: String): String = "synced_ids_$collection"
+
+    private fun readSyncedIds(collection: String): Set<String>? {
+        val key = syncedIdsKey(collection)
+        return if (prefs.contains(key)) {
+            prefs.getStringSet(key, emptySet()).orEmpty()
+        } else {
+            null
+        }
+    }
+
+    private fun writeSyncedIds(collection: String, ids: Set<String>) {
+        prefs.edit().putStringSet(syncedIdsKey(collection), ids).apply()
+    }
+
+    private fun localMutationTimestamp(): Long {
+        val lastSync = prefs.getLong("last_sync_ts", 0L)
+        return maxOf(System.currentTimeMillis(), lastSync + 1L)
+    }
+
+    private data class RemoteEntry<T>(val model: T, val updatedAt: Long)
+
+    private data class MergeOutcome<T>(
+        val items: List<T>,
+        val hadFailure: Boolean,
+        val pushedIds: Set<String>,
+        val ids: Set<String>
+    )
+
+    private suspend fun <T> mergeCollection(
+        collectionKey: String,
+        remoteEntries: Map<String, RemoteEntry<T>>,
+        localItems: List<T>,
+        idOf: (T) -> String,
+        updatedAtOf: (T) -> Long,
+        copyWithId: (T, String) -> T,
+        withUpdatedAt: (T, Long) -> T,
+        forceLocalUpdate: (String) -> Boolean = { false },
+        defaultIds: Set<String> = emptySet(),
+        createRemote: suspend (String, T) -> Boolean,
+        updateRemote: suspend (String, T) -> Boolean
+    ): MergeOutcome<T> {
+        val pendingDeletes = readPendingDeletes(collectionKey)
+        val previousSyncedIds = readSyncedIds(collectionKey)
+        val lastSyncAt = prefs.getLong("last_sync_ts", 0L)
+        val mutationTs = localMutationTimestamp()
+        val prefix = idPrefixFor(collectionKey)
+
+        val merged = linkedMapOf<String, T>()
+        for ((id, entry) in remoteEntries) {
+            if (id !in pendingDeletes) {
+                merged[id] = copyWithId(entry.model, id)
+            }
+        }
+
+        val pushedIds = mutableSetOf<String>()
+        var hadFailure = false
+
+        for (local in localItems) {
+            val docId = sanitizeDocId(idOf(local), prefix)
+            if (docId in pendingDeletes) continue
+
+            val localUpdatedAt = updatedAtOf(local)
+            val remote = remoteEntries[docId]
+
+            if (remote != null) {
+                val localChanged = localUpdatedAt > 0L && localUpdatedAt > lastSyncAt
+                val remoteChanged = remote.updatedAt > 0L && remote.updatedAt > lastSyncAt
+                val localWins = forceLocalUpdate(docId) || when {
+                    lastSyncAt <= 0L -> localUpdatedAt > 0L &&
+                        (remote.updatedAt <= 0L || localUpdatedAt > remote.updatedAt)
+                    localChanged && !remoteChanged -> true
+                    !localChanged && remoteChanged -> false
+                    localChanged && remoteChanged -> localUpdatedAt >= remote.updatedAt
+                    else -> false
+                }
+                if (localWins) {
+                    val ok = runCatching { updateRemote(docId, local) }.getOrDefault(false)
+                    if (ok) {
+                        pushedIds.add(docId)
+                        merged[docId] = withUpdatedAt(copyWithId(local, docId), mutationTs)
+                    } else {
+                        hadFailure = true
+                        merged[docId] = withUpdatedAt(copyWithId(local, docId), mutationTs)
+                    }
+                } else {
+                    merged[docId] = remote.model
+                }
+            } else {
+                val shouldPush = when {
+                    forceLocalUpdate(docId) -> true
+                    previousSyncedIds == null ->
+                        remoteEntries.isEmpty() || localUpdatedAt > 0L || docId !in defaultIds
+                    else -> docId !in previousSyncedIds || localUpdatedAt > lastSyncAt
+                }
+                if (shouldPush) {
+                    val ok = runCatching { createRemote(docId, local) }.getOrDefault(false)
+                    if (ok) {
+                        pushedIds.add(docId)
+                        merged[docId] = withUpdatedAt(copyWithId(local, docId), mutationTs)
+                    } else {
+                        hadFailure = true
+                        merged[docId] = withUpdatedAt(copyWithId(local, docId), mutationTs)
+                    }
+                }
+            }
+        }
+
+        return MergeOutcome(
+            items = merged.values.toList(),
+            hadFailure = hadFailure,
+            pushedIds = pushedIds,
+            ids = merged.keys.toSet()
+        )
+    }
+
+    private suspend fun processPendingDeletes(
+        collection: String,
+        colRef: com.google.firebase.firestore.CollectionReference
+    ): MutableSet<String> {
+        val pending = readPendingDeletes(collection)
+        for (docId in pending.toList()) {
+            val deleted = runCatching {
+                Tasks.await(colRef.document(docId).delete(), 15, TimeUnit.SECONDS)
+                true
+            }.getOrDefault(false)
+            if (deleted) pending.remove(docId)
+        }
+        writePendingDeletes(collection, pending)
+        return pending
+    }
+
+    private fun buildVehicleCreateMap(
+        uid: String,
+        docId: String,
+        vehicle: Vehicle
+    ): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "id" to docId,
+            "userId" to uid,
+            "make" to vehicle.make.ifBlank { "Vehicle" }.take(100),
+            "model" to vehicle.model.ifBlank { "Model" }.take(100),
+            "year" to vehicle.year.coerceIn(1900, 2100),
+            "fuelType" to vehicle.fuelType.name.lowercase(Locale.US),
+            "currentOdometer" to vehicle.currentOdometer.coerceAtLeast(0),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (vehicle.name.isNotBlank()) map["name"] = vehicle.name.take(100)
+        if (vehicle.plate.isNotBlank()) map["plate"] = vehicle.plate.take(30)
+        if (vehicle.vin.isNotBlank()) map["vin"] = vehicle.vin.take(30)
+        if (vehicle.photoUrl.isNotBlank()) map["photoUrl"] = vehicle.photoUrl.take(2048)
+        if (vehicle.notes.isNotBlank()) map["notes"] = vehicle.notes.take(5000)
+        return map
+    }
+
+    private fun buildVehicleUpdateMap(vehicle: Vehicle): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "make" to vehicle.make.ifBlank { "Vehicle" }.take(100),
+            "model" to vehicle.model.ifBlank { "Model" }.take(100),
+            "year" to vehicle.year.coerceIn(1900, 2100),
+            "fuelType" to vehicle.fuelType.name.lowercase(Locale.US),
+            "currentOdometer" to vehicle.currentOdometer.coerceAtLeast(0),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        map["name"] = vehicle.name.takeIf { it.isNotBlank() }?.take(100) ?: FieldValue.delete()
+        map["plate"] = vehicle.plate.takeIf { it.isNotBlank() }?.take(30) ?: FieldValue.delete()
+        map["vin"] = vehicle.vin.takeIf { it.isNotBlank() }?.take(30) ?: FieldValue.delete()
+        map["photoUrl"] = vehicle.photoUrl.takeIf { it.isNotBlank() }?.take(2048) ?: FieldValue.delete()
+        map["notes"] = vehicle.notes.takeIf { it.isNotBlank() }?.take(5000) ?: FieldValue.delete()
+        return map
+    }
+
+    private fun buildFillUpCreateMap(
+        uid: String,
+        docId: String,
+        fillUp: FillUp,
+        vehicleId: String
+    ): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "id" to docId,
+            "userId" to uid,
+            "vehicleId" to vehicleId,
+            "date" to formatIsoDate(fillUp.date),
+            "odometer" to fillUp.odometer.coerceAtLeast(0),
+            "volume" to fillUp.volume.coerceAtLeast(0.0),
+            "pricePerUnit" to fillUp.pricePerUnit.coerceAtLeast(0.0),
+            "totalCost" to fillUp.totalCost.coerceAtLeast(0.0),
+            "fuelType" to fillUp.fuelType.name.lowercase(Locale.US),
+            "isFullTank" to fillUp.isFullTank,
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (fillUp.station.isNotBlank()) map["station"] = fillUp.station.take(200)
+        if (fillUp.notes.isNotBlank()) map["notes"] = fillUp.notes.take(5000)
+        return map
+    }
+
+    private fun buildFillUpUpdateMap(fillUp: FillUp, vehicleId: String): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "vehicleId" to vehicleId,
+            "date" to formatIsoDate(fillUp.date),
+            "odometer" to fillUp.odometer.coerceAtLeast(0),
+            "volume" to fillUp.volume.coerceAtLeast(0.0),
+            "pricePerUnit" to fillUp.pricePerUnit.coerceAtLeast(0.0),
+            "totalCost" to fillUp.totalCost.coerceAtLeast(0.0),
+            "fuelType" to fillUp.fuelType.name.lowercase(Locale.US),
+            "isFullTank" to fillUp.isFullTank,
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        map["station"] = fillUp.station.takeIf { it.isNotBlank() }?.take(200) ?: FieldValue.delete()
+        map["notes"] = fillUp.notes.takeIf { it.isNotBlank() }?.take(5000) ?: FieldValue.delete()
+        return map
+    }
+
+    private fun buildExpenseCreateMap(
+        uid: String,
+        docId: String,
+        expense: Expense,
+        vehicleId: String
+    ): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "id" to docId,
+            "userId" to uid,
+            "vehicleId" to vehicleId,
+            "date" to formatIsoDate(expense.date),
+            "category" to expense.category.name.lowercase(Locale.US),
+            "amount" to expense.amount.coerceAtLeast(0.0),
+            "description" to expense.description.ifBlank { expense.category.displayName }
+                .ifBlank { "Expense" }.take(500),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        expense.odometer?.let { map["odometer"] = it.coerceAtLeast(0) }
+        if (expense.notes.isNotBlank()) map["notes"] = expense.notes.take(5000)
+        return map
+    }
+
+    private fun buildExpenseUpdateMap(expense: Expense, vehicleId: String): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "vehicleId" to vehicleId,
+            "date" to formatIsoDate(expense.date),
+            "category" to expense.category.name.lowercase(Locale.US),
+            "amount" to expense.amount.coerceAtLeast(0.0),
+            "description" to expense.description.ifBlank { expense.category.displayName }
+                .ifBlank { "Expense" }.take(500),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        map["odometer"] = expense.odometer?.coerceAtLeast(0) ?: FieldValue.delete()
+        map["notes"] = expense.notes.takeIf { it.isNotBlank() }?.take(5000) ?: FieldValue.delete()
+        return map
+    }
+
+    private fun buildServiceCreateMap(
+        uid: String,
+        docId: String,
+        service: ServiceRecord,
+        vehicleId: String
+    ): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "id" to docId,
+            "userId" to uid,
+            "vehicleId" to vehicleId,
+            "date" to formatIsoDate(service.date),
+            "type" to serviceTypeToCloud(service.type),
+            "odometer" to service.odometer.coerceAtLeast(0),
+            "cost" to service.cost.coerceAtLeast(0.0),
+            "description" to service.description.ifBlank { service.type.displayName }
+                .ifBlank { "Service" }.take(500),
+            "createdAt" to FieldValue.serverTimestamp(),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        if (service.parts.isNotEmpty()) {
+            map["parts"] = service.parts.take(50).map { it.take(200) }
+        }
+        if (service.receiptUrl.isNotBlank()) map["receiptUrl"] = service.receiptUrl.take(2048)
+        if (service.notes.isNotBlank()) map["notes"] = service.notes.take(5000)
+        return map
+    }
+
+    private fun buildServiceUpdateMap(service: ServiceRecord, vehicleId: String): HashMap<String, Any> {
+        val map = hashMapOf<String, Any>(
+            "vehicleId" to vehicleId,
+            "date" to formatIsoDate(service.date),
+            "type" to serviceTypeToCloud(service.type),
+            "odometer" to service.odometer.coerceAtLeast(0),
+            "cost" to service.cost.coerceAtLeast(0.0),
+            "description" to service.description.ifBlank { service.type.displayName }
+                .ifBlank { "Service" }.take(500),
+            "updatedAt" to FieldValue.serverTimestamp()
+        )
+        map["parts"] = if (service.parts.isNotEmpty()) {
+            service.parts.take(50).map { it.take(200) }
+        } else {
+            FieldValue.delete()
+        }
+        map["receiptUrl"] = service.receiptUrl.takeIf { it.isNotBlank() }?.take(2048) ?: FieldValue.delete()
+        map["notes"] = service.notes.takeIf { it.isNotBlank() }?.take(5000) ?: FieldValue.delete()
+        return map
+    }
+
     private fun buildReminderCreateMap(
         uid: String,
         docId: String,
@@ -1116,18 +1461,21 @@ class NetCarRepository @Inject constructor(
 
             // 1. Ensure parent user profile document exists in /users/{uid}
             val userDocRef = db.collection("users").document(uid)
-            val userDoc = hashMapOf<String, Any>(
-                "userId" to uid,
-                "name" to displayName,
-                "email" to email,
-                "preferredLang" to _userSettings.value.language.code,
-                "units" to if (_userSettings.value.units == Units.METRIC) "metric" else "imperial",
-                "currency" to _userSettings.value.currency.code,
-                "createdAt" to FieldValue.serverTimestamp(),
-                "updatedAt" to FieldValue.serverTimestamp()
-            )
-            _selectedVehicleId.value?.let { userDoc["activeVehicleId"] = sanitizeDocId(it, "veh") }
-            Tasks.await(userDocRef.set(userDoc), 15, TimeUnit.SECONDS)
+            val userSnap = Tasks.await(userDocRef.get(), 15, TimeUnit.SECONDS)
+            if (!userSnap.exists()) {
+                val userDoc = hashMapOf<String, Any>(
+                    "userId" to uid,
+                    "name" to displayName,
+                    "email" to email,
+                    "preferredLang" to _userSettings.value.language.code,
+                    "units" to if (_userSettings.value.units == Units.METRIC) "metric" else "imperial",
+                    "currency" to _userSettings.value.currency.code,
+                    "createdAt" to FieldValue.serverTimestamp(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+                _selectedVehicleId.value?.let { userDoc["activeVehicleId"] = sanitizeDocId(it, "veh") }
+                Tasks.await(userDocRef.set(userDoc), 15, TimeUnit.SECONDS)
+            }
 
             // 2. Sync Vehicles (/users/{uid}/vehicles)
             val vehiclesCol = userDocRef.collection("vehicles")
@@ -1136,17 +1484,16 @@ class NetCarRepository @Inject constructor(
                 15,
                 TimeUnit.SECONDS
             )
-            val remoteVehicles = mutableListOf<Vehicle>()
-            val remoteVehicleIds = mutableSetOf<String>()
+            val remoteVehicles = linkedMapOf<String, RemoteEntry<Vehicle>>()
 
             for (doc in remoteVehSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                remoteVehicleIds.add(id)
                 val ftStr = (data["fuelType"] as? String)?.uppercase(Locale.US) ?: "GASOLINE"
                 val ft = runCatching { FuelType.valueOf(ftStr) }.getOrDefault(FuelType.GASOLINE)
-                remoteVehicles.add(
-                    Vehicle(
+                val updatedAt = parseTimestampMillis(data["updatedAt"])
+                remoteVehicles[id] = RemoteEntry(
+                    model = Vehicle(
                         id = id,
                         name = (data["name"] as? String) ?: "",
                         make = (data["make"] as? String) ?: "Vehicle",
@@ -1155,44 +1502,54 @@ class NetCarRepository @Inject constructor(
                         plate = (data["plate"] as? String) ?: "",
                         vin = (data["vin"] as? String) ?: "",
                         fuelType = ft,
+                        photoUrl = (data["photoUrl"] as? String) ?: "",
                         currentOdometer = (data["currentOdometer"] as? Number)?.toInt() ?: 0,
-                        notes = (data["notes"] as? String) ?: ""
-                    )
+                        notes = (data["notes"] as? String) ?: "",
+                        updatedAt = updatedAt
+                    ),
+                    updatedAt = updatedAt
                 )
             }
 
-            // Push any local vehicles not yet on remote
-            val mergedVehicles = remoteVehicles.toMutableList()
-            for (localV in _vehicles.value) {
-                val cleanVehId = sanitizeDocId(localV.id, "veh")
-                if (cleanVehId !in remoteVehicleIds) {
-                    val vMap = hashMapOf<String, Any>(
-                        "id" to cleanVehId,
-                        "userId" to uid,
-                        "make" to localV.make.ifBlank { "Vehicle" }.take(100),
-                        "model" to localV.model.ifBlank { "Model" }.take(100),
-                        "year" to localV.year.coerceIn(1900, 2100),
-                        "fuelType" to localV.fuelType.name.lowercase(Locale.US),
-                        "currentOdometer" to localV.currentOdometer.coerceAtLeast(0),
-                        "createdAt" to FieldValue.serverTimestamp(),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                    if (localV.name.isNotBlank()) vMap["name"] = localV.name.take(100)
-                    if (localV.plate.isNotBlank()) vMap["plate"] = localV.plate.take(30)
-                    if (localV.vin.isNotBlank()) vMap["vin"] = localV.vin.take(30)
-                    if (localV.notes.isNotBlank()) vMap["notes"] = localV.notes.take(5000)
+            val pendingVehDeletes = processPendingDeletes("vehicles", vehiclesCol)
+            remoteVehicles.keys.removeAll(pendingVehDeletes)
 
-                    Tasks.await(vehiclesCol.document(cleanVehId).set(vMap), 15, TimeUnit.SECONDS)
-                    mergedVehicles.add(localV.copy(id = cleanVehId))
-                    remoteVehicleIds.add(cleanVehId)
+            val vehicleOutcome = mergeCollection(
+                collectionKey = "vehicles",
+                remoteEntries = remoteVehicles,
+                localItems = _vehicles.value,
+                idOf = { it.id },
+                updatedAtOf = { it.updatedAt },
+                copyWithId = { v, id -> v.copy(id = id) },
+                withUpdatedAt = { v, ts -> v.copy(updatedAt = ts) },
+                defaultIds = setOf("veh-1", "veh-2"),
+                createRemote = { docId, vehicle ->
+                    Tasks.await(
+                        vehiclesCol.document(docId)
+                            .set(buildVehicleCreateMap(uid, docId, vehicle)),
+                        15,
+                        TimeUnit.SECONDS
+                    )
+                    true
+                },
+                updateRemote = { docId, vehicle ->
+                    Tasks.await(
+                        vehiclesCol.document(docId).update(buildVehicleUpdateMap(vehicle)),
+                        15,
+                        TimeUnit.SECONDS
+                    )
+                    true
                 }
+            )
+            var hadPushFailure = vehicleOutcome.hadFailure
+            _vehicles.value = vehicleOutcome.items
+            if (_selectedVehicleId.value == null ||
+                vehicleOutcome.items.none { it.id == _selectedVehicleId.value }
+            ) {
+                _selectedVehicleId.value = vehicleOutcome.items.firstOrNull()?.id
             }
-            if (mergedVehicles.isNotEmpty()) {
-                _vehicles.value = mergedVehicles
-                if (_selectedVehicleId.value == null || mergedVehicles.none { it.id == _selectedVehicleId.value }) {
-                    _selectedVehicleId.value = mergedVehicles.first().id
-                }
-            }
+            writeSyncedIds("vehicles", vehicleOutcome.ids)
+            val remoteVehicleIds = vehicleOutcome.ids.toMutableSet()
             val defaultVehicleId = remoteVehicleIds.firstOrNull() ?: "veh-1"
 
             // 3. Sync Fill-Ups (/users/{uid}/fillups)
@@ -1202,17 +1559,16 @@ class NetCarRepository @Inject constructor(
                 15,
                 TimeUnit.SECONDS
             )
-            val remoteFillUps = mutableListOf<FillUp>()
-            val remoteFillIds = mutableSetOf<String>()
+            val remoteFillUps = linkedMapOf<String, RemoteEntry<FillUp>>()
 
             for (doc in remoteFillSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                remoteFillIds.add(id)
                 val ftStr = (data["fuelType"] as? String)?.uppercase(Locale.US) ?: "GASOLINE"
                 val ft = runCatching { FuelType.valueOf(ftStr) }.getOrDefault(FuelType.GASOLINE)
-                remoteFillUps.add(
-                    FillUp(
+                val updatedAt = parseTimestampMillis(data["updatedAt"])
+                remoteFillUps[id] = RemoteEntry(
+                    model = FillUp(
                         id = id,
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
@@ -1223,42 +1579,64 @@ class NetCarRepository @Inject constructor(
                         fuelType = ft,
                         isFullTank = (data["isFullTank"] as? Boolean) ?: true,
                         station = (data["station"] as? String) ?: "",
-                        notes = (data["notes"] as? String) ?: ""
-                    )
+                        notes = (data["notes"] as? String) ?: "",
+                        updatedAt = updatedAt
+                    ),
+                    updatedAt = updatedAt
                 )
             }
 
-            val mergedFillUps = remoteFillUps.toMutableList()
-            for (localF in _fillUps.value) {
-                val cleanFillId = sanitizeDocId(localF.id, "f")
-                val targetVehId = if (localF.vehicleId in remoteVehicleIds) localF.vehicleId else defaultVehicleId
-                if (cleanFillId !in remoteFillIds && targetVehId in remoteVehicleIds && localF.volume >= 0) {
-                    val fMap = hashMapOf<String, Any>(
-                        "id" to cleanFillId,
-                        "userId" to uid,
-                        "vehicleId" to targetVehId,
-                        "date" to formatIsoDate(localF.date),
-                        "odometer" to localF.odometer.coerceAtLeast(0),
-                        "volume" to localF.volume.coerceAtLeast(0.0),
-                        "pricePerUnit" to localF.pricePerUnit.coerceAtLeast(0.0),
-                        "totalCost" to localF.totalCost.coerceAtLeast(0.0),
-                        "fuelType" to localF.fuelType.name.lowercase(Locale.US),
-                        "isFullTank" to localF.isFullTank,
-                        "createdAt" to FieldValue.serverTimestamp(),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                    if (localF.station.isNotBlank()) fMap["station"] = localF.station.take(200)
-                    if (localF.notes.isNotBlank()) fMap["notes"] = localF.notes.take(5000)
+            val pendingFillDeletes = processPendingDeletes("fillups", fillupsCol)
+            remoteFillUps.keys.removeAll(pendingFillDeletes)
 
-                    runCatching {
-                        Tasks.await(fillupsCol.document(cleanFillId).set(fMap), 15, TimeUnit.SECONDS)
-                        mergedFillUps.add(localF.copy(id = cleanFillId, vehicleId = targetVehId))
+            val fillOutcome = mergeCollection(
+                collectionKey = "fillups",
+                remoteEntries = remoteFillUps,
+                localItems = _fillUps.value,
+                idOf = { it.id },
+                updatedAtOf = { it.updatedAt },
+                copyWithId = { f, id ->
+                    f.copy(
+                        id = id,
+                        vehicleId = if (f.vehicleId in remoteVehicleIds) f.vehicleId else defaultVehicleId
+                    )
+                },
+                withUpdatedAt = { f, ts -> f.copy(updatedAt = ts) },
+                defaultIds = setOf("f-1", "f-2", "f-3", "f-4", "f-5", "f-6"),
+                createRemote = { docId, fillUp ->
+                    val targetVehId =
+                        if (fillUp.vehicleId in remoteVehicleIds) fillUp.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds || fillUp.volume < 0) {
+                        false
+                    } else {
+                        Tasks.await(
+                            fillupsCol.document(docId)
+                                .set(buildFillUpCreateMap(uid, docId, fillUp, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
+                    }
+                },
+                updateRemote = { docId, fillUp ->
+                    val targetVehId =
+                        if (fillUp.vehicleId in remoteVehicleIds) fillUp.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds) {
+                        false
+                    } else {
+                        Tasks.await(
+                            fillupsCol.document(docId)
+                                .update(buildFillUpUpdateMap(fillUp, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
                     }
                 }
-            }
-            if (mergedFillUps.isNotEmpty()) {
-                _fillUps.value = mergedFillUps.sortedByDescending { it.odometer }
-            }
+            )
+            hadPushFailure = hadPushFailure || fillOutcome.hadFailure
+            _fillUps.value = fillOutcome.items.sortedByDescending { it.odometer }
+            writeSyncedIds("fillups", fillOutcome.ids)
 
             // 4. Sync Expenses (/users/{uid}/expenses)
             val expensesCol = userDocRef.collection("expenses")
@@ -1267,17 +1645,16 @@ class NetCarRepository @Inject constructor(
                 15,
                 TimeUnit.SECONDS
             )
-            val remoteExpenses = mutableListOf<Expense>()
-            val remoteExpIds = mutableSetOf<String>()
+            val remoteExpenses = linkedMapOf<String, RemoteEntry<Expense>>()
 
             for (doc in remoteExpSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                remoteExpIds.add(id)
                 val catStr = (data["category"] as? String)?.uppercase(Locale.US)?.replace("-", "_") ?: "OTHER"
                 val cat = runCatching { ExpenseCategory.valueOf(catStr) }.getOrDefault(ExpenseCategory.OTHER)
-                remoteExpenses.add(
-                    Expense(
+                val updatedAt = parseTimestampMillis(data["updatedAt"])
+                remoteExpenses[id] = RemoteEntry(
+                    model = Expense(
                         id = id,
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
@@ -1285,39 +1662,64 @@ class NetCarRepository @Inject constructor(
                         amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
                         description = (data["description"] as? String) ?: "",
                         odometer = (data["odometer"] as? Number)?.toInt(),
-                        notes = (data["notes"] as? String) ?: ""
-                    )
+                        notes = (data["notes"] as? String) ?: "",
+                        updatedAt = updatedAt
+                    ),
+                    updatedAt = updatedAt
                 )
             }
 
-            val mergedExpenses = remoteExpenses.toMutableList()
-            for (localE in _expenses.value) {
-                val cleanExpId = sanitizeDocId(localE.id, "e")
-                val targetVehId = if (localE.vehicleId in remoteVehicleIds) localE.vehicleId else defaultVehicleId
-                if (cleanExpId !in remoteExpIds && targetVehId in remoteVehicleIds && localE.amount >= 0) {
-                    val eMap = hashMapOf<String, Any>(
-                        "id" to cleanExpId,
-                        "userId" to uid,
-                        "vehicleId" to targetVehId,
-                        "date" to formatIsoDate(localE.date),
-                        "category" to localE.category.name.lowercase(Locale.US),
-                        "amount" to localE.amount.coerceAtLeast(0.0),
-                        "description" to localE.description.ifBlank { localE.category.displayName }.ifBlank { "Expense" }.take(500),
-                        "createdAt" to FieldValue.serverTimestamp(),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                    localE.odometer?.let { eMap["odometer"] = it.coerceAtLeast(0) }
-                    if (localE.notes.isNotBlank()) eMap["notes"] = localE.notes.take(5000)
+            val pendingExpDeletes = processPendingDeletes("expenses", expensesCol)
+            remoteExpenses.keys.removeAll(pendingExpDeletes)
 
-                    runCatching {
-                        Tasks.await(expensesCol.document(cleanExpId).set(eMap), 15, TimeUnit.SECONDS)
-                        mergedExpenses.add(localE.copy(id = cleanExpId, vehicleId = targetVehId))
+            val expenseOutcome = mergeCollection(
+                collectionKey = "expenses",
+                remoteEntries = remoteExpenses,
+                localItems = _expenses.value,
+                idOf = { it.id },
+                updatedAtOf = { it.updatedAt },
+                copyWithId = { e, id ->
+                    e.copy(
+                        id = id,
+                        vehicleId = if (e.vehicleId in remoteVehicleIds) e.vehicleId else defaultVehicleId
+                    )
+                },
+                withUpdatedAt = { e, ts -> e.copy(updatedAt = ts) },
+                defaultIds = setOf("e-1", "e-2", "e-3"),
+                createRemote = { docId, expense ->
+                    val targetVehId =
+                        if (expense.vehicleId in remoteVehicleIds) expense.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds || expense.amount < 0) {
+                        false
+                    } else {
+                        Tasks.await(
+                            expensesCol.document(docId)
+                                .set(buildExpenseCreateMap(uid, docId, expense, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
+                    }
+                },
+                updateRemote = { docId, expense ->
+                    val targetVehId =
+                        if (expense.vehicleId in remoteVehicleIds) expense.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds) {
+                        false
+                    } else {
+                        Tasks.await(
+                            expensesCol.document(docId)
+                                .update(buildExpenseUpdateMap(expense, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
                     }
                 }
-            }
-            if (mergedExpenses.isNotEmpty()) {
-                _expenses.value = mergedExpenses.sortedByDescending { it.date }
-            }
+            )
+            hadPushFailure = hadPushFailure || expenseOutcome.hadFailure
+            _expenses.value = expenseOutcome.items.sortedByDescending { it.date }
+            writeSyncedIds("expenses", expenseOutcome.ids)
 
             // 5. Sync Services (/users/{uid}/services)
             val servicesCol = userDocRef.collection("services")
@@ -1326,17 +1728,16 @@ class NetCarRepository @Inject constructor(
                 15,
                 TimeUnit.SECONDS
             )
-            val remoteServices = mutableListOf<ServiceRecord>()
-            val remoteSvcIds = mutableSetOf<String>()
+            val remoteServices = linkedMapOf<String, RemoteEntry<ServiceRecord>>()
 
             for (doc in remoteSvcSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                remoteSvcIds.add(id)
                 val svcType = serviceTypeFromCloud(data["type"])
                 val rawParts = (data["parts"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
-                remoteServices.add(
-                    ServiceRecord(
+                val updatedAt = parseTimestampMillis(data["updatedAt"])
+                remoteServices[id] = RemoteEntry(
+                    model = ServiceRecord(
                         id = id,
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
@@ -1345,42 +1746,65 @@ class NetCarRepository @Inject constructor(
                         cost = (data["cost"] as? Number)?.toDouble() ?: 0.0,
                         description = (data["description"] as? String) ?: "",
                         parts = rawParts,
-                        notes = (data["notes"] as? String) ?: ""
-                    )
+                        receiptUrl = (data["receiptUrl"] as? String) ?: "",
+                        notes = (data["notes"] as? String) ?: "",
+                        updatedAt = updatedAt
+                    ),
+                    updatedAt = updatedAt
                 )
             }
 
-            val mergedServices = remoteServices.toMutableList()
-            for (localS in _serviceRecords.value) {
-                val cleanSvcId = sanitizeDocId(localS.id, "s")
-                val targetVehId = if (localS.vehicleId in remoteVehicleIds) localS.vehicleId else defaultVehicleId
-                if (cleanSvcId !in remoteSvcIds && targetVehId in remoteVehicleIds) {
-                    val sMap = hashMapOf<String, Any>(
-                        "id" to cleanSvcId,
-                        "userId" to uid,
-                        "vehicleId" to targetVehId,
-                        "date" to formatIsoDate(localS.date),
-                        "type" to serviceTypeToCloud(localS.type),
-                        "odometer" to localS.odometer.coerceAtLeast(0),
-                        "cost" to localS.cost.coerceAtLeast(0.0),
-                        "description" to localS.description.ifBlank { localS.type.displayName }.ifBlank { "Service" }.take(500),
-                        "createdAt" to FieldValue.serverTimestamp(),
-                        "updatedAt" to FieldValue.serverTimestamp()
-                    )
-                    if (localS.parts.isNotEmpty()) {
-                        sMap["parts"] = localS.parts.take(50).map { it.take(200) }
-                    }
-                    if (localS.notes.isNotBlank()) sMap["notes"] = localS.notes.take(5000)
+            val pendingSvcDeletes = processPendingDeletes("services", servicesCol)
+            remoteServices.keys.removeAll(pendingSvcDeletes)
 
-                    runCatching {
-                        Tasks.await(servicesCol.document(cleanSvcId).set(sMap), 15, TimeUnit.SECONDS)
-                        mergedServices.add(localS.copy(id = cleanSvcId, vehicleId = targetVehId))
+            val serviceOutcome = mergeCollection(
+                collectionKey = "services",
+                remoteEntries = remoteServices,
+                localItems = _serviceRecords.value,
+                idOf = { it.id },
+                updatedAtOf = { it.updatedAt },
+                copyWithId = { s, id ->
+                    s.copy(
+                        id = id,
+                        vehicleId = if (s.vehicleId in remoteVehicleIds) s.vehicleId else defaultVehicleId
+                    )
+                },
+                withUpdatedAt = { s, ts -> s.copy(updatedAt = ts) },
+                defaultIds = setOf("s-1", "s-2"),
+                createRemote = { docId, service ->
+                    val targetVehId =
+                        if (service.vehicleId in remoteVehicleIds) service.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds) {
+                        false
+                    } else {
+                        Tasks.await(
+                            servicesCol.document(docId)
+                                .set(buildServiceCreateMap(uid, docId, service, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
+                    }
+                },
+                updateRemote = { docId, service ->
+                    val targetVehId =
+                        if (service.vehicleId in remoteVehicleIds) service.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds) {
+                        false
+                    } else {
+                        Tasks.await(
+                            servicesCol.document(docId)
+                                .update(buildServiceUpdateMap(service, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
                     }
                 }
-            }
-            if (mergedServices.isNotEmpty()) {
-                _serviceRecords.value = mergedServices.sortedByDescending { it.date }
-            }
+            )
+            hadPushFailure = hadPushFailure || serviceOutcome.hadFailure
+            _serviceRecords.value = serviceOutcome.items.sortedByDescending { it.date }
+            writeSyncedIds("services", serviceOutcome.ids)
 
             // 6. Sync Reminders (/users/{uid}/reminders)
             val remindersCol = userDocRef.collection("reminders")
@@ -1389,16 +1813,15 @@ class NetCarRepository @Inject constructor(
                 15,
                 TimeUnit.SECONDS
             )
-            val remoteReminders = mutableListOf<Reminder>()
-            val remoteRemIds = mutableSetOf<String>()
+            val remoteReminders = linkedMapOf<String, RemoteEntry<Reminder>>()
 
             for (doc in remoteRemSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                remoteRemIds.add(id)
                 val remType = serviceTypeFromCloud(data["type"])
-                remoteReminders.add(
-                    Reminder(
+                val updatedAt = parseTimestampMillis(data["updatedAt"])
+                remoteReminders[id] = RemoteEntry(
+                    model = Reminder(
                         id = id,
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         title = (data["title"] as? String) ?: remType.displayName,
@@ -1410,87 +1833,87 @@ class NetCarRepository @Inject constructor(
                         nextDueDate = parseIsoDateOrNull(data["nextDueDate"]),
                         nextDueOdometer = (data["nextDueOdometer"] as? Number)?.toInt(),
                         isRecurring = (data["isRecurring"] as? Boolean) ?: false,
-                        isCompleted = !((data["isActive"] as? Boolean) ?: true)
-                    )
+                        isCompleted = !((data["isActive"] as? Boolean) ?: true),
+                        updatedAt = updatedAt
+                    ),
+                    updatedAt = updatedAt
                 )
             }
 
             val pendingReminderUpdates = prefs
                 .getStringSet(KEY_PENDING_REMINDER_UPDATES, emptySet())
                 .orEmpty().toMutableSet()
-            val pendingReminderDeletes = prefs
-                .getStringSet(KEY_PENDING_REMINDER_DELETES, emptySet())
-                .orEmpty().toMutableSet()
+            val pendingReminderDeletes = processPendingDeletes("reminders", remindersCol)
+            remoteReminders.keys.removeAll(pendingReminderDeletes)
 
-            val mergedRemindersById = remoteReminders.associateBy { it.id }.toMutableMap()
-
-            // Push local deletions to the cloud (and hide them locally even if a push fails).
-            for (docId in pendingReminderDeletes.toList()) {
-                mergedRemindersById.remove(docId)
-                remoteRemIds.remove(docId)
-                val deleted = runCatching {
-                    Tasks.await(remindersCol.document(docId).delete(), 15, TimeUnit.SECONDS)
-                    true
-                }.getOrDefault(false)
-                if (deleted) {
-                    pendingReminderDeletes.remove(docId)
-                }
-            }
-
-            for (localR in _reminders.value) {
-                val cleanRemId = sanitizeDocId(localR.id, "r")
-                if (cleanRemId in pendingReminderDeletes) continue
-                val targetVehId = if (localR.vehicleId in remoteVehicleIds) localR.vehicleId else defaultVehicleId
-                if (targetVehId !in remoteVehicleIds) continue
-
-                if (cleanRemId in remoteRemIds) {
-                    // Remote wins unless the user edited this reminder locally since the last sync.
-                    if (cleanRemId in pendingReminderUpdates) {
-                        val updated = runCatching {
-                            Tasks.await(
-                                remindersCol.document(cleanRemId)
-                                    .update(buildReminderUpdateMap(localR, targetVehId)),
-                                15,
-                                TimeUnit.SECONDS
-                            )
-                            true
-                        }.getOrDefault(false)
-                        if (updated) pendingReminderUpdates.remove(cleanRemId)
-                        mergedRemindersById[cleanRemId] = localR.copy(id = cleanRemId, vehicleId = targetVehId)
-                    }
-                } else {
-                    val created = runCatching {
+            val reminderOutcome = mergeCollection(
+                collectionKey = "reminders",
+                remoteEntries = remoteReminders,
+                localItems = _reminders.value,
+                idOf = { it.id },
+                updatedAtOf = { it.updatedAt },
+                copyWithId = { r, id ->
+                    r.copy(
+                        id = id,
+                        vehicleId = if (r.vehicleId in remoteVehicleIds) r.vehicleId else defaultVehicleId
+                    )
+                },
+                withUpdatedAt = { r, ts -> r.copy(updatedAt = ts) },
+                defaultIds = setOf("r-1", "r-2", "r-3"),
+                forceLocalUpdate = { docId -> docId in pendingReminderUpdates },
+                createRemote = { docId, reminder ->
+                    val targetVehId =
+                        if (reminder.vehicleId in remoteVehicleIds) reminder.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds) {
+                        false
+                    } else {
                         Tasks.await(
-                            remindersCol.document(cleanRemId)
-                                .set(buildReminderCreateMap(uid, cleanRemId, localR, targetVehId)),
+                            remindersCol.document(docId)
+                                .set(buildReminderCreateMap(uid, docId, reminder, targetVehId)),
                             15,
                             TimeUnit.SECONDS
                         )
                         true
-                    }.getOrDefault(false)
-                    if (created) {
-                        remoteRemIds.add(cleanRemId)
-                        pendingReminderUpdates.remove(cleanRemId)
                     }
-                    mergedRemindersById[cleanRemId] = localR.copy(id = cleanRemId, vehicleId = targetVehId)
+                },
+                updateRemote = { docId, reminder ->
+                    val targetVehId =
+                        if (reminder.vehicleId in remoteVehicleIds) reminder.vehicleId else defaultVehicleId
+                    if (targetVehId !in remoteVehicleIds) {
+                        false
+                    } else {
+                        Tasks.await(
+                            remindersCol.document(docId)
+                                .update(buildReminderUpdateMap(reminder, targetVehId)),
+                            15,
+                            TimeUnit.SECONDS
+                        )
+                        true
+                    }
                 }
-            }
-
-            // Drop pending edits for reminders that no longer exist locally.
-            val localReminderIds = _reminders.value.map { sanitizeDocId(it.id, "r") }.toSet()
-            pendingReminderUpdates.retainAll(localReminderIds)
-
+            )
+            hadPushFailure = hadPushFailure || reminderOutcome.hadFailure
+            pendingReminderUpdates.removeAll(reminderOutcome.pushedIds)
+            pendingReminderUpdates.retainAll(
+                reminderOutcome.items.map { sanitizeDocId(it.id, "r") }.toSet()
+            )
             prefs.edit()
                 .putStringSet(KEY_PENDING_REMINDER_UPDATES, pendingReminderUpdates)
-                .putStringSet(KEY_PENDING_REMINDER_DELETES, pendingReminderDeletes)
                 .apply()
+            _reminders.value = reminderOutcome.items
+            writeSyncedIds("reminders", reminderOutcome.ids)
 
-            if (mergedRemindersById.isNotEmpty()) {
-                _reminders.value = mergedRemindersById.values.toList()
+            val maxUpdatedAt = sequenceOf(
+                _vehicles.value.maxOfOrNull { it.updatedAt } ?: 0L,
+                _fillUps.value.maxOfOrNull { it.updatedAt } ?: 0L,
+                _expenses.value.maxOfOrNull { it.updatedAt } ?: 0L,
+                _serviceRecords.value.maxOfOrNull { it.updatedAt } ?: 0L,
+                _reminders.value.maxOfOrNull { it.updatedAt } ?: 0L
+            ).maxOrNull() ?: 0L
+            val syncTime = maxOf(System.currentTimeMillis(), maxUpdatedAt + 1L)
+            if (!hadPushFailure) {
+                prefs.edit().putLong("last_sync_ts", syncTime).apply()
             }
-
-            val syncTime = System.currentTimeMillis()
-            prefs.edit().putLong("last_sync_ts", syncTime).apply()
             _userSettings.value = _userSettings.value.copy(
                 isDriveBackupConnected = true,
                 connectedEmail = email,

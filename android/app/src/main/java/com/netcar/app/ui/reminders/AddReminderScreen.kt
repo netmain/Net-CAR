@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
@@ -72,6 +73,7 @@ fun AddReminderScreen(
     var serviceDropdownExpanded by remember { mutableStateOf(false) }
     var showDueDatePicker by remember { mutableStateOf(false) }
     var showLastServiceDatePicker by remember { mutableStateOf(false) }
+    var showDeleteConfirm by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -324,7 +326,57 @@ fun AddReminderScreen(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
+
+            if (isEditing) {
+                TextButton(
+                    onClick = { showDeleteConfirm = true },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (isFr) "Supprimer le rappel" else "Delete Reminder",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                }
+            }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = {
+                Text(if (isFr) "Supprimer ce rappel ?" else "Delete this reminder?")
+            },
+            text = {
+                Text(
+                    if (isFr) {
+                        "Le rappel sera supprimé du téléphone et du cloud lors de la prochaine synchronisation."
+                    } else {
+                        "This reminder will be removed from your phone and from the cloud on the next sync."
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        formState.editingReminderId?.let { viewModel.deleteReminder(it) }
+                        onNavigateBack()
+                    }
+                ) {
+                    Text(
+                        text = if (isFr) "Supprimer" else "Delete",
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text(if (isFr) "Annuler" else "Cancel")
+                }
+            }
+        )
     }
 
     if (showDueDatePicker) {

@@ -71,6 +71,7 @@ export interface FillUp {
   station?: string;
   notes?: string;
   createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Expense {
@@ -84,6 +85,7 @@ export interface Expense {
   odometer?: number;
   notes?: string;
   createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Service {
@@ -98,6 +100,7 @@ export interface Service {
   receiptUrl?: string;
   notes?: string;
   createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface Reminder {

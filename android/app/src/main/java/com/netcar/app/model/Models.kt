@@ -71,7 +71,8 @@ data class Vehicle(
     val fuelType: FuelType = FuelType.GASOLINE,
     val photoUrl: String = "",
     val currentOdometer: Int = 0,
-    val notes: String = ""
+    val notes: String = "",
+    val updatedAt: Long = 0L
 ) {
     val displayName: String
         get() = if (name.isNotBlank()) name else "$make $model"
@@ -88,7 +89,8 @@ data class FillUp(
     val fuelType: FuelType = FuelType.GASOLINE,
     val isFullTank: Boolean = true,
     val station: String = "",
-    val notes: String = ""
+    val notes: String = "",
+    val updatedAt: Long = 0L
 )
 
 data class Expense(
@@ -100,7 +102,8 @@ data class Expense(
     val description: String,
     val receiptUrl: String = "",
     val odometer: Int? = null,
-    val notes: String = ""
+    val notes: String = "",
+    val updatedAt: Long = 0L
 )
 
 data class ServiceRecord(
@@ -113,7 +116,8 @@ data class ServiceRecord(
     val description: String,
     val parts: List<String> = emptyList(),
     val receiptUrl: String = "",
-    val notes: String = ""
+    val notes: String = "",
+    val updatedAt: Long = 0L
 )
 
 data class Reminder(
@@ -128,7 +132,8 @@ data class Reminder(
     val nextDueDate: Long? = null,
     val nextDueOdometer: Int? = null,
     val isRecurring: Boolean = false,
-    val isCompleted: Boolean = false
+    val isCompleted: Boolean = false,
+    val updatedAt: Long = 0L
 ) {
     fun isOverdue(currentOdometer: Int, currentDate: Long = System.currentTimeMillis()): Boolean {
         if (isCompleted) return false

@@ -28,6 +28,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  deleteField,
   onSnapshot,
   serverTimestamp,
   query,
@@ -393,6 +394,560 @@ function normalizeTimestampField(val: any): string | undefined {
   return String(val);
 }
 
+function toTimestampMs(value: any): number {
+  if (!value) return 0;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof value?.toMillis === 'function') {
+    const ms = value.toMillis();
+    return Number.isFinite(ms) ? ms : 0;
+  }
+  if (typeof value?.toDate === 'function') {
+    const date = value.toDate();
+    return date instanceof Date && Number.isFinite(date.getTime()) ? date.getTime() : 0;
+  }
+  if (typeof value?.seconds === 'number') {
+    return value.seconds * 1000 + (Number(value.nanoseconds) || 0) / 1_000_000;
+  }
+  return 0;
+}
+
+function readStringArray(key: string): string[] | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(key);
+  if (raw === null) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeStringArray(key: string, values: Iterable<string>) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(Array.from(new Set(values))));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function readSyncedIds(collectionName: string): Set<string> | null {
+  const values = readStringArray(`netcar_synced_ids_${collectionName}`);
+  return values === null ? null : new Set(values);
+}
+
+function writeSyncedIds(collectionName: string, ids: Iterable<string>) {
+  writeStringArray(`netcar_synced_ids_${collectionName}`, ids);
+}
+
+function readPendingDeletes(collectionName: string): Set<string> {
+  return new Set(readStringArray(`netcar_pending_deletes_${collectionName}`) || []);
+}
+
+function writePendingDeletes(collectionName: string, ids: Set<string>) {
+  writeStringArray(`netcar_pending_deletes_${collectionName}`, ids);
+}
+
+function markPendingDelete(collectionName: string, id: string) {
+  const pending = readPendingDeletes(collectionName);
+  pending.add(id);
+  writePendingDeletes(collectionName, pending);
+}
+
+function unmarkPendingDelete(collectionName: string, id: string) {
+  const pending = readPendingDeletes(collectionName);
+  if (pending.delete(id)) {
+    writePendingDeletes(collectionName, pending);
+  }
+}
+
+function getLastSyncMs(): number {
+  if (typeof window === 'undefined') return 0;
+  const raw = localStorage.getItem('netcar_last_sync_ts');
+  const parsed = raw ? Number(raw) : 0;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function setLastSyncMs(ms: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem('netcar_last_sync_ts', String(ms));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+function readLocalCollection<T>(key: string, fallback: T[]): T[] {
+  if (typeof window === 'undefined') return fallback;
+  const raw = localStorage.getItem(key);
+  if (raw === null) return fallback;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as T[]) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+interface RemoteEntry<T> {
+  item: T;
+  updatedAtMs: number;
+}
+
+interface MergeCollectionResult<T> {
+  items: T[];
+  ids: Set<string>;
+  pushedCount: number;
+  hadFailure: boolean;
+}
+
+async function processPendingDeletes(
+  collectionName: string,
+  collectionPath: string
+): Promise<Set<string>> {
+  const pending = readPendingDeletes(collectionName);
+  if (pending.size === 0) return pending;
+
+  for (const id of Array.from(pending)) {
+    try {
+      await deleteDoc(doc(db, collectionPath, id));
+      pending.delete(id);
+      const synced = readSyncedIds(collectionName);
+      if (synced) {
+        synced.delete(id);
+        writeSyncedIds(collectionName, synced);
+      }
+    } catch {
+      // Keep the deletion queued for the next sync attempt.
+    }
+  }
+  writePendingDeletes(collectionName, pending);
+  return pending;
+}
+
+async function mergeCollection<T>(
+  collectionName: string,
+  localItems: T[],
+  remoteItems: Map<string, RemoteEntry<T>>,
+  lastSyncMs: number,
+  options: {
+    getId: (item: T) => string;
+    getUpdatedAtMs: (item: T) => number;
+    withUpdatedAt: (item: T, iso: string) => T;
+    remap: (item: T, id: string) => T;
+    createRemote: (id: string, item: T) => Promise<void>;
+    updateRemote: (id: string, item: T) => Promise<void>;
+  }
+): Promise<MergeCollectionResult<T>> {
+  const previousSyncedIds = readSyncedIds(collectionName);
+  const pendingDeletes = readPendingDeletes(collectionName);
+  const merged = new Map<string, T>();
+
+  // Remote documents win by default; pending local deletions are hidden until pushed.
+  for (const [id, entry] of remoteItems) {
+    if (!pendingDeletes.has(id)) {
+      merged.set(id, options.remap(entry.item, id));
+    }
+  }
+
+  let pushedCount = 0;
+  let hadFailure = false;
+  const nowIso = new Date().toISOString();
+
+  for (const local of localItems) {
+    const id = options.getId(local);
+    if (!id || pendingDeletes.has(id)) continue;
+
+    const localUpdatedMs = options.getUpdatedAtMs(local);
+    const remote = remoteItems.get(id);
+
+    if (remote) {
+      // Only items changed since the last successful sync may override the cloud.
+      const localChanged = localUpdatedMs > 0 && localUpdatedMs > lastSyncMs;
+      const remoteChanged = remote.updatedAtMs > 0 && remote.updatedAtMs > lastSyncMs;
+      let localWins = false;
+
+      if (lastSyncMs > 0) {
+        if (localChanged && !remoteChanged) {
+          localWins = true;
+        } else if (localChanged && remoteChanged) {
+          localWins = localUpdatedMs >= remote.updatedAtMs;
+        }
+      } else if (localUpdatedMs > 0 && remote.updatedAtMs > 0) {
+        // First sync after this device received the updated app: compare the
+        // records directly. Stale records from older versions have no updatedAt
+        // and therefore never override the cloud.
+        localWins = localUpdatedMs > remote.updatedAtMs;
+      } else if (localUpdatedMs > 0 && remote.updatedAtMs === 0) {
+        localWins = true;
+      }
+
+      if (localWins) {
+        try {
+          await options.updateRemote(id, local);
+          pushedCount++;
+          merged.set(id, options.withUpdatedAt(options.remap(local, id), nowIso));
+        } catch {
+          hadFailure = true;
+          merged.set(id, options.withUpdatedAt(options.remap(local, id), nowIso));
+        }
+      } else {
+        merged.set(id, options.remap(remote.item, id));
+      }
+    } else {
+      // Missing remotely: push new local records. If this ID was previously synced,
+      // treat the absence as a remote deletion unless it changed locally since then.
+      const shouldPush =
+        previousSyncedIds === null
+          ? true
+          : !previousSyncedIds.has(id) || (localUpdatedMs > 0 && localUpdatedMs > lastSyncMs);
+
+      if (shouldPush) {
+        try {
+          await options.createRemote(id, local);
+          pushedCount++;
+          merged.set(id, options.withUpdatedAt(options.remap(local, id), nowIso));
+        } catch {
+          hadFailure = true;
+          merged.set(id, options.withUpdatedAt(options.remap(local, id), nowIso));
+        }
+      }
+    }
+  }
+
+  const ids = new Set(merged.keys());
+  writeSyncedIds(collectionName, ids);
+  return { items: Array.from(merged.values()), ids, pushedCount, hadFailure };
+}
+
+function mapVehicleFromDoc(raw: any, docId: string): Vehicle {
+  return {
+    id: raw.id || docId,
+    name: raw.name,
+    make: raw.make || 'Vehicle',
+    model: raw.model || 'Model',
+    year: Number(raw.year) || 2021,
+    plate: raw.plate,
+    vin: raw.vin,
+    fuelType: (raw.fuelType || 'gasoline') as Vehicle['fuelType'],
+    photoUrl: raw.photoUrl,
+    currentOdometer: Number(raw.currentOdometer) || 0,
+    notes: raw.notes,
+    createdAt: normalizeTimestampField(raw.createdAt),
+    updatedAt: normalizeTimestampField(raw.updatedAt),
+  };
+}
+
+function mapFillUpFromDoc(raw: any, docId: string): FillUp {
+  return {
+    id: raw.id || docId,
+    vehicleId: raw.vehicleId,
+    date: raw.date,
+    odometer: Number(raw.odometer) || 0,
+    volume: Number(raw.volume) || 0,
+    pricePerUnit: Number(raw.pricePerUnit) || 0,
+    totalCost: Number(raw.totalCost) || 0,
+    fuelType: (raw.fuelType || 'gasoline') as FillUp['fuelType'],
+    isFullTank: Boolean(raw.isFullTank),
+    station: raw.station,
+    notes: raw.notes,
+    createdAt: normalizeTimestampField(raw.createdAt),
+    updatedAt: normalizeTimestampField(raw.updatedAt),
+  };
+}
+
+function mapExpenseFromDoc(raw: any, docId: string): Expense {
+  return {
+    id: raw.id || docId,
+    vehicleId: raw.vehicleId,
+    date: raw.date,
+    category: (raw.category || 'other') as Expense['category'],
+    amount: Number(raw.amount) || 0,
+    description: raw.description || '',
+    receiptUrl: raw.receiptUrl,
+    odometer: raw.odometer !== undefined ? Number(raw.odometer) : undefined,
+    notes: raw.notes,
+    createdAt: normalizeTimestampField(raw.createdAt),
+    updatedAt: normalizeTimestampField(raw.updatedAt),
+  };
+}
+
+function mapServiceFromDoc(raw: any, docId: string): Service {
+  return {
+    id: raw.id || docId,
+    vehicleId: raw.vehicleId,
+    date: raw.date,
+    type: (raw.type || 'other') as Service['type'],
+    odometer: Number(raw.odometer) || 0,
+    cost: Number(raw.cost) || 0,
+    description: raw.description || '',
+    parts: Array.isArray(raw.parts) ? raw.parts : undefined,
+    receiptUrl: raw.receiptUrl,
+    notes: raw.notes,
+    createdAt: normalizeTimestampField(raw.createdAt),
+    updatedAt: normalizeTimestampField(raw.updatedAt),
+  };
+}
+
+function mapReminderFromDoc(raw: any, docId: string): Reminder {
+  return {
+    id: raw.id || docId,
+    vehicleId: raw.vehicleId,
+    type: raw.type || 'other',
+    title: raw.title,
+    intervalKm: raw.intervalKm !== undefined ? Number(raw.intervalKm) : undefined,
+    intervalDays: raw.intervalDays !== undefined ? Number(raw.intervalDays) : undefined,
+    lastServiceDate: raw.lastServiceDate,
+    lastServiceOdometer:
+      raw.lastServiceOdometer !== undefined ? Number(raw.lastServiceOdometer) : undefined,
+    nextDueDate: raw.nextDueDate,
+    nextDueOdometer:
+      raw.nextDueOdometer !== undefined ? Number(raw.nextDueOdometer) : undefined,
+    isRecurring: Boolean(raw.isRecurring),
+    isActive: Boolean(raw.isActive),
+    createdAt: normalizeTimestampField(raw.createdAt),
+    updatedAt: normalizeTimestampField(raw.updatedAt),
+  };
+}
+
+const VALID_FUEL_TYPES = [
+  'gasoline',
+  'diesel',
+  'lpg',
+  'electric',
+  'hybrid',
+  'ethanol',
+  'cng',
+];
+const VALID_CURRENCIES = ['DZD', 'EUR', 'USD', 'CAD', 'GBP', 'MAD', 'CHF'];
+
+function buildVehicleCreateData(uid: string, id: string, v: Vehicle): Record<string, any> {
+  return stripUndefined({
+    id,
+    userId: uid,
+    name: v.name ? v.name.slice(0, 100) : undefined,
+    make: (v.make || 'Vehicle').slice(0, 100),
+    model: (v.model || 'Model').slice(0, 100),
+    year: Math.min(2100, Math.max(1900, Number(v.year) || 2021)),
+    plate: v.plate ? v.plate.slice(0, 30) : undefined,
+    vin: v.vin ? v.vin.slice(0, 30) : undefined,
+    fuelType: VALID_FUEL_TYPES.includes(v.fuelType) ? v.fuelType : 'gasoline',
+    photoUrl: v.photoUrl ? v.photoUrl.slice(0, 2048) : undefined,
+    currentOdometer: Math.max(0, Number(v.currentOdometer) || 0),
+    notes: v.notes ? v.notes.slice(0, 5000) : undefined,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+function buildVehicleUpdateData(v: Vehicle): Record<string, any> {
+  return {
+    make: (v.make || 'Vehicle').slice(0, 100),
+    model: (v.model || 'Model').slice(0, 100),
+    year: Math.min(2100, Math.max(1900, Number(v.year) || 2021)),
+    fuelType: VALID_FUEL_TYPES.includes(v.fuelType) ? v.fuelType : 'gasoline',
+    currentOdometer: Math.max(0, Number(v.currentOdometer) || 0),
+    name: v.name ? v.name.slice(0, 100) : deleteField(),
+    plate: v.plate ? v.plate.slice(0, 30) : deleteField(),
+    vin: v.vin ? v.vin.slice(0, 30) : deleteField(),
+    photoUrl: v.photoUrl ? v.photoUrl.slice(0, 2048) : deleteField(),
+    notes: v.notes ? v.notes.slice(0, 5000) : deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function buildFillUpCreateData(
+  uid: string,
+  id: string,
+  f: FillUp,
+  vehicleId: string
+): Record<string, any> {
+  return stripUndefined({
+    id,
+    userId: uid,
+    vehicleId,
+    date: String(f.date || new Date().toISOString()).slice(0, 64),
+    odometer: Math.max(0, Number(f.odometer) || 0),
+    volume: Math.max(0, Number(f.volume) || 0),
+    pricePerUnit: Math.max(0, Number(f.pricePerUnit) || 0),
+    totalCost: Math.max(0, Number(f.totalCost) || 0),
+    fuelType: String(f.fuelType || 'gasoline').slice(0, 30),
+    isFullTank: Boolean(f.isFullTank),
+    station: f.station ? f.station.slice(0, 200) : undefined,
+    notes: f.notes ? f.notes.slice(0, 5000) : undefined,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+function buildFillUpUpdateData(f: FillUp, vehicleId: string): Record<string, any> {
+  return {
+    vehicleId,
+    date: String(f.date || new Date().toISOString()).slice(0, 64),
+    odometer: Math.max(0, Number(f.odometer) || 0),
+    volume: Math.max(0, Number(f.volume) || 0),
+    pricePerUnit: Math.max(0, Number(f.pricePerUnit) || 0),
+    totalCost: Math.max(0, Number(f.totalCost) || 0),
+    fuelType: String(f.fuelType || 'gasoline').slice(0, 30),
+    isFullTank: Boolean(f.isFullTank),
+    station: f.station ? f.station.slice(0, 200) : deleteField(),
+    notes: f.notes ? f.notes.slice(0, 5000) : deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function buildExpenseCreateData(
+  uid: string,
+  id: string,
+  e: Expense,
+  vehicleId: string
+): Record<string, any> {
+  return stripUndefined({
+    id,
+    userId: uid,
+    vehicleId,
+    date: String(e.date || new Date().toISOString()).slice(0, 64),
+    category: String(e.category || 'other').slice(0, 100),
+    amount: Math.max(0, Number(e.amount) || 0),
+    description: (e.description || 'Expense').slice(0, 500),
+    receiptUrl: e.receiptUrl ? e.receiptUrl.slice(0, 2048) : undefined,
+    odometer:
+      e.odometer !== undefined && Number(e.odometer) >= 0 ? Number(e.odometer) : undefined,
+    notes: e.notes ? e.notes.slice(0, 5000) : undefined,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+function buildExpenseUpdateData(e: Expense, vehicleId: string): Record<string, any> {
+  return {
+    vehicleId,
+    date: String(e.date || new Date().toISOString()).slice(0, 64),
+    category: String(e.category || 'other').slice(0, 100),
+    amount: Math.max(0, Number(e.amount) || 0),
+    description: (e.description || 'Expense').slice(0, 500),
+    receiptUrl: e.receiptUrl ? e.receiptUrl.slice(0, 2048) : deleteField(),
+    odometer:
+      e.odometer !== undefined && Number(e.odometer) >= 0
+        ? Number(e.odometer)
+        : deleteField(),
+    notes: e.notes ? e.notes.slice(0, 5000) : deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function buildServiceCreateData(
+  uid: string,
+  id: string,
+  s: Service,
+  vehicleId: string
+): Record<string, any> {
+  return stripUndefined({
+    id,
+    userId: uid,
+    vehicleId,
+    date: String(s.date || new Date().toISOString()).slice(0, 64),
+    type: String(s.type || 'other').slice(0, 100),
+    odometer: Math.max(0, Number(s.odometer) || 0),
+    cost: Math.max(0, Number(s.cost) || 0),
+    description: (s.description || 'Service').slice(0, 500),
+    parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
+    receiptUrl: s.receiptUrl ? s.receiptUrl.slice(0, 2048) : undefined,
+    notes: s.notes ? s.notes.slice(0, 5000) : undefined,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+function buildServiceUpdateData(s: Service, vehicleId: string): Record<string, any> {
+  return {
+    vehicleId,
+    date: String(s.date || new Date().toISOString()).slice(0, 64),
+    type: String(s.type || 'other').slice(0, 100),
+    odometer: Math.max(0, Number(s.odometer) || 0),
+    cost: Math.max(0, Number(s.cost) || 0),
+    description: (s.description || 'Service').slice(0, 500),
+    parts:
+      s.parts && s.parts.length > 0
+        ? s.parts.slice(0, 50).map((p) => String(p).slice(0, 200))
+        : deleteField(),
+    receiptUrl: s.receiptUrl ? s.receiptUrl.slice(0, 2048) : deleteField(),
+    notes: s.notes ? s.notes.slice(0, 5000) : deleteField(),
+    updatedAt: serverTimestamp(),
+  };
+}
+
+function buildReminderCreateData(
+  uid: string,
+  id: string,
+  r: Reminder,
+  vehicleId: string
+): Record<string, any> {
+  return stripUndefined({
+    id,
+    userId: uid,
+    vehicleId,
+    type: String(r.type || 'other').slice(0, 100),
+    title: r.title ? r.title.slice(0, 200) : undefined,
+    intervalKm:
+      r.intervalKm !== undefined && Number(r.intervalKm) >= 0
+        ? Number(r.intervalKm)
+        : undefined,
+    intervalDays:
+      r.intervalDays !== undefined && Number(r.intervalDays) >= 0
+        ? Number(r.intervalDays)
+        : undefined,
+    lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate).slice(0, 64) : undefined,
+    lastServiceOdometer:
+      r.lastServiceOdometer !== undefined && Number(r.lastServiceOdometer) >= 0
+        ? Number(r.lastServiceOdometer)
+        : undefined,
+    nextDueDate: r.nextDueDate ? String(r.nextDueDate).slice(0, 64) : undefined,
+    nextDueOdometer:
+      r.nextDueOdometer !== undefined && Number(r.nextDueOdometer) >= 0
+        ? Number(r.nextDueOdometer)
+        : undefined,
+    isRecurring: Boolean(r.isRecurring),
+    isActive: Boolean(r.isActive),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+function buildReminderUpdateData(r: Reminder, vehicleId: string): Record<string, any> {
+  return {
+    vehicleId,
+    type: String(r.type || 'other').slice(0, 100),
+    title: r.title ? r.title.slice(0, 200) : deleteField(),
+    intervalKm:
+      r.intervalKm !== undefined && Number(r.intervalKm) >= 0
+        ? Number(r.intervalKm)
+        : deleteField(),
+    intervalDays:
+      r.intervalDays !== undefined && Number(r.intervalDays) >= 0
+        ? Number(r.intervalDays)
+        : deleteField(),
+    lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate).slice(0, 64) : deleteField(),
+    lastServiceOdometer:
+      r.lastServiceOdometer !== undefined && Number(r.lastServiceOdometer) >= 0
+        ? Number(r.lastServiceOdometer)
+        : deleteField(),
+    nextDueDate: r.nextDueDate ? String(r.nextDueDate).slice(0, 64) : deleteField(),
+    nextDueOdometer:
+      r.nextDueOdometer !== undefined && Number(r.nextDueOdometer) >= 0
+        ? Number(r.nextDueOdometer)
+        : deleteField(),
+    isRecurring: Boolean(r.isRecurring),
+    isActive: Boolean(r.isActive),
+    updatedAt: serverTimestamp(),
+  };
+}
+
 const AppContext = createContext<AppContextType | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
@@ -576,7 +1131,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const currentSavedActiveId =
           localStorage.getItem('netcar_active_vehicle_id') || activeVehicleId || 'veh-1';
 
-        const validVehicles = vehicles.length > 0 ? vehicles : initialVehicles;
+        // Read local data directly from storage: this effect runs once on mount and
+        // React state may not have been hydrated from localStorage yet.
+        const localVehicles = readLocalCollection<Vehicle>('netcar_vehicles', initialVehicles);
+        const localFillUps = readLocalCollection<FillUp>('netcar_fillups', initialFillUps);
+        const localExpenses = readLocalCollection<Expense>('netcar_expenses', initialExpenses);
+        const localServices = readLocalCollection<Service>('netcar_services', initialServices);
+        const localReminders = readLocalCollection<Reminder>('netcar_reminders', initialReminders);
+
+        const validVehicles = localVehicles;
         const defaultVehId = validVehicles[0]?.id || 'veh-1';
         const validVehicleIds = new Set(validVehicles.map((v) => v.id));
 
@@ -602,62 +1165,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         isCloudReadyRef.current = true;
 
-        // Check existing vehicles in Firestore and push any local vehicles not yet in Cloud
+        // Only import local data when the cloud account is empty. When cloud data
+        // already exists, the real-time listeners below become the source of truth
+        // and syncToCloudNow merges changes per record.
         const vehiclesColRef = collection(db, 'users', uid, 'vehicles');
         const existingVehSnap = await getDocs(query(vehiclesColRef, where('userId', '==', uid)));
         const remoteVehIds = new Set(existingVehSnap.docs.map((d) => d.data().id || d.id));
 
-        const parentBatch = writeBatch(db);
-        let parentOpsCount = 0;
+        if (existingVehSnap.empty && validVehicles.length > 0) {
+          const parentBatch = writeBatch(db);
+          let parentOpsCount = 0;
 
-        for (const v of validVehicles) {
-          validVehicleIds.add(v.id);
-          if (!remoteVehIds.has(v.id)) {
+          for (const v of validVehicles) {
             parentBatch.set(
               doc(db, 'users', uid, 'vehicles', v.id),
-              stripUndefined({
-                id: v.id,
-                userId: uid,
-                name: v.name ? v.name.slice(0, 100) : undefined,
-                make: (v.make || 'Vehicle').slice(0, 100),
-                model: (v.model || 'Model').slice(0, 100),
-                year: Math.min(2100, Math.max(1900, Number(v.year) || 2021)),
-                plate: v.plate ? v.plate.slice(0, 30) : undefined,
-                vin: v.vin ? v.vin.slice(0, 30) : undefined,
-                fuelType: [
-                  'gasoline',
-                  'diesel',
-                  'lpg',
-                  'electric',
-                  'hybrid',
-                  'ethanol',
-                  'cng',
-                ].includes(v.fuelType)
-                  ? v.fuelType
-                  : 'gasoline',
-                photoUrl: v.photoUrl ? v.photoUrl.slice(0, 2048) : undefined,
-                currentOdometer: Math.max(0, Number(v.currentOdometer) || 0),
-                notes: v.notes ? v.notes.slice(0, 5000) : undefined,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              })
+              buildVehicleCreateData(uid, v.id, v)
             );
             parentOpsCount++;
           }
-        }
 
-        if (parentOpsCount > 0) {
-          await parentBatch.commit();
+          if (parentOpsCount > 0) {
+            await parentBatch.commit();
+          }
         }
         for (const rId of remoteVehIds) {
           validVehicleIds.add(rId);
         }
 
-        if (existingVehSnap.empty) {
+        if (existingVehSnap.empty && validVehicles.length > 0) {
           const childBatch = writeBatch(db);
           let childCount = 0;
 
-          for (const f of fillUps) {
+          for (const f of localFillUps) {
             const targetVehId = validVehicleIds.has(f.vehicleId) ? f.vehicleId : defaultVehId;
             childBatch.set(
               doc(db, 'users', uid, 'fillups', f.id),
@@ -681,7 +1220,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             childCount++;
           }
 
-          for (const e of expenses) {
+          for (const e of localExpenses) {
             const targetVehId = validVehicleIds.has(e.vehicleId) ? e.vehicleId : defaultVehId;
             childBatch.set(
               doc(db, 'users', uid, 'expenses', e.id),
@@ -706,7 +1245,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             childCount++;
           }
 
-          for (const s of services) {
+          for (const s of localServices) {
             const targetVehId = validVehicleIds.has(s.vehicleId) ? s.vehicleId : defaultVehId;
             childBatch.set(
               doc(db, 'users', uid, 'services', s.id),
@@ -729,7 +1268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             childCount++;
           }
 
-          for (const r of reminders) {
+          for (const r of localReminders) {
             const targetVehId = validVehicleIds.has(r.vehicleId) ? r.vehicleId : defaultVehId;
             childBatch.set(
               doc(db, 'users', uid, 'reminders', r.id),
@@ -820,24 +1359,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubVehicles = onSnapshot(
         query(collection(db, vehiclesPath), where('userId', '==', uid)),
         (snap) => {
-          const list: Vehicle[] = snap.docs.map((d) => {
-            const raw = d.data();
-            return {
-              id: raw.id || d.id,
-              name: raw.name,
-              make: raw.make,
-              model: raw.model,
-              year: Number(raw.year),
-              plate: raw.plate,
-              vin: raw.vin,
-              fuelType: raw.fuelType,
-              photoUrl: raw.photoUrl,
-              currentOdometer: Number(raw.currentOdometer) || 0,
-              notes: raw.notes,
-              createdAt: normalizeTimestampField(raw.createdAt),
-              updatedAt: normalizeTimestampField(raw.updatedAt),
-            };
-          });
+          const pending = readPendingDeletes('vehicles');
+          const list: Vehicle[] = snap.docs
+            .map((d) => mapVehicleFromDoc(d.data(), d.id))
+            .filter((v) => !pending.has(v.id));
           setVehicles(list);
           saveToLocal('netcar_vehicles', list);
           setSyncStatus('synced');
@@ -853,23 +1378,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubFillups = onSnapshot(
         query(collection(db, fillupsPath), where('userId', '==', uid)),
         (snap) => {
-          const list: FillUp[] = snap.docs.map((d) => {
-            const raw = d.data();
-            return {
-              id: raw.id || d.id,
-              vehicleId: raw.vehicleId,
-              date: raw.date,
-              odometer: Number(raw.odometer),
-              volume: Number(raw.volume),
-              pricePerUnit: Number(raw.pricePerUnit),
-              totalCost: Number(raw.totalCost),
-              fuelType: raw.fuelType,
-              isFullTank: Boolean(raw.isFullTank),
-              station: raw.station,
-              notes: raw.notes,
-              createdAt: normalizeTimestampField(raw.createdAt),
-            };
-          });
+          const pending = readPendingDeletes('fillups');
+          const list: FillUp[] = snap.docs
+            .map((d) => mapFillUpFromDoc(d.data(), d.id))
+            .filter((f) => !pending.has(f.id));
           setFillUps(list);
           saveToLocal('netcar_fillups', list);
           setSyncStatus('synced');
@@ -885,21 +1397,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubExpenses = onSnapshot(
         query(collection(db, expensesPath), where('userId', '==', uid)),
         (snap) => {
-          const list: Expense[] = snap.docs.map((d) => {
-            const raw = d.data();
-            return {
-              id: raw.id || d.id,
-              vehicleId: raw.vehicleId,
-              date: raw.date,
-              category: raw.category,
-              amount: Number(raw.amount),
-              description: raw.description,
-              receiptUrl: raw.receiptUrl,
-              odometer: raw.odometer !== undefined ? Number(raw.odometer) : undefined,
-              notes: raw.notes,
-              createdAt: normalizeTimestampField(raw.createdAt),
-            };
-          });
+          const pending = readPendingDeletes('expenses');
+          const list: Expense[] = snap.docs
+            .map((d) => mapExpenseFromDoc(d.data(), d.id))
+            .filter((e) => !pending.has(e.id));
           setExpenses(list);
           saveToLocal('netcar_expenses', list);
           setSyncStatus('synced');
@@ -915,22 +1416,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubServices = onSnapshot(
         query(collection(db, servicesPath), where('userId', '==', uid)),
         (snap) => {
-          const list: Service[] = snap.docs.map((d) => {
-            const raw = d.data();
-            return {
-              id: raw.id || d.id,
-              vehicleId: raw.vehicleId,
-              date: raw.date,
-              type: raw.type,
-              odometer: Number(raw.odometer),
-              cost: Number(raw.cost),
-              description: raw.description,
-              parts: raw.parts,
-              receiptUrl: raw.receiptUrl,
-              notes: raw.notes,
-              createdAt: normalizeTimestampField(raw.createdAt),
-            };
-          });
+          const pending = readPendingDeletes('services');
+          const list: Service[] = snap.docs
+            .map((d) => mapServiceFromDoc(d.data(), d.id))
+            .filter((s) => !pending.has(s.id));
           setServices(list);
           saveToLocal('netcar_services', list);
           setSyncStatus('synced');
@@ -946,29 +1435,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       unsubReminders = onSnapshot(
         query(collection(db, remindersPath), where('userId', '==', uid)),
         (snap) => {
-          const list: Reminder[] = snap.docs.map((d) => {
-            const raw = d.data();
-            return {
-              id: raw.id || d.id,
-              vehicleId: raw.vehicleId,
-              type: raw.type,
-              title: raw.title,
-              intervalKm: raw.intervalKm !== undefined ? Number(raw.intervalKm) : undefined,
-              intervalDays: raw.intervalDays !== undefined ? Number(raw.intervalDays) : undefined,
-              lastServiceDate: raw.lastServiceDate,
-              lastServiceOdometer:
-                raw.lastServiceOdometer !== undefined
-                  ? Number(raw.lastServiceOdometer)
-                  : undefined,
-              nextDueDate: raw.nextDueDate,
-              nextDueOdometer:
-                raw.nextDueOdometer !== undefined ? Number(raw.nextDueOdometer) : undefined,
-              isRecurring: Boolean(raw.isRecurring),
-              isActive: Boolean(raw.isActive),
-              createdAt: normalizeTimestampField(raw.createdAt),
-              updatedAt: normalizeTimestampField(raw.updatedAt),
-            };
-          });
+          const pending = readPendingDeletes('reminders');
+          const list: Reminder[] = snap.docs
+            .map((d) => mapReminderFromDoc(d.data(), d.id))
+            .filter((r) => !pending.has(r.id));
           setReminders(list);
           saveToLocal('netcar_reminders', list);
           setSyncStatus('synced');
@@ -995,7 +1465,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('netcar_active_vehicle_id', id);
       }
       setUserProfile((prev) => {
-        const updated = { ...prev, activeVehicleId: id };
+        const updated = { ...prev, activeVehicleId: id, updatedAt: new Date().toISOString() };
         saveToLocal('netcar_profile', updated);
         return updated;
       });
@@ -1027,7 +1497,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         localStorage.setItem('netcar_lang', newLang);
       }
       setUserProfile((prev) => {
-        const updated = { ...prev, preferredLang: newLang };
+        const updated = { ...prev, preferredLang: newLang, updatedAt: new Date().toISOString() };
         saveToLocal('netcar_profile', updated);
         return updated;
       });
@@ -1152,6 +1622,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteVehicle = async (id: string) => {
+    markPendingDelete('vehicles', id);
     let nextActiveId: string | null = null;
     setVehicles((prev) => {
       const updated = prev.filter((v) => v.id !== id);
@@ -1172,6 +1643,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus('syncing');
       try {
         await deleteDoc(doc(db, 'users', currentUid, 'vehicles', id));
+        unmarkPendingDelete('vehicles', id);
         setSyncStatus('synced');
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
@@ -1183,7 +1655,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addFillUp = async (f: Omit<FillUp, 'id'>) => {
     const id = `f-${Date.now()}`;
-    const newFillUp: FillUp = { ...f, id, createdAt: new Date().toISOString() };
+    const nowIso = new Date().toISOString();
+    const newFillUp: FillUp = { ...f, id, createdAt: nowIso, updatedAt: nowIso };
     setFillUps((prev) => {
       const updated = [newFillUp, ...prev];
       saveToLocal('netcar_fillups', updated);
@@ -1234,6 +1707,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteFillUp = async (id: string) => {
+    markPendingDelete('fillups', id);
     setFillUps((prev) => {
       const updated = prev.filter((f) => f.id !== id);
       saveToLocal('netcar_fillups', updated);
@@ -1246,6 +1720,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus('syncing');
       try {
         await deleteDoc(doc(db, 'users', currentUid, 'fillups', id));
+        unmarkPendingDelete('fillups', id);
         setSyncStatus('synced');
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
@@ -1257,7 +1732,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addExpense = async (e: Omit<Expense, 'id'>) => {
     const id = `e-${Date.now()}`;
-    const newExpense: Expense = { ...e, id, createdAt: new Date().toISOString() };
+    const nowIso = new Date().toISOString();
+    const newExpense: Expense = { ...e, id, createdAt: nowIso, updatedAt: nowIso };
     setExpenses((prev) => {
       const updated = [newExpense, ...prev];
       saveToLocal('netcar_expenses', updated);
@@ -1297,6 +1773,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteExpense = async (id: string) => {
+    markPendingDelete('expenses', id);
     setExpenses((prev) => {
       const updated = prev.filter((e) => e.id !== id);
       saveToLocal('netcar_expenses', updated);
@@ -1309,6 +1786,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus('syncing');
       try {
         await deleteDoc(doc(db, 'users', currentUid, 'expenses', id));
+        unmarkPendingDelete('expenses', id);
         setSyncStatus('synced');
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
@@ -1320,7 +1798,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addService = async (s: Omit<Service, 'id'>) => {
     const id = `s-${Date.now()}`;
-    const newService: Service = { ...s, id, createdAt: new Date().toISOString() };
+    const nowIso = new Date().toISOString();
+    const newService: Service = { ...s, id, createdAt: nowIso, updatedAt: nowIso };
     setServices((prev) => {
       const updated = [newService, ...prev];
       saveToLocal('netcar_services', updated);
@@ -1368,6 +1847,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteService = async (id: string) => {
+    markPendingDelete('services', id);
     setServices((prev) => {
       const updated = prev.filter((s) => s.id !== id);
       saveToLocal('netcar_services', updated);
@@ -1380,6 +1860,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus('syncing');
       try {
         await deleteDoc(doc(db, 'users', currentUid, 'services', id));
+        unmarkPendingDelete('services', id);
         setSyncStatus('synced');
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
@@ -1391,11 +1872,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const addReminder = async (r: Omit<Reminder, 'id'>) => {
     const id = `r-${Date.now()}`;
+    const nowIso = new Date().toISOString();
     const newReminder: Reminder = {
       ...r,
       id,
       isActive: true,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
+      updatedAt: nowIso,
     };
     setReminders((prev) => {
       const updated = [newReminder, ...prev];
@@ -1476,7 +1959,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatedAt: serverTimestamp(),
       };
       setReminders((prev) => {
-        const updated = prev.map((r) => (r.id === id ? { ...r, isActive: false } : r));
+        const updated = prev.map((r) => (r.id === id ? { ...r, isActive: false, updatedAt: nowIso } : r));
         saveToLocal('netcar_reminders', updated);
         return updated;
       });
@@ -1498,6 +1981,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteReminder = async (id: string) => {
+    markPendingDelete('reminders', id);
     setReminders((prev) => {
       const updated = prev.filter((r) => r.id !== id);
       saveToLocal('netcar_reminders', updated);
@@ -1510,6 +1994,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setSyncStatus('syncing');
       try {
         await deleteDoc(doc(db, 'users', currentUid, 'reminders', id));
+        unmarkPendingDelete('reminders', id);
         setSyncStatus('synced');
         setLastSyncedAt(new Date().toISOString());
       } catch (error) {
@@ -1521,7 +2006,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const updatePreferences = (prefs: Partial<UserProfile>) => {
     setUserProfile((prev) => {
-      const updated = { ...prev, ...prefs };
+      const updated = { ...prev, ...prefs, updatedAt: new Date().toISOString() };
       saveToLocal('netcar_profile', updated);
       return updated;
     });
@@ -1572,186 +2057,312 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSyncStatus('syncing');
     try {
       const userDocRef = doc(db, 'users', uid);
-      const validVehicles = vehicles.length > 0 ? vehicles : initialVehicles;
-      const defaultVehId = validVehicles[0]?.id || 'veh-1';
-      const validVehicleIds = new Set(validVehicles.map((v) => v.id));
+      const vehiclesCol = collection(db, 'users', uid, 'vehicles');
+      const fillupsCol = collection(db, 'users', uid, 'fillups');
+      const expensesCol = collection(db, 'users', uid, 'expenses');
+      const servicesCol = collection(db, 'users', uid, 'services');
+      const remindersCol = collection(db, 'users', uid, 'reminders');
 
-      const baseProfile = stripUndefined({
-        userId: uid,
-        name: (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) || 'Pilot',
-        email:
-          (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
-          'driver@netcar.app',
-        preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
-        units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
-        currency: ['DZD', 'EUR', 'USD', 'CAD', 'GBP', 'MAD', 'CHF'].includes(userProfile.currency)
-          ? userProfile.currency
-          : 'DZD',
-        activeVehicleId: validVehicleIds.has(activeVehicleId) ? activeVehicleId : defaultVehId,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      // Use the freshest local snapshot. React state updates are asynchronous, so
+      // flows like "restore backup then sync" would otherwise push stale records.
+      const localVehicles = readLocalCollection<Vehicle>('netcar_vehicles', vehicles);
+      const localFillUps = readLocalCollection<FillUp>('netcar_fillups', fillUps);
+      const localExpenses = readLocalCollection<Expense>('netcar_expenses', expenses);
+      const localServices = readLocalCollection<Service>('netcar_services', services);
+      const localReminders = readLocalCollection<Reminder>('netcar_reminders', reminders);
+      const savedActiveId =
+        (typeof window !== 'undefined'
+          ? localStorage.getItem('netcar_active_vehicle_id')
+          : null) || activeVehicleId;
+
+      // 1. Push deletions queued while offline before reading the cloud, so old
+      // remote copies cannot resurrect records the user deleted locally.
+      await Promise.all([
+        processPendingDeletes('vehicles', `users/${uid}/vehicles`),
+        processPendingDeletes('fillups', `users/${uid}/fillups`),
+        processPendingDeletes('expenses', `users/${uid}/expenses`),
+        processPendingDeletes('services', `users/${uid}/services`),
+        processPendingDeletes('reminders', `users/${uid}/reminders`),
+      ]);
+
+      // 2. Read both sides.
+      const [
+        userSnap,
+        remoteVehSnap,
+        remoteFillSnap,
+        remoteExpSnap,
+        remoteSvcSnap,
+        remoteRemSnap,
+      ] = await Promise.all([
+        getDoc(userDocRef),
+        getDocs(query(vehiclesCol, where('userId', '==', uid))),
+        getDocs(query(fillupsCol, where('userId', '==', uid))),
+        getDocs(query(expensesCol, where('userId', '==', uid))),
+        getDocs(query(servicesCol, where('userId', '==', uid))),
+        getDocs(query(remindersCol, where('userId', '==', uid))),
+      ]);
+
+      const remoteVehicles = new Map<string, RemoteEntry<Vehicle>>();
+      remoteVehSnap.forEach((d) => {
+        const raw = d.data();
+        const item = mapVehicleFromDoc(raw, d.id);
+        remoteVehicles.set(item.id, { item, updatedAtMs: toTimestampMs(raw.updatedAt) });
       });
 
-      // Step 1: Write user profile & all parent vehicles in an initial atomic batch
-      // so parentUserExists and parentVehicleExists are 100% satisfied for child records
-      const parentBatch = writeBatch(db);
-      parentBatch.set(userDocRef, baseProfile);
+      const remoteFillUps = new Map<string, RemoteEntry<FillUp>>();
+      remoteFillSnap.forEach((d) => {
+        const raw = d.data();
+        const item = mapFillUpFromDoc(raw, d.id);
+        remoteFillUps.set(item.id, { item, updatedAtMs: toTimestampMs(raw.updatedAt) });
+      });
 
-      for (const v of validVehicles) {
-        parentBatch.set(
-          doc(db, 'users', uid, 'vehicles', v.id),
+      const remoteExpenses = new Map<string, RemoteEntry<Expense>>();
+      remoteExpSnap.forEach((d) => {
+        const raw = d.data();
+        const item = mapExpenseFromDoc(raw, d.id);
+        remoteExpenses.set(item.id, { item, updatedAtMs: toTimestampMs(raw.updatedAt) });
+      });
+
+      const remoteServices = new Map<string, RemoteEntry<Service>>();
+      remoteSvcSnap.forEach((d) => {
+        const raw = d.data();
+        const item = mapServiceFromDoc(raw, d.id);
+        remoteServices.set(item.id, { item, updatedAtMs: toTimestampMs(raw.updatedAt) });
+      });
+
+      const remoteReminders = new Map<string, RemoteEntry<Reminder>>();
+      remoteRemSnap.forEach((d) => {
+        const raw = d.data();
+        const item = mapReminderFromDoc(raw, d.id);
+        remoteReminders.set(item.id, { item, updatedAtMs: toTimestampMs(raw.updatedAt) });
+      });
+
+      const lastSyncMs = getLastSyncMs();
+
+      // 3. Merge vehicles first so child records always have a valid parent.
+      const vehicleMerge = await mergeCollection('vehicles', localVehicles, remoteVehicles, lastSyncMs, {
+        getId: (v) => v.id,
+        getUpdatedAtMs: (v) => toTimestampMs(v.updatedAt),
+        withUpdatedAt: (v, iso) => ({ ...v, updatedAt: iso }),
+        remap: (v, id) => ({ ...v, id }),
+        createRemote: async (id, v) => {
+          await setDoc(doc(vehiclesCol, id), buildVehicleCreateData(uid, id, v));
+        },
+        updateRemote: async (id, v) => {
+          await updateDoc(doc(vehiclesCol, id), buildVehicleUpdateData(v));
+        },
+      });
+
+      const mergedVehicles = vehicleMerge.items;
+      const mergedVehicleIds = new Set(mergedVehicles.map((v) => v.id));
+      const defaultVehId = mergedVehicles[0]?.id || null;
+      const resolveVehicleId = (vehicleId: string): string | null =>
+        mergedVehicleIds.has(vehicleId) ? vehicleId : defaultVehId;
+      const remapVehicleId = (item: { vehicleId: string }) =>
+        resolveVehicleId(item.vehicleId) || item.vehicleId;
+
+      setVehicles(mergedVehicles);
+      saveToLocal('netcar_vehicles', mergedVehicles);
+
+      // 4. Merge the remaining collections. Child records pointing at a vehicle
+      // deleted on another device are remapped to the first available vehicle.
+      const [fillMerge, expenseMerge, serviceMerge, reminderMerge] = await Promise.all([
+        mergeCollection('fillups', localFillUps, remoteFillUps, lastSyncMs, {
+          getId: (f) => f.id,
+          getUpdatedAtMs: (f) => toTimestampMs(f.updatedAt),
+          withUpdatedAt: (f, iso) => ({ ...f, updatedAt: iso }),
+          remap: (f, id) => ({ ...f, id, vehicleId: remapVehicleId(f) }),
+          createRemote: async (id, f) => {
+            const vehicleId = resolveVehicleId(f.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await setDoc(doc(fillupsCol, id), buildFillUpCreateData(uid, id, f, vehicleId));
+          },
+          updateRemote: async (id, f) => {
+            const vehicleId = resolveVehicleId(f.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await updateDoc(doc(fillupsCol, id), buildFillUpUpdateData(f, vehicleId));
+          },
+        }),
+        mergeCollection('expenses', localExpenses, remoteExpenses, lastSyncMs, {
+          getId: (e) => e.id,
+          getUpdatedAtMs: (e) => toTimestampMs(e.updatedAt),
+          withUpdatedAt: (e, iso) => ({ ...e, updatedAt: iso }),
+          remap: (e, id) => ({ ...e, id, vehicleId: remapVehicleId(e) }),
+          createRemote: async (id, e) => {
+            const vehicleId = resolveVehicleId(e.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await setDoc(doc(expensesCol, id), buildExpenseCreateData(uid, id, e, vehicleId));
+          },
+          updateRemote: async (id, e) => {
+            const vehicleId = resolveVehicleId(e.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await updateDoc(doc(expensesCol, id), buildExpenseUpdateData(e, vehicleId));
+          },
+        }),
+        mergeCollection('services', localServices, remoteServices, lastSyncMs, {
+          getId: (s) => s.id,
+          getUpdatedAtMs: (s) => toTimestampMs(s.updatedAt),
+          withUpdatedAt: (s, iso) => ({ ...s, updatedAt: iso }),
+          remap: (s, id) => ({ ...s, id, vehicleId: remapVehicleId(s) }),
+          createRemote: async (id, s) => {
+            const vehicleId = resolveVehicleId(s.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await setDoc(doc(servicesCol, id), buildServiceCreateData(uid, id, s, vehicleId));
+          },
+          updateRemote: async (id, s) => {
+            const vehicleId = resolveVehicleId(s.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await updateDoc(doc(servicesCol, id), buildServiceUpdateData(s, vehicleId));
+          },
+        }),
+        mergeCollection('reminders', localReminders, remoteReminders, lastSyncMs, {
+          getId: (r) => r.id,
+          getUpdatedAtMs: (r) => toTimestampMs(r.updatedAt),
+          withUpdatedAt: (r, iso) => ({ ...r, updatedAt: iso }),
+          remap: (r, id) => ({ ...r, id, vehicleId: remapVehicleId(r) }),
+          createRemote: async (id, r) => {
+            const vehicleId = resolveVehicleId(r.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await setDoc(doc(remindersCol, id), buildReminderCreateData(uid, id, r, vehicleId));
+          },
+          updateRemote: async (id, r) => {
+            const vehicleId = resolveVehicleId(r.vehicleId);
+            if (!vehicleId) throw new Error('No parent vehicle available');
+            await updateDoc(doc(remindersCol, id), buildReminderUpdateData(r, vehicleId));
+          },
+        }),
+      ]);
+
+      setFillUps(fillMerge.items);
+      saveToLocal('netcar_fillups', fillMerge.items);
+      setExpenses(expenseMerge.items);
+      saveToLocal('netcar_expenses', expenseMerge.items);
+      setServices(serviceMerge.items);
+      saveToLocal('netcar_services', serviceMerge.items);
+      setReminders(reminderMerge.items);
+      saveToLocal('netcar_reminders', reminderMerge.items);
+
+      // 5. Merge the profile without letting stale local settings win.
+      const remoteProfile = userSnap.exists() ? userSnap.data() : null;
+      let desiredActiveId = savedActiveId;
+      if (mergedVehicles.length > 0 && !mergedVehicleIds.has(desiredActiveId)) {
+        desiredActiveId = mergedVehicles[0].id;
+      }
+
+      if (!remoteProfile) {
+        await setDoc(
+          userDocRef,
           stripUndefined({
-            id: v.id,
             userId: uid,
-            name: v.name ? v.name.slice(0, 100) : undefined,
-            make: (v.make || 'Vehicle').slice(0, 100),
-            model: (v.model || 'Model').slice(0, 100),
-            year: Math.min(2100, Math.max(1900, Number(v.year) || 2021)),
-            plate: v.plate ? v.plate.slice(0, 30) : undefined,
-            vin: v.vin ? v.vin.slice(0, 30) : undefined,
-            fuelType: ['gasoline', 'diesel', 'lpg', 'electric', 'hybrid', 'ethanol', 'cng'].includes(
-              v.fuelType
-            )
-              ? v.fuelType
-              : 'gasoline',
-            photoUrl: v.photoUrl ? v.photoUrl.slice(0, 2048) : undefined,
-            currentOdometer: Math.max(0, Number(v.currentOdometer) || 0),
-            notes: v.notes ? v.notes.slice(0, 5000) : undefined,
+            name:
+              (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) ||
+              'Pilot',
+            email:
+              (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
+              'driver@netcar.app',
+            preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
+            units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
+            currency: VALID_CURRENCIES.includes(userProfile.currency)
+              ? userProfile.currency
+              : 'DZD',
+            activeVehicleId: desiredActiveId || undefined,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           })
         );
-      }
-
-      await parentBatch.commit();
-      isCloudReadyRef.current = true;
-
-      // Step 2: Prepare all child operations and commit in chunks of 400
-      const childOps: Array<{ ref: ReturnType<typeof doc>; data: Record<string, any> }> = [];
-
-      for (const f of fillUps) {
-        const targetVehId = validVehicleIds.has(f.vehicleId) ? f.vehicleId : defaultVehId;
-        const vol = Number(f.volume);
-        if (!Number.isFinite(vol) || vol <= 0) continue;
-        childOps.push({
-          ref: doc(db, 'users', uid, 'fillups', f.id),
-          data: stripUndefined({
-            id: f.id,
-            userId: uid,
-            vehicleId: targetVehId,
-            date: String(f.date || new Date().toISOString()).slice(0, 64),
-            odometer: Math.max(0, Number(f.odometer) || 0),
-            volume: vol,
-            pricePerUnit: Math.max(0, Number(f.pricePerUnit) || 0),
-            totalCost: Math.max(0, Number(f.totalCost) || 0),
-            fuelType: String(f.fuelType || 'gasoline').slice(0, 30),
-            isFullTank: Boolean(f.isFullTank),
-            station: f.station ? f.station.slice(0, 200) : undefined,
-            notes: f.notes ? f.notes.slice(0, 5000) : undefined,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-        });
-      }
-
-      for (const e of expenses) {
-        const targetVehId = validVehicleIds.has(e.vehicleId) ? e.vehicleId : defaultVehId;
-        const amt = Number(e.amount);
-        if (!Number.isFinite(amt) || amt <= 0) continue;
-        childOps.push({
-          ref: doc(db, 'users', uid, 'expenses', e.id),
-          data: stripUndefined({
-            id: e.id,
-            userId: uid,
-            vehicleId: targetVehId,
-            date: String(e.date || new Date().toISOString()).slice(0, 64),
-            category: String(e.category || 'other').slice(0, 100),
-            amount: amt,
-            description: (e.description || 'Expense').slice(0, 500),
-            receiptUrl: e.receiptUrl ? e.receiptUrl.slice(0, 2048) : undefined,
-            odometer:
-              e.odometer !== undefined && Number(e.odometer) >= 0 ? Number(e.odometer) : undefined,
-            notes: e.notes ? e.notes.slice(0, 5000) : undefined,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-        });
-      }
-
-      for (const s of services) {
-        const targetVehId = validVehicleIds.has(s.vehicleId) ? s.vehicleId : defaultVehId;
-        childOps.push({
-          ref: doc(db, 'users', uid, 'services', s.id),
-          data: stripUndefined({
-            id: s.id,
-            userId: uid,
-            vehicleId: targetVehId,
-            date: String(s.date || new Date().toISOString()).slice(0, 64),
-            type: String(s.type || 'other').slice(0, 100),
-            odometer: Math.max(0, Number(s.odometer) || 0),
-            cost: Math.max(0, Number(s.cost) || 0),
-            description: (s.description || 'Service').slice(0, 500),
-            parts: s.parts && s.parts.length > 0 ? s.parts.slice(0, 50) : undefined,
-            receiptUrl: s.receiptUrl ? s.receiptUrl.slice(0, 2048) : undefined,
-            notes: s.notes ? s.notes.slice(0, 5000) : undefined,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-        });
-      }
-
-      for (const r of reminders) {
-        const targetVehId = validVehicleIds.has(r.vehicleId) ? r.vehicleId : defaultVehId;
-        childOps.push({
-          ref: doc(db, 'users', uid, 'reminders', r.id),
-          data: stripUndefined({
-            id: r.id,
-            userId: uid,
-            vehicleId: targetVehId,
-            type: String(r.type || 'other').slice(0, 100),
-            title: r.title ? r.title.slice(0, 200) : undefined,
-            intervalKm:
-              r.intervalKm !== undefined && Number(r.intervalKm) >= 0
-                ? Number(r.intervalKm)
-                : undefined,
-            intervalDays:
-              r.intervalDays !== undefined && Number(r.intervalDays) >= 0
-                ? Number(r.intervalDays)
-                : undefined,
-            lastServiceDate: r.lastServiceDate ? String(r.lastServiceDate).slice(0, 64) : undefined,
-            lastServiceOdometer:
-              r.lastServiceOdometer !== undefined && Number(r.lastServiceOdometer) >= 0
-                ? Number(r.lastServiceOdometer)
-                : undefined,
-            nextDueDate: r.nextDueDate ? String(r.nextDueDate).slice(0, 64) : undefined,
-            nextDueOdometer:
-              r.nextDueOdometer !== undefined && Number(r.nextDueOdometer) >= 0
-                ? Number(r.nextDueOdometer)
-                : undefined,
-            isRecurring: Boolean(r.isRecurring),
-            isActive: Boolean(r.isActive),
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          }),
-        });
-      }
-
-      const CHUNK_SIZE = 400;
-      for (let i = 0; i < childOps.length; i += CHUNK_SIZE) {
-        const batch = writeBatch(db);
-        const chunk = childOps.slice(i, i + CHUNK_SIZE);
-        for (const item of chunk) {
-          batch.set(item.ref, item.data);
+      } else {
+        const remoteActive =
+          typeof remoteProfile.activeVehicleId === 'string' ? remoteProfile.activeVehicleId : '';
+        const localProfileUpdatedMs = toTimestampMs(userProfile.updatedAt);
+        const remoteProfileUpdatedMs = toTimestampMs(remoteProfile.updatedAt);
+        const localProfileChanged =
+          localProfileUpdatedMs > 0 && localProfileUpdatedMs > lastSyncMs;
+        const remoteProfileChanged =
+          remoteProfileUpdatedMs > 0 && remoteProfileUpdatedMs > lastSyncMs;
+        let localProfileWins = false;
+        if (lastSyncMs > 0) {
+          if (localProfileChanged && !remoteProfileChanged) {
+            localProfileWins = true;
+          } else if (localProfileChanged && remoteProfileChanged) {
+            localProfileWins = localProfileUpdatedMs >= remoteProfileUpdatedMs;
+          }
         }
-        await batch.commit();
+
+        if (localProfileWins) {
+          await updateDoc(
+            userDocRef,
+            stripUndefined({
+              userId: uid,
+              name:
+                (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) ||
+                'Pilot',
+              email:
+                (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
+                'driver@netcar.app',
+              preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
+              units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
+              currency: VALID_CURRENCIES.includes(userProfile.currency)
+                ? userProfile.currency
+                : 'DZD',
+              activeVehicleId: desiredActiveId || undefined,
+              updatedAt: serverTimestamp(),
+            })
+          );
+          setUserProfile((prev) => ({
+            ...prev,
+            activeVehicleId: desiredActiveId || prev.activeVehicleId,
+            updatedAt: new Date().toISOString(),
+          }));
+        } else {
+          if (remoteActive && mergedVehicleIds.has(remoteActive)) {
+            desiredActiveId = remoteActive;
+          }
+          const needsActiveRepair =
+            mergedVehicles.length > 0 &&
+            (!remoteActive || !mergedVehicleIds.has(remoteActive));
+          if (needsActiveRepair) {
+            await updateDoc(userDocRef, {
+              activeVehicleId: mergedVehicles[0].id,
+              updatedAt: serverTimestamp(),
+            });
+            desiredActiveId = mergedVehicles[0].id;
+          }
+        }
       }
 
-      const nowIso = new Date().toISOString();
-      setSyncStatus('synced');
-      setLastSyncedAt(nowIso);
+      if (desiredActiveId && desiredActiveId !== activeVehicleId) {
+        setActiveVehicleIdState(desiredActiveId);
+        localStorage.setItem('netcar_active_vehicle_id', desiredActiveId);
+      }
+
+      const hadFailure =
+        vehicleMerge.hadFailure ||
+        fillMerge.hadFailure ||
+        expenseMerge.hadFailure ||
+        serviceMerge.hadFailure ||
+        reminderMerge.hadFailure;
+      const pushedCount =
+        vehicleMerge.pushedCount +
+        fillMerge.pushedCount +
+        expenseMerge.pushedCount +
+        serviceMerge.pushedCount +
+        reminderMerge.pushedCount;
+
+      if (!hadFailure) {
+        setLastSyncMs(Date.now());
+        setLastSyncedAt(new Date().toISOString());
+        setSyncStatus('synced');
+        return { success: true, count: pushedCount };
+      }
+
+      setSyncStatus('error');
       return {
-        success: true,
-        count: validVehicles.length + childOps.length,
+        success: false,
+        count: pushedCount,
+        error:
+          lang === 'fr'
+            ? 'Certains éléments n’ont pas pu être envoyés. Ils restent enregistrés localement et seront réessayés à la prochaine synchronisation.'
+            : 'Some records could not be uploaded. They remain saved locally and will retry on the next sync.',
       };
     } catch (error) {
       setSyncStatus('error');
@@ -1783,25 +2394,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const importBackupJson = (jsonData: string): boolean => {
     try {
       const data = JSON.parse(jsonData);
+      const nowIso = new Date().toISOString();
+
+      function stamp<T extends { id: string; updatedAt?: any }>(item: T): T {
+        return { ...item, updatedAt: nowIso };
+      }
+
       if (data.vehicles && Array.isArray(data.vehicles)) {
-        setVehicles(data.vehicles);
-        saveToLocal('netcar_vehicles', data.vehicles);
+        const imported = (data.vehicles as Vehicle[]).map(stamp);
+        imported.forEach((v) => unmarkPendingDelete('vehicles', v.id));
+        setVehicles(imported);
+        saveToLocal('netcar_vehicles', imported);
       }
       if (data.fillUps && Array.isArray(data.fillUps)) {
-        setFillUps(data.fillUps);
-        saveToLocal('netcar_fillups', data.fillUps);
+        const imported = (data.fillUps as FillUp[]).map(stamp);
+        imported.forEach((f) => unmarkPendingDelete('fillups', f.id));
+        setFillUps(imported);
+        saveToLocal('netcar_fillups', imported);
       }
       if (data.expenses && Array.isArray(data.expenses)) {
-        setExpenses(data.expenses);
-        saveToLocal('netcar_expenses', data.expenses);
+        const imported = (data.expenses as Expense[]).map(stamp);
+        imported.forEach((e) => unmarkPendingDelete('expenses', e.id));
+        setExpenses(imported);
+        saveToLocal('netcar_expenses', imported);
       }
       if (data.services && Array.isArray(data.services)) {
-        setServices(data.services);
-        saveToLocal('netcar_services', data.services);
+        const imported = (data.services as Service[]).map(stamp);
+        imported.forEach((s) => unmarkPendingDelete('services', s.id));
+        setServices(imported);
+        saveToLocal('netcar_services', imported);
       }
       if (data.reminders && Array.isArray(data.reminders)) {
-        setReminders(data.reminders);
-        saveToLocal('netcar_reminders', data.reminders);
+        const imported = (data.reminders as Reminder[]).map(stamp);
+        imported.forEach((r) => unmarkPendingDelete('reminders', r.id));
+        setReminders(imported);
+        saveToLocal('netcar_reminders', imported);
       }
       return true;
     } catch (e) {
