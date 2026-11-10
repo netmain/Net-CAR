@@ -955,6 +955,55 @@ class NetCarRepository @Inject constructor(
         return System.currentTimeMillis()
     }
 
+    private fun serviceTypeToCloud(type: ServiceType): String = when (type) {
+        ServiceType.OIL_CHANGE -> "oilChange"
+        ServiceType.TIRE_ROTATION -> "tireRotation"
+        ServiceType.BRAKES -> "brakes"
+        ServiceType.FILTERS -> "filters"
+        ServiceType.BATTERY -> "battery"
+        ServiceType.TRANSMISSION -> "transmission"
+        ServiceType.COOLANT -> "coolant"
+        ServiceType.SPARK_PLUGS -> "sparkPlugs"
+        ServiceType.TIMING_BELT -> "timing"
+        ServiceType.INSPECTION -> "inspection"
+        ServiceType.OTHER -> "other"
+    }
+
+    private fun serviceTypeFromCloud(raw: Any?): ServiceType {
+        val key = (raw as? String)?.trim()?.lowercase(Locale.US)
+            ?.replace("_", "")?.replace("-", "") ?: return ServiceType.OTHER
+        return when (key) {
+            "oilchange" -> ServiceType.OIL_CHANGE
+            "tirerotation" -> ServiceType.TIRE_ROTATION
+            "brakes" -> ServiceType.BRAKES
+            "filters" -> ServiceType.FILTERS
+            "battery" -> ServiceType.BATTERY
+            "transmission" -> ServiceType.TRANSMISSION
+            "coolant" -> ServiceType.COOLANT
+            "sparkplugs" -> ServiceType.SPARK_PLUGS
+            "timing", "timingbelt" -> ServiceType.TIMING_BELT
+            "inspection" -> ServiceType.INSPECTION
+            else -> ServiceType.OTHER
+        }
+    }
+
+    private fun parseIsoDateOrNull(raw: Any?): Long? {
+        if (raw == null) return null
+        if (raw is Number) return raw.toLong()
+        val str = raw as? String ?: return null
+        if (str.isBlank()) return null
+        runCatching {
+            val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
+            sdf.timeZone = TimeZone.getTimeZone("UTC")
+            sdf.parse(str)?.time?.let { return it }
+        }
+        runCatching {
+            val sdfShort = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            sdfShort.parse(str.take(10))?.time?.let { return it }
+        }
+        return null
+    }
+
     suspend fun syncWithCloud(): Result<String> = withContext(Dispatchers.IO) {
         try {
             val fbUser = runCatching { FirebaseAuth.getInstance().currentUser }.getOrNull()
@@ -1198,8 +1247,7 @@ class NetCarRepository @Inject constructor(
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
                 remoteSvcIds.add(id)
-                val typeStr = (data["type"] as? String)?.uppercase(Locale.US)?.replace("-", "_") ?: "OTHER"
-                val svcType = runCatching { ServiceType.valueOf(typeStr) }.getOrDefault(ServiceType.OTHER)
+                val svcType = serviceTypeFromCloud(data["type"])
                 val rawParts = (data["parts"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                 remoteServices.add(
                     ServiceRecord(
@@ -1226,7 +1274,7 @@ class NetCarRepository @Inject constructor(
                         "userId" to uid,
                         "vehicleId" to targetVehId,
                         "date" to formatIsoDate(localS.date),
-                        "type" to localS.type.name.lowercase(Locale.US),
+                        "type" to serviceTypeToCloud(localS.type),
                         "odometer" to localS.odometer.coerceAtLeast(0),
                         "cost" to localS.cost.coerceAtLeast(0.0),
                         "description" to localS.description.ifBlank { localS.type.displayName }.ifBlank { "Service" }.take(500),
@@ -1248,6 +1296,72 @@ class NetCarRepository @Inject constructor(
                 _serviceRecords.value = mergedServices.sortedByDescending { it.date }
             }
 
+            // 6. Sync Reminders (/users/{uid}/reminders)
+            val remindersCol = userDocRef.collection("reminders")
+            val remoteRemSnap = Tasks.await(
+                remindersCol.whereEqualTo("userId", uid).get(),
+                15,
+                TimeUnit.SECONDS
+            )
+            val remoteReminders = mutableListOf<Reminder>()
+            val remoteRemIds = mutableSetOf<String>()
+
+            for (doc in remoteRemSnap.documents) {
+                val data = doc.data ?: continue
+                val id = (data["id"] as? String) ?: doc.id
+                remoteRemIds.add(id)
+                val remType = serviceTypeFromCloud(data["type"])
+                remoteReminders.add(
+                    Reminder(
+                        id = id,
+                        vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
+                        title = (data["title"] as? String) ?: remType.displayName,
+                        type = remType,
+                        intervalKm = (data["intervalKm"] as? Number)?.toInt(),
+                        intervalDays = (data["intervalDays"] as? Number)?.toInt(),
+                        lastServiceDate = parseIsoDateOrNull(data["lastServiceDate"]),
+                        lastServiceOdometer = (data["lastServiceOdometer"] as? Number)?.toInt(),
+                        nextDueDate = parseIsoDateOrNull(data["nextDueDate"]),
+                        nextDueOdometer = (data["nextDueOdometer"] as? Number)?.toInt(),
+                        isRecurring = (data["isRecurring"] as? Boolean) ?: false,
+                        isCompleted = !((data["isActive"] as? Boolean) ?: true)
+                    )
+                )
+            }
+
+            val mergedReminders = remoteReminders.toMutableList()
+            for (localR in _reminders.value) {
+                val cleanRemId = sanitizeDocId(localR.id, "r")
+                val targetVehId = if (localR.vehicleId in remoteVehicleIds) localR.vehicleId else defaultVehicleId
+                if (cleanRemId !in remoteRemIds && targetVehId in remoteVehicleIds) {
+                    val rMap = hashMapOf<String, Any>(
+                        "id" to cleanRemId,
+                        "userId" to uid,
+                        "vehicleId" to targetVehId,
+                        "type" to serviceTypeToCloud(localR.type),
+                        "isRecurring" to localR.isRecurring,
+                        "isActive" to !localR.isCompleted,
+                        "createdAt" to FieldValue.serverTimestamp(),
+                        "updatedAt" to FieldValue.serverTimestamp()
+                    )
+                    if (localR.title.isNotBlank()) rMap["title"] = localR.title.take(200)
+                    localR.intervalKm?.let { rMap["intervalKm"] = it.coerceAtLeast(0) }
+                    localR.intervalDays?.let { rMap["intervalDays"] = it.coerceAtLeast(0) }
+                    localR.lastServiceDate?.let { rMap["lastServiceDate"] = formatIsoDate(it) }
+                    localR.lastServiceOdometer?.let { rMap["lastServiceOdometer"] = it.coerceAtLeast(0) }
+                    localR.nextDueDate?.let { rMap["nextDueDate"] = formatIsoDate(it) }
+                    localR.nextDueOdometer?.let { rMap["nextDueOdometer"] = it.coerceAtLeast(0) }
+
+                    runCatching {
+                        Tasks.await(remindersCol.document(cleanRemId).set(rMap), 15, TimeUnit.SECONDS)
+                        mergedReminders.add(localR.copy(id = cleanRemId, vehicleId = targetVehId))
+                    }
+                }
+            }
+            if (mergedReminders.isNotEmpty()) {
+                _reminders.value = mergedReminders
+            }
+
             val syncTime = System.currentTimeMillis()
             prefs.edit().putLong("last_sync_ts", syncTime).apply()
             _userSettings.value = _userSettings.value.copy(
@@ -1260,9 +1374,9 @@ class NetCarRepository @Inject constructor(
             checkRemindersAndNotify(forceAllActive = false)
 
             val msg = if (_userSettings.value.language == SupportedLanguage.FR) {
-                "Synchronisation Cloud réussie (${_vehicles.value.size} véhicules, ${_fillUps.value.size} pleins)"
+                "Synchronisation Cloud réussie (${_vehicles.value.size} véhicules, ${_fillUps.value.size} pleins, ${_reminders.value.size} rappels)"
             } else {
-                "Cloud sync complete (${_vehicles.value.size} vehicles, ${_fillUps.value.size} fill-ups)"
+                "Cloud sync complete (${_vehicles.value.size} vehicles, ${_fillUps.value.size} fill-ups, ${_reminders.value.size} reminders)"
             }
             Result.success(msg)
         } catch (t: Throwable) {

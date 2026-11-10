@@ -68,6 +68,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
@@ -482,6 +483,7 @@ fun SettingsScreen(
                                         containerColor = MaterialTheme.colorScheme.primary,
                                         contentColor = MaterialTheme.colorScheme.onPrimary
                                     ),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                                     modifier = Modifier
                                         .weight(1f)
                                         .height(48.dp)
@@ -494,11 +496,14 @@ fun SettingsScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
                                         text = if (isSyncing) {
-                                            if (isFr) "Synchronisation..." else "Syncing..."
+                                            if (isFr) "Synchro..." else "Syncing..."
                                         } else {
                                             if (isFr) "Synchroniser" else "Sync Now"
                                         },
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
@@ -509,7 +514,10 @@ fun SettingsScreen(
                                     },
                                     enabled = !isSyncing,
                                     shape = RoundedCornerShape(12.dp),
-                                    modifier = Modifier.height(48.dp)
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.AutoMirrored.Filled.Logout,
@@ -517,7 +525,12 @@ fun SettingsScreen(
                                         modifier = Modifier.size(18.dp)
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (isFr) "Déconnexion" else "Sign Out")
+                                    Text(
+                                        text = if (isFr) "Déconnexion" else "Sign Out",
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
                         }
@@ -627,6 +640,7 @@ fun SettingsScreen(
                                     containerColor = FuelGreen,
                                     contentColor = Color(0xFF052E16)
                                 ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(46.dp)
@@ -639,7 +653,10 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (isFr) "Importer CSV" else "Import CSV",
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
 
@@ -650,6 +667,7 @@ fun SettingsScreen(
                                     csvExportLauncher.launch(exported.first)
                                 },
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(46.dp)
@@ -662,7 +680,10 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (isFr) "Exporter CSV" else "Export CSV",
-                                    fontWeight = FontWeight.Bold
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
