@@ -55,17 +55,7 @@ fun NetCarApp() {
         }
     }
 
-    // Show bottom bar on primary top-level tabs for quick thumb reach, while Side Drawer serves as the complete Main Menu
-    val bottomBarRoutes = listOf(
-        Screen.Dashboard.route,
-        Screen.Fuel.route,
-        Screen.Expenses.route,
-        Screen.Maintenance.route,
-        Screen.Reminders.route
-    )
-    val showBottomBar = currentRoute in bottomBarRoutes
-
-    // Obtain dashboard ViewModel to share active vehicle, settings, and badge count with Side Drawer & Bottom Bar
+    // Obtain dashboard ViewModel to share active vehicle, settings, and badge count with Side Drawer
     val dashboardViewModel: DashboardViewModel = hiltViewModel()
     val dashboardUiState by dashboardViewModel.uiState.collectAsState()
     val overdueCount = dashboardUiState.stats.dueRemindersCount
@@ -102,14 +92,6 @@ fun NetCarApp() {
         }
     ) {
         Scaffold(
-            bottomBar = {
-                if (showBottomBar) {
-                    BottomNavBar(
-                        navController = navController,
-                        overdueRemindersCount = overdueCount
-                    )
-                }
-            },
             modifier = Modifier.fillMaxSize()
         ) { innerPadding ->
             NavHost(

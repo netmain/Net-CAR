@@ -138,3 +138,95 @@ export function buildConsumptionTrendSeries(
 
   return points;
 }
+
+export function getLatestVehicleOdometer(params: {
+  currentOdometer?: number;
+  fillUps?: Pick<FillUp, 'odometer'>[];
+  services?: { odometer: number }[];
+  expenses?: { odometer?: number }[];
+}): number {
+  let maxOdo = typeof params.currentOdometer === 'number' && !Number.isNaN(params.currentOdometer)
+    ? params.currentOdometer
+    : 0;
+
+  if (params.fillUps) {
+    for (const f of params.fillUps) {
+      if (typeof f.odometer === 'number' && f.odometer > maxOdo) {
+        maxOdo = f.odometer;
+      }
+    }
+  }
+
+  if (params.services) {
+    for (const s of params.services) {
+      if (typeof s.odometer === 'number' && s.odometer > maxOdo) {
+        maxOdo = s.odometer;
+      }
+    }
+  }
+
+  if (params.expenses) {
+    for (const e of params.expenses) {
+      if (typeof e.odometer === 'number' && e.odometer > maxOdo) {
+        maxOdo = e.odometer;
+      }
+    }
+  }
+
+  return Math.max(0, maxOdo);
+}
+
+export function validateVehicleOdometer(params: {
+  enteredOdometer: number | '';
+  latestOdometer: number;
+  distUnit?: string;
+  lang?: 'fr' | 'en';
+  requirePositive?: boolean;
+}): {
+  valid: boolean;
+  error?: string;
+  minRequired: number;
+} {
+  const {
+    enteredOdometer,
+    latestOdometer,
+    distUnit = 'km',
+    lang = 'fr',
+    requirePositive = false,
+  } = params;
+
+  const minRequired = Math.max(0, latestOdometer || 0);
+
+  if (
+    enteredOdometer === '' ||
+    Number.isNaN(Number(enteredOdometer)) ||
+    (requirePositive ? Number(enteredOdometer) <= 0 : Number(enteredOdometer) < 0)
+  ) {
+    return {
+      valid: false,
+      minRequired,
+      error:
+        lang === 'fr'
+          ? 'Kilométrage valide requis'
+          : 'Valid odometer reading is required',
+    };
+  }
+
+  const numericOdo = Number(enteredOdometer);
+  if (numericOdo < minRequired) {
+    return {
+      valid: false,
+      minRequired,
+      error:
+        lang === 'fr'
+          ? `Le kilométrage saisi (${numericOdo.toLocaleString()} ${distUnit}) ne peut pas être inférieur au dernier relevé (${minRequired.toLocaleString()} ${distUnit}).`
+          : `Entered odometer (${numericOdo.toLocaleString()} ${distUnit}) cannot be less than the latest existing record (${minRequired.toLocaleString()} ${distUnit}).`,
+    };
+  }
+
+  return {
+    valid: true,
+    minRequired,
+  };
+}
+

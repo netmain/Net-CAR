@@ -490,6 +490,105 @@ class NetCarRepository @Inject constructor(
         persistLocalData()
     }
 
+    class GoogleOAuthFallbackRequiredException(val emailHint: String) : Exception("GOOGLE_OAUTH_REQUIRED")
+
+    fun exportActiveVehicleFuelioCsv(vehicleId: String? = null): Pair<String, String> {
+        val targetId = vehicleId ?: _selectedVehicleId.value ?: _vehicles.value.firstOrNull()?.id
+        val vehicle = _vehicles.value.find { it.id == targetId }
+            ?: _vehicles.value.firstOrNull()
+            ?: defaultVehicle1
+        val vFillUps = _fillUps.value.filter { it.vehicleId == vehicle.id }
+        val vExpenses = _expenses.value.filter { it.vehicleId == vehicle.id }
+        val csv = FuelioCsvHelper.exportFuelioCsv(
+            vehicle = vehicle,
+            fillUps = vFillUps,
+            expenses = vExpenses,
+            units = _userSettings.value.units
+        )
+        val slug = "${vehicle.make}-${vehicle.model}"
+            .lowercase(Locale.US)
+            .replace(Regex("[^a-z0-9]+"), "-")
+            .trim('-')
+            .ifBlank { "vehicle" }
+        val dateStr = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+        val fileName = "netcar-fuelio-$slug-$dateStr.csv"
+        return fileName to csv
+    }
+
+    suspend fun importFuelioCsv(csvContent: String, targetVehicleId: String? = null): Result<String> =
+        withContext(Dispatchers.IO) {
+            try {
+                val isFr = _userSettings.value.language == SupportedLanguage.FR
+                val targetId = targetVehicleId ?: _selectedVehicleId.value ?: _vehicles.value.firstOrNull()?.id
+                val vehicle = _vehicles.value.find { it.id == targetId } ?: _vehicles.value.firstOrNull()
+                    ?: return@withContext Result.failure(
+                        IllegalStateException(
+                            if (isFr) "Aucun véhicule sélectionné pour l'import CSV."
+                            else "No active vehicle found for CSV import."
+                        )
+                    )
+
+                val parsed = FuelioCsvHelper.parseFuelioCsv(
+                    csvContent = csvContent,
+                    vehicleId = vehicle.id,
+                    defaultFuelType = vehicle.fuelType
+                )
+
+                if (parsed.fillUps.isEmpty() && parsed.expenses.isEmpty()) {
+                    return@withContext Result.failure(
+                        IllegalArgumentException(
+                            if (isFr) "Aucune donnée valide trouvée dans le fichier CSV (format Fuelio ou table CSV attendu)."
+                            else "No valid fill-up or expense rows found in the CSV file."
+                        )
+                    )
+                }
+
+                // Deduplicate against existing entries for this vehicle
+                val existingFillKeys = _fillUps.value
+                    .filter { it.vehicleId == vehicle.id }
+                    .map { "${it.odometer}_${String.format(Locale.US, "%.2f", it.volume)}" }
+                    .toSet()
+
+                val newFillUps = parsed.fillUps.filter {
+                    "${it.odometer}_${String.format(Locale.US, "%.2f", it.volume)}" !in existingFillKeys
+                }
+
+                val existingExpKeys = _expenses.value
+                    .filter { it.vehicleId == vehicle.id }
+                    .map { "${it.date / 60000}_${String.format(Locale.US, "%.2f", it.amount)}_${it.description}" }
+                    .toSet()
+
+                val newExpenses = parsed.expenses.filter {
+                    "${it.date / 60000}_${String.format(Locale.US, "%.2f", it.amount)}_${it.description}" !in existingExpKeys
+                }
+
+                if (newFillUps.isNotEmpty()) {
+                    _fillUps.value = (newFillUps + _fillUps.value).sortedByDescending { it.date }
+                }
+                if (newExpenses.isNotEmpty()) {
+                    _expenses.value = (newExpenses + _expenses.value).sortedByDescending { it.date }
+                }
+                if (parsed.maxOdometer > vehicle.currentOdometer) {
+                    updateVehicleOdometer(vehicle.id, parsed.maxOdometer)
+                }
+                persistLocalData()
+
+                if (_userSettings.value.isDriveBackupConnected) {
+                    runCatching { syncWithCloud() }
+                }
+
+                val vehLabel = "${vehicle.make} ${vehicle.model}".trim()
+                val msg = if (isFr) {
+                    "Import CSV réussi : ${newFillUps.size} plein(s) et ${newExpenses.size} dépense(s) importés sur $vehLabel."
+                } else {
+                    "CSV imported: ${newFillUps.size} fill-up(s) and ${newExpenses.size} expense(s) added to $vehLabel."
+                }
+                Result.success(msg)
+            } catch (t: Throwable) {
+                Result.failure(t)
+            }
+        }
+
     private fun isOperationNotAllowedError(t: Throwable): Boolean {
         val cause = t.cause ?: t
         if (cause is FirebaseAuthException &&
@@ -501,7 +600,8 @@ class NetCarRepository @Inject constructor(
         val msg = (t.message ?: "") + " " + (cause.message ?: "")
         return msg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
             msg.contains("operation is not allowed", ignoreCase = true) ||
-            msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true)
+            msg.contains("CONFIGURATION_NOT_FOUND", ignoreCase = true) ||
+            msg.contains("INVALID_APP_ID", ignoreCase = true)
     }
 
     private fun formatFriendlyAuthError(t: Throwable): Exception {
@@ -511,9 +611,9 @@ class NetCarRepository @Inject constructor(
 
         val friendly = when {
             isOperationNotAllowedError(t) -> if (isFr) {
-                "Le mode Email/Mot de passe n'est pas activé sur Firebase. Utilisez le bouton « Continuer avec Google » ci-dessus (recommandé) ou activez Email/Password dans Firebase Console > Authentication."
+                "Veuillez finaliser la connexion via la fenêtre sécurisée Google Sign-In."
             } else {
-                "Email/Password sign-in is not enabled in Firebase. Please tap 'Continue with Google' above (recommended) or enable Email/Password in Firebase Console > Authentication."
+                "Please complete sign-in using the secure Google Sign-In window."
             }
             msg.contains("email-already-in-use") || msg.contains("already in use") -> if (isFr) {
                 "Cette adresse e-mail possède déjà un compte. Basculez sur « Se connecter » ou utilisez « Continuer avec Google »."
@@ -535,59 +635,18 @@ class NetCarRepository @Inject constructor(
         return IllegalStateException(friendly)
     }
 
-    suspend fun signInWithGoogle(activity: Activity, loginHint: String? = null): Result<String> =
-        withContext(Dispatchers.IO) {
-            try {
-                val auth = FirebaseAuth.getInstance()
-                val providerBuilder = OAuthProvider.newBuilder("google.com")
-                val params = hashMapOf("prompt" to "select_account")
-                if (!loginHint.isNullOrBlank() && loginHint.contains("@")) {
-                    params["login_hint"] = loginHint.trim()
-                }
-                providerBuilder.addCustomParameters(params)
-
-                val authTask = withContext(Dispatchers.Main) {
-                    auth.pendingAuthResult ?: auth.startActivityForSignInWithProvider(activity, providerBuilder.build())
-                }
-                val authResult = Tasks.await(authTask, 120, TimeUnit.SECONDS)
-                val user = authResult.user
-                    ?: return@withContext Result.failure(IllegalStateException("Google authentication failed"))
-
-                val resolvedEmail = user.email ?: loginHint ?: "driver@netcar.app"
-                _userSettings.value = _userSettings.value.copy(
-                    isDriveBackupConnected = true,
-                    connectedEmail = resolvedEmail,
-                    userId = user.uid
-                )
-                persistLocalData()
-
-                val syncRes = syncWithCloud()
-                syncRes.fold(
-                    onSuccess = { msg -> Result.success(msg) },
-                    onFailure = {
-                        val fallbackMsg = if (_userSettings.value.language == SupportedLanguage.FR) {
-                            "Connecté avec Google ($resolvedEmail)"
-                        } else {
-                            "Signed in with Google ($resolvedEmail)"
-                        }
-                        Result.success(fallbackMsg)
-                    }
-                )
-            } catch (t: Throwable) {
-                Result.failure(formatFriendlyAuthError(t))
-            }
-        }
-
-    suspend fun signInWithGoogleIdToken(idToken: String): Result<String> =
+    suspend fun signInWithGoogleIdToken(idToken: String, fallbackEmail: String? = null): Result<String> =
         withContext(Dispatchers.IO) {
             try {
                 val auth = FirebaseAuth.getInstance()
                 val credential = GoogleAuthProvider.getCredential(idToken, null)
-                val authResult = Tasks.await(auth.signInWithCredential(credential), 20, TimeUnit.SECONDS)
+                val authResult = Tasks.await(auth.signInWithCredential(credential), 25, TimeUnit.SECONDS)
                 val user = authResult.user
                     ?: return@withContext Result.failure(IllegalStateException("Google authentication failed"))
 
-                val resolvedEmail = user.email ?: "driver@netcar.app"
+                val resolvedEmail = user.email?.takeIf { it.isNotBlank() }
+                    ?: fallbackEmail?.takeIf { it.isNotBlank() }
+                    ?: "driver@netcar.app"
                 _userSettings.value = _userSettings.value.copy(
                     isDriveBackupConnected = true,
                     connectedEmail = resolvedEmail,
@@ -614,8 +673,7 @@ class NetCarRepository @Inject constructor(
 
     suspend fun signInWithEmailPassword(
         email: String,
-        password: String,
-        activity: Activity? = null
+        password: String
     ): Result<String> =
         withContext(Dispatchers.IO) {
             val cleanEmail = email.trim()
@@ -670,8 +728,8 @@ class NetCarRepository @Inject constructor(
                     }
                 )
             } catch (t: Throwable) {
-                if (isOperationNotAllowedError(t) && activity != null) {
-                    return@withContext signInWithGoogle(activity, loginHint = cleanEmail)
+                if (isOperationNotAllowedError(t)) {
+                    return@withContext Result.failure(GoogleOAuthFallbackRequiredException(cleanEmail))
                 }
                 Result.failure(formatFriendlyAuthError(t))
             }
@@ -679,8 +737,7 @@ class NetCarRepository @Inject constructor(
 
     suspend fun signUpWithEmailPassword(
         email: String,
-        password: String,
-        activity: Activity? = null
+        password: String
     ): Result<String> =
         withContext(Dispatchers.IO) {
             val cleanEmail = email.trim()
@@ -735,8 +792,8 @@ class NetCarRepository @Inject constructor(
                     }
                 )
             } catch (t: Throwable) {
-                if (isOperationNotAllowedError(t) && activity != null) {
-                    return@withContext signInWithGoogle(activity, loginHint = cleanEmail)
+                if (isOperationNotAllowedError(t)) {
+                    return@withContext Result.failure(GoogleOAuthFallbackRequiredException(cleanEmail))
                 }
                 Result.failure(formatFriendlyAuthError(t))
             }

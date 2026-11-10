@@ -141,3 +141,76 @@ test('parseFuelioCsv and exportFuelioCsv provide 100% dual compatibility with Fu
   assert.equal(reparsed.fillUps[0].odometer, 64250);
   assert.equal(reparsed.fillUps[0].totalCost, 1450);
 });
+
+import {
+  classifyVehicleCategory,
+  buildGeneratedVehiclePhotoUrl,
+  STUDIO_VEHICLE_PHOTOS,
+} from './vehicle-photo';
+
+test('classifyVehicleCategory and buildGeneratedVehiclePhotoUrl select matching studio placeholder photo by make and model', () => {
+  assert.equal(classifyVehicleCategory('Volkswagen', 'Golf VIII R', 'gasoline'), 'hatchback');
+  assert.equal(classifyVehicleCategory('Peugeot', '3008 GT', 'diesel'), 'suv');
+  assert.equal(classifyVehicleCategory('Tesla', 'Model 3', 'electric'), 'electric');
+  assert.equal(classifyVehicleCategory('Audi', 'RS7 Sportback', 'gasoline'), 'sedan');
+
+  const generated = buildGeneratedVehiclePhotoUrl({
+    make: 'Volkswagen',
+    model: 'Golf VIII',
+    year: 2024,
+    fuelType: 'gasoline',
+  });
+  assert.equal(generated.category, 'hatchback');
+  assert.equal(generated.label, 'Volkswagen Golf VIII');
+  assert.ok(generated.photoUrl.startsWith(STUDIO_VEHICLE_PHOTOS.hatchback));
+  assert.ok(generated.photoUrl.includes('make=Volkswagen'));
+  assert.ok(generated.photoUrl.includes('model=Golf+VIII'));
+});
+
+import {
+  getLatestVehicleOdometer,
+  validateVehicleOdometer,
+} from './telemetry-math';
+
+test('getLatestVehicleOdometer and validateVehicleOdometer reject odometer readings below latest existing record', () => {
+  const latestOdo = getLatestVehicleOdometer({
+    currentOdometer: 64250,
+    fillUps: [{ odometer: 63480 }, { odometer: 64500 }],
+    services: [{ odometer: 60000 }],
+    expenses: [{ odometer: 64100 }],
+  });
+  assert.equal(latestOdo, 64500);
+
+  const lowerReading = validateVehicleOdometer({
+    enteredOdometer: 64200,
+    latestOdometer: latestOdo,
+    distUnit: 'km',
+    lang: 'fr',
+    requirePositive: true,
+  });
+  assert.equal(lowerReading.valid, false);
+  assert.equal(lowerReading.minRequired, 64500);
+  assert.ok(lowerReading.error?.includes('64'));
+
+  const equalReading = validateVehicleOdometer({
+    enteredOdometer: 64500,
+    latestOdometer: latestOdo,
+    distUnit: 'km',
+    lang: 'en',
+    requirePositive: true,
+  });
+  assert.equal(equalReading.valid, true);
+  assert.equal(equalReading.error, undefined);
+
+  const higherReading = validateVehicleOdometer({
+    enteredOdometer: 65120,
+    latestOdometer: latestOdo,
+    distUnit: 'km',
+    lang: 'en',
+    requirePositive: true,
+  });
+  assert.equal(higherReading.valid, true);
+  assert.equal(higherReading.error, undefined);
+});
+
+

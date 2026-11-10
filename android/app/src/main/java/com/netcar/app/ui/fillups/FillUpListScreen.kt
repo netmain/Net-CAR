@@ -1,5 +1,8 @@
 package com.netcar.app.ui.fillups
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,6 +24,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Card
@@ -29,22 +34,31 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.FillUp
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.FuelGreen
 import com.netcar.app.ui.theme.FuelGreenContainer
+import com.netcar.app.ui.theme.OverdueRed
+import com.netcar.app.ui.theme.OverdueRedContainer
+import com.netcar.app.ui.theme.SuccessGreen
+import com.netcar.app.ui.theme.SuccessGreenContainer
 import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -59,16 +73,63 @@ fun FillUpListScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
     val volUnit = uiState.userSettings.units.volUnit
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy", Locale.getDefault()) }
     val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
+    val context = LocalContext.current
+
+    var pendingCsvExportContent by remember { mutableStateOf<Pair<String, String>?>(null) }
+
+    val csvImportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                val content = context.contentResolver.openInputStream(uri)
+                    ?.bufferedReader(Charsets.UTF_8)
+                    ?.use { it.readText() }
+                if (!content.isNullOrBlank()) {
+                    viewModel.importCsvContent(content)
+                } else {
+                    viewModel.reportCsvError(
+                        if (isFr) "Le fichier CSV sélectionné est vide."
+                        else "The selected CSV file is empty."
+                    )
+                }
+            }.onFailure { err ->
+                viewModel.reportCsvError(
+                    err.localizedMessage ?: if (isFr) "Impossible de lire le fichier CSV." else "Could not read CSV file."
+                )
+            }
+        }
+    }
+
+    val csvExportLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        val payload = pendingCsvExportContent
+        if (uri != null && payload != null) {
+            runCatching {
+                context.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(payload.second.toByteArray(Charsets.UTF_8))
+                    out.flush()
+                }
+                viewModel.reportCsvExportSuccess(payload.first)
+            }.onFailure { err ->
+                viewModel.reportCsvError(
+                    err.localizedMessage ?: if (isFr) "Erreur lors de l'enregistrement du CSV." else "Failed to save CSV file."
+                )
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
             TopBar(
-                title = "Fuel History",
+                title = if (isFr) "Historique Carburant" else "Fuel History",
                 canNavigateBack = onOpenDrawer == null,
                 onNavigateBack = onNavigateBack,
                 onOpenDrawer = onOpenDrawer
@@ -100,39 +161,115 @@ fun FillUpListScreen(
                     colors = CardDefaults.cardColors(containerColor = FuelGreenContainer),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(18.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(18.dp)
                     ) {
-                        Column {
-                            Text(
-                                text = "Total Fuel Spent",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.totalSpent)}",
-                                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column {
+                                Text(
+                                    text = if (isFr) "Total Carburant" else "Total Fuel Spent",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.totalSpent)}",
+                                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    text = (if (isFr) "Volume : " else "Total Volume: ") +
+                                        "${String.format(Locale.US, "%.1f", uiState.totalVolume)} $volUnit",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = (if (isFr) "Moy : " else "Avg: ") +
+                                        "$currencySymbol${String.format(Locale.US, "%.2f", uiState.averagePricePerUnit)}/$volUnit",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
 
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text(
-                                text = "Total Volume: ${String.format(Locale.US, "%.1f", uiState.totalVolume)} $volUnit",
-                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = "Avg: $currencySymbol${String.format(Locale.US, "%.2f", uiState.averagePricePerUnit)}/$volUnit",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    csvImportLauncher.launch(
+                                        arrayOf(
+                                            "text/csv",
+                                            "text/comma-separated-values",
+                                            "text/plain",
+                                            "*/*"
+                                        )
+                                    )
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FileUpload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isFr) "Importer CSV" else "Import CSV",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    val exported = viewModel.exportActiveVehicleCsv()
+                                    pendingCsvExportContent = exported
+                                    csvExportLauncher.launch(exported.first)
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.FileDownload,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isFr) "Exporter CSV" else "Export CSV",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold)
+                                )
+                            }
+                        }
+
+                        if (!uiState.csvStatusMessage.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = if (uiState.csvIsError) OverdueRedContainer else SuccessGreenContainer,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = uiState.csvStatusMessage ?: "",
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = if (uiState.csvIsError) OverdueRed else SuccessGreen,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -154,13 +291,13 @@ fun FillUpListScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No fill-up entries yet",
+                            text = if (isFr) "Aucun plein enregistré" else "No fill-up entries yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + below to record a fill-up.",
+                            text = if (isFr) "Appuyez sur + ou importez un CSV Fuelio." else "Tap + below or import a Fuelio CSV.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

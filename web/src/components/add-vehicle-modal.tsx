@@ -3,26 +3,11 @@
 import React, { useState } from 'react';
 import { useApp } from '@/lib/app-context';
 import { FuelType } from '@/types';
-import { Car, Check, Sparkles, Image as ImageIcon, X } from 'lucide-react';
-
-const PRESET_PHOTOS = [
-  {
-    label: 'Sedan (Blue)',
-    url: 'https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    label: 'Hatchback (Grey)',
-    url: 'https://images.unsplash.com/photo-1619767886558-efdc259cde1a?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    label: 'SUV (White)',
-    url: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&w=800&q=80',
-  },
-  {
-    label: 'Electric / Modern',
-    url: 'https://images.unsplash.com/photo-1563720223185-11003d516935?auto=format&fit=crop&w=800&q=80',
-  },
-];
+import { Car, Check, Sparkles, Image as ImageIcon, X, Wand2, Loader2 } from 'lucide-react';
+import {
+  PRESET_VEHICLE_PHOTOS,
+  buildGeneratedVehiclePhotoUrl,
+} from '@/lib/vehicle-photo';
 
 export function AddVehicleModal() {
   const {
@@ -46,6 +31,11 @@ export function AddVehicleModal() {
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [generatingPhoto, setGeneratingPhoto] = useState(false);
+  const [photoGenStatus, setPhotoGenStatus] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
 
   if (!addVehicleModalOpen) return null;
 
@@ -63,6 +53,82 @@ export function AddVehicleModal() {
     setPhotoUrl('');
     setNotes('');
     setErrors({});
+    setPhotoGenStatus(null);
+  };
+
+  const handleGeneratePhoto = async () => {
+    const cleanMake = make.trim();
+    const cleanModel = model.trim();
+
+    if (!cleanMake && !cleanModel) {
+      setErrors((prev) => ({
+        ...prev,
+        make: prev.make || (lang === 'fr' ? 'La marque est requise' : 'Make is required'),
+        model: prev.model || (lang === 'fr' ? 'Le modèle est requis' : 'Model is required'),
+      }));
+      setPhotoGenStatus({
+        type: 'error',
+        message:
+          lang === 'fr'
+            ? "Veuillez d'abord saisir la marque et le modèle du véhicule pour générer une photo."
+            : "Please enter the vehicle's Make and Model first to generate a placeholder photo.",
+      });
+      return;
+    }
+
+    setGeneratingPhoto(true);
+    setPhotoGenStatus(null);
+
+    try {
+      const response = await fetch('/api/generate-vehicle-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          make: cleanMake,
+          model: cleanModel,
+          year,
+          fuelType,
+        }),
+      });
+
+      let result: { photoUrl: string; category: string; label: string };
+      if (response.ok) {
+        result = await response.json();
+      } else {
+        result = buildGeneratedVehiclePhotoUrl({
+          make: cleanMake,
+          model: cleanModel,
+          year,
+          fuelType,
+        });
+      }
+
+      setPhotoUrl(result.photoUrl);
+      setPhotoGenStatus({
+        type: 'success',
+        message:
+          lang === 'fr'
+            ? `Photo générée pour ${result.label} (${result.category.toUpperCase()}) et insérée dans le champ URL.`
+            : `Generated placeholder photo for ${result.label} (${result.category.toUpperCase()}) and populated Photo URL.`,
+      });
+    } catch {
+      const fallback = buildGeneratedVehiclePhotoUrl({
+        make: cleanMake,
+        model: cleanModel,
+        year,
+        fuelType,
+      });
+      setPhotoUrl(fallback.photoUrl);
+      setPhotoGenStatus({
+        type: 'success',
+        message:
+          lang === 'fr'
+            ? `Photo générée pour ${fallback.label} (${fallback.category.toUpperCase()}) et insérée dans le champ URL.`
+            : `Generated placeholder photo for ${fallback.label} (${fallback.category.toUpperCase()}) and populated Photo URL.`,
+      });
+    } finally {
+      setGeneratingPhoto(false);
+    }
   };
 
   const handleClose = () => {
@@ -311,22 +377,68 @@ export function AddVehicleModal() {
             </h3>
 
             <div>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                <label
+                  htmlFor="modal-vehicle-photo-url"
+                  className="block text-xs font-mono font-bold text-slate-300 uppercase tracking-wider"
+                >
+                  {t.vehicles.photoUrl}
+                </label>
+                <button
+                  type="button"
+                  onClick={handleGeneratePhoto}
+                  disabled={generatingPhoto}
+                  data-testid="modal-generate-photo-btn"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-3 py-1.5 text-xs font-mono font-bold text-amber-300 hover:bg-amber-500/25 hover:border-amber-400 disabled:opacity-50 transition cursor-pointer"
+                >
+                  {generatingPhoto ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-400" />
+                  ) : (
+                    <Wand2 className="h-3.5 w-3.5 text-amber-400" />
+                  )}
+                  <span>
+                    {generatingPhoto
+                      ? lang === 'fr'
+                        ? 'Génération...'
+                        : 'Generating...'
+                      : lang === 'fr'
+                        ? 'Générer une photo (Marque & Modèle)'
+                        : 'Generate Photo from Make & Model'}
+                  </span>
+                </button>
+              </div>
               <input
-                type="url"
+                id="modal-vehicle-photo-url"
+                type="text"
                 placeholder="https://example.com/car-photo.jpg"
                 value={photoUrl}
-                onChange={(e) => setPhotoUrl(e.target.value)}
+                onChange={(e) => {
+                  setPhotoUrl(e.target.value);
+                  if (photoGenStatus) setPhotoGenStatus(null);
+                }}
                 className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3.5 py-2 text-sm font-medium text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
               />
+              {photoGenStatus && (
+                <p
+                  className={`mt-1.5 text-xs font-mono ${
+                    photoGenStatus.type === 'error' ? 'text-red-400' : 'text-emerald-400'
+                  }`}
+                >
+                  {photoGenStatus.message}
+                </p>
+              )}
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <span className="text-[11px] font-mono text-slate-500">
                   {lang === 'fr' ? 'Photos rapides :' : 'Quick presets:'}
                 </span>
-                {PRESET_PHOTOS.map((p) => (
+                {PRESET_VEHICLE_PHOTOS.map((p) => (
                   <button
                     type="button"
                     key={p.label}
-                    onClick={() => setPhotoUrl(p.url)}
+                    onClick={() => {
+                      setPhotoUrl(p.url);
+                      setPhotoGenStatus(null);
+                    }}
                     className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1 text-[11px] font-mono text-slate-300 hover:border-amber-500/40 hover:text-amber-400 transition cursor-pointer"
                   >
                     {p.label}
@@ -334,6 +446,21 @@ export function AddVehicleModal() {
                 ))}
               </div>
             </div>
+
+            {photoUrl && (
+              <div className="relative h-40 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-900">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={photoUrl}
+                  alt={`${make || 'Vehicle'} ${model || ''} preview`.trim()}
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-cover"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
 
             <div>
               <textarea

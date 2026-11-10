@@ -3,7 +3,11 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/lib/app-context';
 import { FuelType } from '@/types';
-import { buildConsumptionTrendSeries } from '@/lib/telemetry-math';
+import {
+  buildConsumptionTrendSeries,
+  getLatestVehicleOdometer,
+  validateVehicleOdometer,
+} from '@/lib/telemetry-math';
 import {
   ResponsiveContainer,
   LineChart,
@@ -38,6 +42,8 @@ export default function FuelPage() {
   const { 
     activeVehicle, 
     fillUps, 
+    services,
+    expenses,
     addFillUp, 
     deleteFillUp, 
     importFuelioCsv,
@@ -307,9 +313,19 @@ export default function FuelPage() {
   const volumeUnit = userProfile.units === 'metric' ? 'L' : 'gal';
   const economyUnit = userProfile.units === 'metric' ? 'L/100km' : 'MPG';
 
+  const latestVehicleOdometer = useMemo(() => {
+    if (!activeVehicle) return 0;
+    return getLatestVehicleOdometer({
+      currentOdometer: activeVehicle.currentOdometer,
+      fillUps: vehicleFillups,
+      services: services.filter((s) => s.vehicleId === activeVehicle.id),
+      expenses: expenses.filter((e) => e.vehicleId === activeVehicle.id),
+    });
+  }, [activeVehicle, vehicleFillups, services, expenses]);
+
   const handleOpenAddModal = () => {
     setDate(new Date().toISOString().split('T')[0]);
-    setOdometer(activeVehicle ? activeVehicle.currentOdometer : '');
+    setOdometer(activeVehicle ? latestVehicleOdometer : '');
     setVolume('');
     
     const lastFillup = vehicleFillups.length > 0 ? vehicleFillups[0] : null;
@@ -330,10 +346,25 @@ export default function FuelPage() {
     if (!activeVehicle) return;
 
     const errors: Record<string, string> = {};
-    if (!date) errors.date = 'Date is required';
-    if (odometer === '' || Number(odometer) <= 0) errors.odometer = 'Valid odometer is required';
-    if (volume === '' || Number(volume) <= 0) errors.volume = 'Valid fuel volume is required';
-    if (totalCost === '' || Number(totalCost) <= 0) errors.totalCost = 'Total cost is required';
+    if (!date) errors.date = lang === 'fr' ? 'La date est requise' : 'Date is required';
+
+    const odoValidation = validateVehicleOdometer({
+      enteredOdometer: odometer,
+      latestOdometer: latestVehicleOdometer,
+      distUnit,
+      lang,
+      requirePositive: true,
+    });
+    if (!odoValidation.valid && odoValidation.error) {
+      errors.odometer = odoValidation.error;
+    }
+
+    if (volume === '' || Number(volume) <= 0) {
+      errors.volume = lang === 'fr' ? 'Un volume de carburant valide est requis' : 'Valid fuel volume is required';
+    }
+    if (totalCost === '' || Number(totalCost) <= 0) {
+      errors.totalCost = lang === 'fr' ? 'Le coût total est requis' : 'Total cost is required';
+    }
 
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
@@ -1000,7 +1031,7 @@ export default function FuelPage() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveFillup} className="mt-5 space-y-4">
+            <form onSubmit={handleSaveFillup} noValidate className="mt-5 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 font-mono uppercase tracking-wider mb-1.5">
@@ -1016,17 +1047,55 @@ export default function FuelPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 font-mono uppercase tracking-wider mb-1.5">
-                    {t.common.odometer} ({distUnit}) *
-                  </label>
+                  <div className="flex items-center justify-between gap-1 mb-1.5">
+                    <label
+                      htmlFor="fillup-odometer-input"
+                      className="block text-xs font-bold text-slate-300 font-mono uppercase tracking-wider"
+                    >
+                      {t.common.odometer} ({distUnit}) *
+                    </label>
+                    {latestVehicleOdometer > 0 && (
+                      <span className="text-[10px] font-mono text-slate-400">
+                        Min: {latestVehicleOdometer.toLocaleString()} {distUnit}
+                      </span>
+                    )}
+                  </div>
                   <input
+                    id="fillup-odometer-input"
                     type="number"
-                    placeholder="e.g. 64250"
+                    placeholder={`>= ${latestVehicleOdometer}`}
                     value={odometer}
-                    onChange={(e) => setOdometer(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
+                    onChange={(e) => {
+                      const nextVal = e.target.value === '' ? '' : Number(e.target.value);
+                      setOdometer(nextVal);
+                      const check = validateVehicleOdometer({
+                        enteredOdometer: nextVal,
+                        latestOdometer: latestVehicleOdometer,
+                        distUnit,
+                        lang,
+                        requirePositive: true,
+                      });
+                      setFormErrors((prev) => {
+                        const updated = { ...prev };
+                        if (!check.valid && check.error) {
+                          updated.odometer = check.error;
+                        } else {
+                          delete updated.odometer;
+                        }
+                        return updated;
+                      });
+                    }}
+                    className={`w-full rounded-xl border bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 transition ${
+                      formErrors.odometer
+                        ? 'border-red-500/80 focus:border-red-500 focus:ring-red-500/40'
+                        : 'border-slate-800 focus:border-amber-500/50 focus:ring-amber-500/50'
+                    }`}
                   />
-                  {formErrors.odometer && <p className="mt-1 text-xs text-red-400 font-mono">{formErrors.odometer}</p>}
+                  {formErrors.odometer && (
+                    <p data-testid="fillup-odometer-error" className="mt-1 text-xs text-red-400 font-mono">
+                      {formErrors.odometer}
+                    </p>
+                  )}
                 </div>
               </div>
 

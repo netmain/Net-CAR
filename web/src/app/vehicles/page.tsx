@@ -18,8 +18,10 @@ import {
   AlertTriangle,
   Sparkles,
   ShieldCheck,
-  Activity
+  Activity,
+  Wand2
 } from 'lucide-react';
+import { buildGeneratedVehiclePhotoUrl } from '@/lib/vehicle-photo';
 
 export default function VehiclesPage() {
   const { 
@@ -32,6 +34,7 @@ export default function VehiclesPage() {
     fillUps, 
     services, 
     userProfile, 
+    lang,
     t 
   } = useApp();
 
@@ -180,6 +183,7 @@ export default function VehiclesPage() {
                     <img
                       src={v.photoUrl}
                       alt={`${v.make} ${v.model}`}
+                      referrerPolicy="no-referrer"
                       className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = 'none';
@@ -426,11 +430,33 @@ export default function VehiclesPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1">
-                  {t.vehicles.photoUrl}
-                </label>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    {t.vehicles.photoUrl}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const generated = buildGeneratedVehiclePhotoUrl({
+                        make: editForm.make || '',
+                        model: editForm.model || '',
+                        year: editForm.year,
+                        fuelType: editForm.fuelType,
+                      });
+                      setEditForm({ ...editForm, photoUrl: generated.photoUrl });
+                    }}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/40 bg-amber-500/15 px-2.5 py-1 text-xs font-mono font-bold text-amber-300 hover:bg-amber-500/25 hover:border-amber-400 transition cursor-pointer"
+                  >
+                    <Wand2 className="h-3.5 w-3.5 text-amber-400" />
+                    <span>
+                      {lang === 'fr'
+                        ? 'Générer une photo (Marque & Modèle)'
+                        : 'Generate Photo from Make & Model'}
+                    </span>
+                  </button>
+                </div>
                 <input
-                  type="url"
+                  type="text"
                   placeholder="https://..."
                   value={editForm.photoUrl || ''}
                   onChange={(e) => setEditForm({ ...editForm, photoUrl: e.target.value })}
