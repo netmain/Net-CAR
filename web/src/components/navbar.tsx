@@ -19,6 +19,7 @@ import {
   LogOut,
   Cloud,
   RefreshCw,
+  Download,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -140,8 +141,26 @@ export function Navbar() {
           )}
         </div>
 
-        {/* Right Controls: Sync Badge, Language Switcher, Profile / Auth */}
+        {/* Right Controls: APK Download, Sync Badge, Language Switcher, Profile / Auth */}
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Direct Android APK Download Button */}
+          <a
+            href="/api/download-apk"
+            download="Net-CAR.apk"
+            className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1 text-[11px] font-mono font-bold text-emerald-300 hover:bg-emerald-500/25 transition cursor-pointer"
+            title={
+              lang === 'fr'
+                ? 'Télécharger la dernière version de Net-CAR.apk (v2.2.0)'
+                : 'Download the latest Net-CAR.apk (v2.2.0)'
+            }
+          >
+            <Download className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden md:inline">
+              {lang === 'fr' ? 'Télécharger Net-CAR.apk' : 'Download Net-CAR.apk'}
+            </span>
+            <span className="md:hidden">APK</span>
+          </a>
+
           {/* Cloud Sync Status Indicator */}
           {user && !user.isDemo ? (
             <Link

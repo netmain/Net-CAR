@@ -7,6 +7,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -20,19 +23,38 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - name: Install Gradle 8.5 & Sanitize Resources
+        run: |
+          curl -sL https://services.gradle.org/distributions/gradle-8.5-bin.zip -o /tmp/gradle-8.5-bin.zip
+          sudo unzip -q -o /tmp/gradle-8.5-bin.zip -d /opt/gradle
+          echo "/opt/gradle/gradle-8.5/bin" >> $GITHUB_PATH
+          find android/app/src/main/res -name "*.webp" -delete || true
+          rm -f android/local.properties
 
-      - name: Grant execute permission for gradlew
-        working-directory: ./android
-        run: chmod +x gradlew
+      - name: Build Debug & Release APKs
+        run: |
+          /opt/gradle/gradle-8.5/bin/gradle -p android assembleDebug assembleRelease --no-daemon --stacktrace
+          cp android/app/build/outputs/apk/release/app-release.apk Net-CAR.apk
+          cp android/app/build/outputs/apk/debug/app-debug.apk Net-CAR-debug.apk
+          ls -lh Net-CAR.apk Net-CAR-debug.apk
 
-      - name: Build Debug APK
-        working-directory: ./android
-        run: ./gradlew assembleDebug --no-daemon
-
-      - name: Upload Net-CAR Debug APK Artifact
+      - name: Upload Net-CAR APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Net-CAR-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            Net-CAR.apk
+            Net-CAR-debug.apk
+          if-no-files-found: error
+
+      - name: Publish APK to GitHub Releases (latest-apk)
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest-apk
+          name: Net-CAR Android APK (Latest Build)
+          body: "Automated Android APK build from the latest commit. Download **Net-CAR.apk** below to install on your Android device."
+          prerelease: false
+          files: |
+            Net-CAR.apk
+            Net-CAR-debug.apk

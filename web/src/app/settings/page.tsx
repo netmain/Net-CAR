@@ -677,18 +677,31 @@ export default function SettingsPage() {
                   <Smartphone className="h-4 w-4 text-sky-400" />
                   <span>
                     {lang === 'fr'
-                      ? 'Application Mobile Android (Net-CAR v2.0.0 .APK)'
-                      : 'Android Mobile Application (Net-CAR v2.0.0 .APK)'}
+                      ? 'Application Mobile Android (Net-CAR v2.2.0 .APK)'
+                      : 'Android Mobile Application (Net-CAR v2.2.0 .APK)'}
                   </span>
                 </div>
                 <p className="mt-1.5 text-xs text-slate-300 font-sans max-w-2xl">
                   {lang === 'fr'
-                    ? 'Téléchargez le fichier .APK compilé pour Android avec le nouveau menu latéral (Side Drawer), le thème sombre moderne et la synchronisation Cloud Firebase.'
-                    : 'Download the compiled Android .APK featuring the new Material 3 Side Drawer main menu, modern dark telemetry theme, and Firebase Cloud synchronization.'}
+                    ? 'Téléchargez le fichier .APK compilé pour Android avec connexion Google/Cloud sans WebView, notifications natives pour les rappels et import/export CSV.'
+                    : 'Download the compiled Android .APK featuring crash-free external Google/Cloud sign-in, native reminder notifications, and CSV import/export.'}
                 </p>
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                <a
+                  href="/api/download-apk"
+                  download="Net-CAR.apk"
+                  className="flex items-center justify-center gap-2 rounded-xl border border-emerald-400 bg-emerald-500 px-4 py-2.5 text-xs font-mono font-bold text-slate-950 shadow-md hover:bg-emerald-400 transition shrink-0 cursor-pointer"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>
+                    {lang === 'fr'
+                      ? 'Téléchargement Direct (Net-CAR.apk)'
+                      : 'Direct Download (Net-CAR.apk)'}
+                  </span>
+                </a>
+
                 <button
                   type="button"
                   onClick={handlePrepareApkBlob}
@@ -704,8 +717,8 @@ export default function SettingsPage() {
                     {apkDownloading
                       ? apkProgress || 'Préparation APK...'
                       : lang === 'fr'
-                        ? '1. Préparer & Télécharger Net-CAR.apk'
-                        : '1. Prepare & Download Net-CAR.apk'}
+                        ? 'Alternative : Préparer par segments'
+                        : 'Alternative: Chunked Download'}
                   </span>
                 </button>
 
