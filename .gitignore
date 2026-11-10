@@ -16,6 +16,11 @@ android/app/build/
 android/local.properties
 *.aab
 
+# Signing (never commit keystores or passwords)
+android/keystore.properties
+*.jks
+*.keystore
+
 # Firebase
 .firebase/
 

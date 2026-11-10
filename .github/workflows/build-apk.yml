@@ -10,9 +10,16 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: apk-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-apk:
+    name: Build & Publish APKs
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -23,38 +30,102 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Gradle 8.5 & Sanitize Resources
-        run: |
-          curl -sL https://services.gradle.org/distributions/gradle-8.5-bin.zip -o /tmp/gradle-8.5-bin.zip
-          sudo unzip -q -o /tmp/gradle-8.5-bin.zip -d /opt/gradle
-          echo "/opt/gradle/gradle-8.5/bin" >> $GITHUB_PATH
-          find android/app/src/main/res -name "*.webp" -delete || true
-          rm -f android/local.properties
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Build Debug & Release APKs
-        run: |
-          /opt/gradle/gradle-8.5/bin/gradle -p android assembleDebug assembleRelease --no-daemon --stacktrace
-          cp android/app/build/outputs/apk/release/app-release.apk Net-CAR.apk
-          cp android/app/build/outputs/apk/debug/app-debug.apk Net-CAR-debug.apk
-          ls -lh Net-CAR.apk Net-CAR-debug.apk
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
 
-      - name: Upload Net-CAR APK Artifact
+      - name: Ensure google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "Using google-services.json from the GOOGLE_SERVICES_JSON secret."
+          elif [ -f android/app/google-services.json ]; then
+            echo "Using the committed android/app/google-services.json."
+          else
+            echo "::error::android/app/google-services.json is missing. Commit it or set the GOOGLE_SERVICES_JSON repository secret."
+            exit 1
+          fi
+
+      - name: Configure release signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/release.keystore
+            {
+              echo "storeFile=release.keystore"
+              echo "storePassword=$KEYSTORE_PASSWORD"
+              echo "keyAlias=$KEY_ALIAS"
+              echo "keyPassword=$KEY_PASSWORD"
+            } > android/keystore.properties
+            echo "using_release_key=true" >> "$GITHUB_OUTPUT"
+            echo "Release APK will be signed with the configured release keystore."
+          else
+            if [ -n "$KEYSTORE_BASE64$KEYSTORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
+              echo "::error::Incomplete signing secrets. Set ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD together."
+              exit 1
+            fi
+            echo "using_release_key=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No release keystore secrets configured. The release APK will be signed with this runner's debug key, which changes on every run, so existing installs must be uninstalled before updating."
+          fi
+
+      - name: Build debug and release APKs
+        working-directory: ./android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          VERSION_NAME: 1.0.${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug assembleRelease --no-daemon --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk ../Net-CAR.apk
+          cp app/build/outputs/apk/debug/app-debug.apk ../Net-CAR-debug.apk
+          cd ..
+          sha256sum Net-CAR.apk Net-CAR-debug.apk > checksums.txt
+          ls -lh Net-CAR.apk Net-CAR-debug.apk checksums.txt
+
+      - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: Net-CAR-Android-APK
           path: |
             Net-CAR.apk
             Net-CAR-debug.apk
+            checksums.txt
           if-no-files-found: error
+          retention-days: 30
 
-      - name: Publish APK to GitHub Releases (latest-apk)
+      - name: Publish APKs to GitHub Release
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: latest-apk
           name: Net-CAR Android APK (Latest Build)
-          body: "Automated Android APK build from the latest commit. Download **Net-CAR.apk** below to install on your Android device."
+          body: |
+            Automated Android build from commit `${{ github.sha }}` (workflow run #${{ github.run_number }}).
+
+            - **Version:** `1.0.${{ github.run_number }}` (versionCode `${{ github.run_number }}`)
+            - **Signing:** ${{ steps.signing.outputs.using_release_key == 'true' && 'release keystore' || 'CI debug key (uninstall the old app before updating)' }}
+
+            | Asset | Description |
+            |-------|-------------|
+            | `Net-CAR.apk` | Release build (recommended) |
+            | `Net-CAR-debug.apk` | Debug build (debuggable, for testing) |
+            | `checksums.txt` | SHA-256 checksums for both APKs |
+
+            Install on Android 8.0+ (API 26). If Android refuses to update an existing installation, uninstall the old app first.
           prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
+          overwrite_files: true
           files: |
             Net-CAR.apk
             Net-CAR-debug.apk
+            checksums.txt
