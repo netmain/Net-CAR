@@ -43,7 +43,7 @@ fun AppLogo(
             painter = painterResource(R.drawable.ic_app_mark),
             contentDescription = "Net-CAR",
             contentScale = ContentScale.Fit,
-            modifier = Modifier.fillMaxSize(0.62f)
+            modifier = Modifier.fillMaxSize(0.92f)
         )
     }
 }
