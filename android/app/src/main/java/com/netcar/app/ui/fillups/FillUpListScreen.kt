@@ -49,10 +49,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.FillUp
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
+import com.netcar.app.ui.components.formatMoney
 import com.netcar.app.ui.theme.FuelGreen
 import com.netcar.app.ui.theme.FuelGreenContainer
 import com.netcar.app.ui.theme.OverdueRed
@@ -69,7 +71,6 @@ fun FillUpListScreen(
     viewModel: FillUpViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddFillUp: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -130,9 +131,8 @@ fun FillUpListScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Historique Carburant" else "Fuel History",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = false,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {
@@ -182,7 +182,7 @@ fun FillUpListScreen(
                                 )
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.totalSpent)}",
+                                    text = formatMoney(currencySymbol, uiState.totalSpent),
                                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -198,7 +198,7 @@ fun FillUpListScreen(
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = (if (isFr) "Moy : " else "Avg: ") +
-                                        "$currencySymbol${String.format(Locale.US, "%.2f", uiState.averagePricePerUnit)}/$volUnit",
+                                        "$currencySymbol ${String.format(Locale.US, "%.2f", uiState.averagePricePerUnit)}/$volUnit",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -348,7 +348,7 @@ private fun FillUpItemCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -361,7 +361,7 @@ private fun FillUpItemCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
                             .background(FuelGreenContainer),
                         contentAlignment = Alignment.Center
@@ -370,11 +370,11 @@ private fun FillUpItemCard(
                             imageVector = Icons.Default.LocalGasStation,
                             contentDescription = null,
                             tint = FuelGreen,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Column {
                         Text(
@@ -383,8 +383,10 @@ private fun FillUpItemCard(
                             } else {
                                 if (isFr) "Plein de carburant" else "Fuel Refill"
                             },
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = dateFormatter.format(Date(fillUp.date)),
@@ -396,9 +398,10 @@ private fun FillUpItemCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "$currencySymbol${String.format(Locale.US, "%.2f", fillUp.totalCost)}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = formatMoney(currencySymbol, fillUp.totalCost),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
 
                     IconButton(onClick = onDelete) {
@@ -406,13 +409,13 @@ private fun FillUpItemCard(
                             imageVector = Icons.Default.DeleteOutline,
                             contentDescription = if (isFr) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -438,7 +441,7 @@ private fun FillUpItemCard(
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         Text(
-                            text = "$currencySymbol${String.format(Locale.US, "%.2f", fillUp.pricePerUnit)}/$volUnit",
+                            text = "${formatMoney(currencySymbol, fillUp.pricePerUnit)}/$volUnit",
                             style = MaterialTheme.typography.labelSmall,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )

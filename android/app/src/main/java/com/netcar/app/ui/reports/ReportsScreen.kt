@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.StatCard
 import com.netcar.app.ui.components.TopBar
+import com.netcar.app.ui.components.formatMoney
 import com.netcar.app.ui.theme.ExpenseAmber
 import com.netcar.app.ui.theme.ExpenseAmberContainer
 import com.netcar.app.ui.theme.FuelGreen
@@ -59,7 +60,6 @@ import java.util.Locale
 fun ReportsScreen(
     viewModel: ReportsViewModel,
     onNavigateBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -73,9 +73,8 @@ fun ReportsScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Rapports et analyses" else "Reports & Analytics",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = true,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         modifier = modifier
@@ -111,7 +110,7 @@ fun ReportsScreen(
                     ) {
                         StatCard(
                             title = if (isFr) "Dépenses totales" else "Total Spend",
-                            value = "$currencySymbol${String.format(Locale.US, "%.0f", uiState.totalSpend)}",
+                            value = formatMoney(currencySymbol, uiState.totalSpend, decimals = 0),
                             icon = Icons.Default.Payments,
                             iconTint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.weight(1f)
@@ -119,7 +118,7 @@ fun ReportsScreen(
 
                         StatCard(
                             title = (if (isFr) "Coût par " else "Cost per ") + distUnit,
-                            value = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.costPerKm)}",
+                            value = formatMoney(currencySymbol, uiState.costPerKm),
                             unit = "/$distUnit",
                             icon = Icons.Default.Speed,
                             iconTint = ExpenseAmber,
@@ -227,7 +226,7 @@ fun ReportsScreen(
                         // 3 Main pillars
                         DistributionPillar(
                             title = if (isFr) "Carburant" else "Fuel",
-                            amount = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.fuelSpend)}",
+                            amount = formatMoney(currencySymbol, uiState.fuelSpend),
                             percentage = (uiState.fuelPercentage * 100).toInt(),
                             color = FuelGreen,
                             icon = Icons.Default.LocalGasStation
@@ -237,7 +236,7 @@ fun ReportsScreen(
 
                         DistributionPillar(
                             title = if (isFr) "Entretien" else "Maintenance",
-                            amount = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.maintenanceSpend)}",
+                            amount = formatMoney(currencySymbol, uiState.maintenanceSpend),
                             percentage = (uiState.maintenancePercentage * 100).toInt(),
                             color = MaintenanceBlue,
                             icon = Icons.Default.Build
@@ -251,7 +250,7 @@ fun ReportsScreen(
                             } else {
                                 "Expenses (Parking, Tolls, Wash)"
                             },
-                            amount = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.expensesSpend)}",
+                            amount = formatMoney(currencySymbol, uiState.expensesSpend),
                             percentage = (uiState.expensesPercentage * 100).toInt(),
                             color = ExpenseAmber,
                             icon = Icons.Default.Receipt
@@ -280,20 +279,20 @@ fun ReportsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
+                                .padding(10.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = item.name,
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = "$currencySymbol${String.format(Locale.US, "%.2f", item.amount)}",
-                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                                    text = formatMoney(currencySymbol, item.amount),
+                                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))

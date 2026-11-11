@@ -41,11 +41,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.netcar.app.model.ServiceRecord
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
+import com.netcar.app.ui.components.formatMoney
 import com.netcar.app.ui.theme.MaintenanceBlue
 import com.netcar.app.ui.theme.MaintenanceBlueContainer
 import java.text.NumberFormat
@@ -58,7 +60,6 @@ fun ServiceListScreen(
     viewModel: MaintenanceViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddService: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -70,9 +71,8 @@ fun ServiceListScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Entretien & Services" else "Maintenance & Services",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = false,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {
@@ -119,7 +119,7 @@ fun ServiceListScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.totalMaintenanceCost)}",
+                                text = formatMoney(currencySymbol, uiState.totalMaintenanceCost),
                                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -215,7 +215,7 @@ private fun ServiceItemCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -228,7 +228,7 @@ private fun ServiceItemCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
                             .background(MaintenanceBlueContainer),
                         contentAlignment = Alignment.Center
@@ -237,17 +237,19 @@ private fun ServiceItemCard(
                             imageVector = Icons.Default.Build,
                             contentDescription = null,
                             tint = MaintenanceBlue,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Column {
                         Text(
                             text = service.description,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = dateFormatter.format(Date(service.date)),
@@ -259,9 +261,10 @@ private fun ServiceItemCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "$currencySymbol${String.format(Locale.US, "%.2f", service.cost)}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = formatMoney(currencySymbol, service.cost),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
 
                     IconButton(onClick = onDelete) {
@@ -269,13 +272,13 @@ private fun ServiceItemCard(
                             imageVector = Icons.Default.DeleteOutline,
                             contentDescription = if (isFrench) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

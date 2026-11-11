@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.Info
@@ -72,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
+import com.netcar.app.model.ThemeMode
 import com.netcar.app.model.Units
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.ExpenseAmber
@@ -91,7 +93,6 @@ import java.util.Locale
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onNavigateBack: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -154,9 +155,8 @@ fun SettingsScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Paramètres & Cloud" else "Settings & Cloud",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = true,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         modifier = modifier
@@ -785,6 +785,80 @@ fun SettingsScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+
+            // 3b. Theme Selector (System / Light / Dark)
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.DarkMode,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = if (isFr) "Thème" else "Theme",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            ThemeMode.values().forEach { mode ->
+                                val selected = settings.themeMode == mode
+                                FilterChip(
+                                    selected = selected,
+                                    onClick = { viewModel.setThemeMode(mode) },
+                                    label = {
+                                        Text(
+                                            if (isFr) mode.displayNameFr else mode.displayName,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    leadingIcon = if (selected) {
+                                        {
+                                            Icon(
+                                                imageVector = Icons.Default.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    } else null,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = if (isFr) {
+                                "Clair : thème blanc « CarLog ». Sombre : thème actuel."
+                            } else {
+                                "Light: the white CarLog theme. Dark: the current theme."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

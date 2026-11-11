@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { currencySymbolFor, formatMoney } from '@/lib/currency';
 import { useApp } from '@/lib/app-context';
 import {
   getLatestVehicleOdometer,
@@ -55,7 +56,7 @@ export default function MaintenancePage() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
-  const currencySymbol = userProfile.currency === 'EUR' ? '€' : userProfile.currency === 'USD' ? '$' : userProfile.currency;
+  const currencySymbol = currencySymbolFor(userProfile.currency);
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
 
   // Filter services by active vehicle

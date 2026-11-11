@@ -28,6 +28,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
+import com.netcar.app.ui.theme.LocalIsDarkTheme
 import com.netcar.app.ui.theme.OverdueRed
 
 sealed class BottomNavItem(
@@ -95,6 +96,7 @@ fun BottomNavBar(
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
+    val isDarkTheme = LocalIsDarkTheme.current
 
     NavigationBar(
         modifier = modifier,
@@ -153,7 +155,11 @@ fun BottomNavBar(
                     selectedTextColor = MaterialTheme.colorScheme.primary,
                     unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                    indicatorColor = if (isDarkTheme) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    }
                 )
             )
         }

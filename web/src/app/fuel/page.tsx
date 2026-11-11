@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import { currencySymbolFor, formatMoney } from '@/lib/currency';
 import { useApp } from '@/lib/app-context';
 import { FuelType } from '@/types';
 import {
@@ -301,14 +302,7 @@ export default function FuelPage() {
   }, [filteredFillups, safeCurrentPage, pageSize]);
 
   // Units
-  const currencySymbol =
-    userProfile.currency === 'DZD'
-      ? 'DA '
-      : userProfile.currency === 'EUR'
-        ? '€'
-        : userProfile.currency === 'USD'
-          ? '$'
-          : userProfile.currency + ' ';
+  const currencySymbol = currencySymbolFor(userProfile.currency);
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
   const volumeUnit = userProfile.units === 'metric' ? 'L' : 'gal';
   const economyUnit = userProfile.units === 'metric' ? 'L/100km' : 'MPG';
@@ -546,7 +540,7 @@ export default function FuelPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-1">
             <span className="font-mono text-3xl font-black text-amber-400">
-              {currencySymbol}{totalCostSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatMoney(currencySymbol, totalCostSum.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
             </span>
           </div>
           <p className="mt-1.5 text-xs text-slate-400">
@@ -917,13 +911,13 @@ export default function FuelPage() {
 
                       {/* Price Per Unit */}
                       <td className="px-5 py-4 whitespace-nowrap text-slate-400 font-mono">
-                        {currencySymbol}{f.pricePerUnit.toFixed(2)}
+                        {formatMoney(currencySymbol, f.pricePerUnit.toFixed(2))}
                       </td>
 
                       {/* Total Cost */}
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className="font-mono font-black text-amber-400">
-                          {currencySymbol}{f.totalCost.toFixed(2)}
+                          {formatMoney(currencySymbol, f.totalCost.toFixed(2))}
                         </span>
                       </td>
 

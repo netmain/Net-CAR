@@ -68,10 +68,14 @@ import com.netcar.app.ui.components.StatCard
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.components.VehiclePhotoDialog
 import com.netcar.app.ui.components.VehiclePhotoThumbnail
+import com.netcar.app.ui.components.formatMoney
 import com.netcar.app.ui.theme.ExpenseAmber
 import com.netcar.app.ui.theme.ExpenseAmberContainer
 import com.netcar.app.ui.theme.FuelGreen
 import com.netcar.app.ui.theme.FuelGreenContainer
+import com.netcar.app.ui.theme.Ink
+import com.netcar.app.ui.theme.InkSoft
+import com.netcar.app.ui.theme.LocalIsDarkTheme
 import com.netcar.app.ui.theme.MaintenanceBlue
 import com.netcar.app.ui.theme.MaintenanceBlueContainer
 import com.netcar.app.ui.theme.OverdueRed
@@ -94,7 +98,6 @@ fun DashboardScreen(
     onNavigateToFuel: () -> Unit,
     onNavigateToReports: () -> Unit,
     onNavigateToSettings: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -112,7 +115,7 @@ fun DashboardScreen(
     ) {
         TopBar(
             title = "Net-CAR",
-            onOpenDrawer = onOpenDrawer,
+            showLogo = true,
             actions = {
                 IconButton(onClick = onNavigateToVehicles) {
                     Icon(
@@ -178,7 +181,7 @@ fun DashboardScreen(
 
                         StatCard(
                             title = if (isFr) "Coût mensuel" else "Monthly Cost",
-                            value = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.stats.totalMonthlyCost)}",
+                            value = formatMoney(currencySymbol, uiState.stats.totalMonthlyCost),
                             unit = "",
                             icon = Icons.Default.Payments,
                             trend = if (isFr) "+5,4 % ce mois" else "+5.4% this mo",
@@ -406,18 +409,26 @@ private fun VehicleSwitcherCard(
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
     val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
+    val isDarkTheme = LocalIsDarkTheme.current
+    val heroBackground = if (isDarkTheme) MaterialTheme.colorScheme.primaryContainer else Ink
+    val heroForeground = if (isDarkTheme) MaterialTheme.colorScheme.onPrimaryContainer else Color.White
+    val heroMuted = if (isDarkTheme) {
+        MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+    } else {
+        InkSoft
+    }
 
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.primaryContainer
+            containerColor = heroBackground
         ),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .padding(16.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -425,8 +436,8 @@ private fun VehicleSwitcherCard(
             ) {
                 VehiclePhotoThumbnail(
                     photoUrl = selectedVehicle?.photoUrl.orEmpty(),
-                    iconSize = 26,
-                    modifier = Modifier.size(56.dp)
+                    iconSize = 24,
+                    modifier = Modifier.size(52.dp)
                 )
 
                 Spacer(modifier = Modifier.width(12.dp))
@@ -443,8 +454,8 @@ private fun VehicleSwitcherCard(
                             Text(
                                 text = selectedVehicle?.displayName
                                     ?: if (isFr) "Aucun véhicule" else "No vehicle",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = heroForeground,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f, fill = false)
@@ -452,7 +463,7 @@ private fun VehicleSwitcherCard(
                             Icon(
                                 imageVector = Icons.Default.ExpandMore,
                                 contentDescription = if (isFr) "Changer de véhicule" else "Switch Vehicle",
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                tint = heroForeground,
                                 modifier = Modifier.size(24.dp)
                             )
                         }
@@ -547,21 +558,22 @@ private fun VehicleSwitcherCard(
                             "${selectedVehicle?.year ?: ""} Model"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                        color = heroMuted
                     )
                 }
 
                 Text(
                     text = "${numberFormat.format(selectedVehicle?.currentOdometer ?: 0)} $distUnit",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                    color = heroForeground
                 )
             }
 
             TextButton(
                 onClick = onChangePhoto,
                 enabled = selectedVehicle != null,
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = heroForeground)
             ) {
                 Icon(
                     imageVector = Icons.Default.PhotoCamera,
@@ -604,7 +616,7 @@ private fun QuickActionButton(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
                     .background(containerColor),
                 contentAlignment = Alignment.Center
@@ -613,13 +625,13 @@ private fun QuickActionButton(
                     imageVector = icon,
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(19.dp)
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = title,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                 maxLines = 1
             )
         }
@@ -646,7 +658,7 @@ private fun RecentFillUpCard(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -656,7 +668,7 @@ private fun RecentFillUpCard(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(34.dp)
                         .clip(CircleShape)
                         .background(FuelGreenContainer),
                     contentAlignment = Alignment.Center
@@ -665,11 +677,11 @@ private fun RecentFillUpCard(
                         imageVector = Icons.Default.LocalGasStation,
                         contentDescription = null,
                         tint = FuelGreen,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(10.dp))
 
                 Column {
                     Text(
@@ -691,12 +703,12 @@ private fun RecentFillUpCard(
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    text = "$currencySymbol${String.format(Locale.US, "%.2f", fillUp.totalCost)}",
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    text = formatMoney(currencySymbol, fillUp.totalCost),
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "${fillUp.volume} $volUnit @ $currencySymbol${fillUp.pricePerUnit}/$volUnit",
+                    text = "${fillUp.volume} $volUnit @ ${formatMoney(currencySymbol, fillUp.pricePerUnit)}/$volUnit",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

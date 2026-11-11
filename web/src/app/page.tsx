@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useMemo } from 'react';
+import { currencySymbolFor, formatMoney } from '@/lib/currency';
 import Link from 'next/link';
 import { useApp } from '@/lib/app-context';
 import {
@@ -83,7 +84,7 @@ export default function DashboardPage() {
     [vehicleReminders]
   );
 
-  const currencySymbol = userProfile.currency === 'DZD' ? 'DA ' : userProfile.currency === 'EUR' ? '€' : userProfile.currency === 'USD' ? '$' : userProfile.currency + ' ';
+  const currencySymbol = currencySymbolFor(userProfile.currency);
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
   const volumeUnit = userProfile.units === 'metric' ? 'L' : 'gal';
   const economyUnit = userProfile.units === 'metric' ? 'L/100km' : 'MPG';
@@ -285,11 +286,11 @@ export default function DashboardPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-1">
             <span className="font-mono text-3xl font-black text-amber-400">
-              {currencySymbol}{totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {formatMoney(currencySymbol, totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }))}
             </span>
           </div>
           <p className="mt-2 text-xs text-slate-400 truncate">
-            {lang === 'fr' ? 'Carburant' : 'Fuel'} ({currencySymbol}{totalFuelCost.toFixed(0)}) · {lang === 'fr' ? 'Entretien' : 'Maintenance'} ({currencySymbol}{totalServiceCost.toFixed(0)})
+            {lang === 'fr' ? 'Carburant' : 'Fuel'} ({formatMoney(currencySymbol, totalFuelCost.toFixed(0))}) · {lang === 'fr' ? 'Entretien' : 'Maintenance'} ({formatMoney(currencySymbol, totalServiceCost.toFixed(0))})
           </p>
           <div className="mt-2 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: '70%' }} />
@@ -475,17 +476,17 @@ export default function DashboardPage() {
             <div className="grid grid-cols-3 gap-2 pt-2 text-center">
               <div className="rounded-2xl border border-amber-500/20 bg-amber-500/5 p-3">
                 <span className="block text-[10px] font-extrabold uppercase tracking-widest text-amber-400">{t.reports.fuelShare}</span>
-                <span className="font-mono text-base font-black text-amber-300">{currencySymbol}{totalFuelCost.toFixed(0)}</span>
+                <span className="font-mono text-base font-black text-amber-300">{formatMoney(currencySymbol, totalFuelCost.toFixed(0))}</span>
                 <span className="block text-[10px] font-mono text-slate-500">{fuelShare}%</span>
               </div>
               <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-3">
                 <span className="block text-[10px] font-extrabold uppercase tracking-widest text-emerald-400">{t.reports.maintenanceShare}</span>
-                <span className="font-mono text-base font-black text-emerald-300">{currencySymbol}{totalServiceCost.toFixed(0)}</span>
+                <span className="font-mono text-base font-black text-emerald-300">{formatMoney(currencySymbol, totalServiceCost.toFixed(0))}</span>
                 <span className="block text-[10px] font-mono text-slate-500">{serviceShare}%</span>
               </div>
               <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-3">
                 <span className="block text-[10px] font-extrabold uppercase tracking-widest text-violet-400">{t.reports.otherExpensesShare}</span>
-                <span className="font-mono text-base font-black text-violet-300">{currencySymbol}{totalExpenseCost.toFixed(0)}</span>
+                <span className="font-mono text-base font-black text-violet-300">{formatMoney(currencySymbol, totalExpenseCost.toFixed(0))}</span>
                 <span className="block text-[10px] font-mono text-slate-500">{expenseShare}%</span>
               </div>
             </div>
@@ -498,7 +499,7 @@ export default function DashboardPage() {
               {vehicleExpenses.slice(0, 3).map((e) => (
                 <div key={e.id} className="flex items-center justify-between text-xs py-1.5 border-b border-slate-800/40 last:border-0">
                   <span className="font-semibold text-slate-300">{e.description}</span>
-                  <span className="font-mono font-bold text-amber-400">{currencySymbol}{e.amount.toFixed(2)}</span>
+                  <span className="font-mono font-bold text-amber-400">{formatMoney(currencySymbol, e.amount.toFixed(2))}</span>
                 </div>
               ))}
             </div>
@@ -544,8 +545,8 @@ export default function DashboardPage() {
                   <td className="py-3 px-3 font-semibold text-slate-200">{new Date(f.date).toLocaleDateString()}</td>
                   <td className="py-3 px-3 font-mono font-bold text-cyan-300">{f.odometer.toLocaleString()} {distUnit}</td>
                   <td className="py-3 px-3 text-slate-300 font-mono">{f.volume} {volumeUnit}</td>
-                  <td className="py-3 px-3 text-slate-400 font-mono">{currencySymbol}{f.pricePerUnit}</td>
-                  <td className="py-3 px-3 font-mono font-black text-amber-400">{currencySymbol}{f.totalCost.toFixed(2)}</td>
+                  <td className="py-3 px-3 text-slate-400 font-mono">{formatMoney(currencySymbol, f.pricePerUnit)}</td>
+                  <td className="py-3 px-3 font-mono font-black text-amber-400">{formatMoney(currencySymbol, f.totalCost.toFixed(2))}</td>
                   <td className="py-3 px-3">
                     <span className="inline-flex items-center gap-1 rounded-md bg-slate-800/90 border border-slate-700/80 px-2 py-0.5 text-xs font-bold text-slate-300">
                       {f.station || 'Naftal'}

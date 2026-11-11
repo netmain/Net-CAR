@@ -110,7 +110,7 @@ fun ReminderCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             // Header Row: Title + Status Badge
             Row(
@@ -124,7 +124,7 @@ fun ReminderCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(30.dp)
                             .clip(CircleShape)
                             .background(statusContainerColor),
                         contentAlignment = Alignment.Center
@@ -146,7 +146,7 @@ fun ReminderCard(
                     Column {
                         Text(
                             text = reminder.title,
-                            style = MaterialTheme.typography.titleMedium.copy(
+                            style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.Bold,
                                 textDecoration = if (reminder.isCompleted) TextDecoration.LineThrough else null
                             ),
@@ -175,7 +175,7 @@ fun ReminderCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             // Due info row
             Row(

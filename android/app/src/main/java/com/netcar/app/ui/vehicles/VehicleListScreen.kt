@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.netcar.app.model.SupportedLanguage
@@ -62,7 +63,6 @@ fun VehicleListScreen(
     viewModel: VehicleViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddVehicle: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -75,9 +75,8 @@ fun VehicleListScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Mes véhicules" else "My Vehicles",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = true,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {
@@ -226,7 +225,7 @@ private fun VehicleCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp)
+                .padding(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -239,17 +238,19 @@ private fun VehicleCard(
                 ) {
                     VehiclePhotoThumbnail(
                         photoUrl = vehicle.photoUrl,
-                        iconSize = 26,
-                        modifier = Modifier.size(52.dp)
+                        iconSize = 24,
+                        modifier = Modifier.size(48.dp)
                     )
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Column {
                         Text(
                             text = vehicle.displayName,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = "${vehicle.year} • ${vehicle.make}",
@@ -301,7 +302,7 @@ private fun VehicleCard(
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

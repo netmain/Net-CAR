@@ -58,7 +58,6 @@ fun ReminderListScreen(
     onNavigateBack: () -> Unit,
     onNavigateToAddReminder: () -> Unit,
     onEditReminder: (String) -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -78,9 +77,8 @@ fun ReminderListScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Rappels & Alertes" else "Service Reminders",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = false,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {

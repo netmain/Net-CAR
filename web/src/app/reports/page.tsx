@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { currencySymbolFor, formatMoney } from '@/lib/currency';
 import { useApp } from '@/lib/app-context';
 import { 
   Download, 
@@ -34,7 +35,7 @@ export default function ReportsPage() {
     }
   }, [activeVehicle?.id]);
 
-  const currencySymbol = userProfile.currency === 'EUR' ? '€' : userProfile.currency === 'USD' ? '$' : userProfile.currency;
+  const currencySymbol = currencySymbolFor(userProfile.currency);
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
 
   // Filter datasets

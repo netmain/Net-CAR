@@ -42,11 +42,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.Expense
 import com.netcar.app.model.ExpenseCategory
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
+import com.netcar.app.ui.components.formatMoney
 import com.netcar.app.ui.theme.ExpenseAmber
 import com.netcar.app.ui.theme.ExpenseAmberContainer
 import java.text.NumberFormat
@@ -62,7 +64,6 @@ fun ExpenseListScreen(
     viewModel: ExpenseViewModel,
     onNavigateBack: () -> Unit,
     onNavigateToAddExpense: () -> Unit,
-    onOpenDrawer: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -96,9 +97,8 @@ fun ExpenseListScreen(
         topBar = {
             TopBar(
                 title = if (isFr) "Dépenses" else "Expenses",
-                canNavigateBack = onOpenDrawer == null,
+                canNavigateBack = false,
                 onNavigateBack = onNavigateBack,
-                onOpenDrawer = onOpenDrawer
             )
         },
         floatingActionButton = {
@@ -147,7 +147,7 @@ fun ExpenseListScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.monthlyExpenses)}",
+                                text = formatMoney(currencySymbol, uiState.monthlyExpenses),
                                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -160,7 +160,7 @@ fun ExpenseListScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.totalExpenses)}",
+                                text = formatMoney(currencySymbol, uiState.totalExpenses),
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -280,7 +280,7 @@ private fun ExpenseItemCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp)
+                .padding(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -293,7 +293,7 @@ private fun ExpenseItemCard(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
                             .background(ExpenseAmberContainer),
                         contentAlignment = Alignment.Center
@@ -302,17 +302,19 @@ private fun ExpenseItemCard(
                             imageVector = Icons.Default.LocalAtm,
                             contentDescription = null,
                             tint = ExpenseAmber,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
 
                     Column {
                         Text(
                             text = expense.description,
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface
+                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = dateFormatter.format(Date(expense.date)),
@@ -324,9 +326,10 @@ private fun ExpenseItemCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "$currencySymbol${String.format(Locale.US, "%.2f", expense.amount)}",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface
+                        text = formatMoney(currencySymbol, expense.amount),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1
                     )
 
                     IconButton(onClick = onDelete) {
@@ -334,13 +337,13 @@ private fun ExpenseItemCard(
                             imageVector = Icons.Default.DeleteOutline,
                             contentDescription = if (isFrench) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

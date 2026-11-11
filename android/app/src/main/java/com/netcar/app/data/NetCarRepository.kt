@@ -23,6 +23,7 @@ import com.netcar.app.model.ServiceRecord
 import com.netcar.app.model.ServiceType
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
+import com.netcar.app.model.ThemeMode
 import com.netcar.app.model.Units
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
@@ -474,16 +475,19 @@ class NetCarRepository @Inject constructor(
         val langCode = prefs.getString("lang", "fr") ?: "fr"
         val unitsName = prefs.getString("units", Units.METRIC.name) ?: Units.METRIC.name
         val currencyName = prefs.getString("currency", SupportedCurrency.DZD.name) ?: SupportedCurrency.DZD.name
+        val themeModeName = prefs.getString("theme_mode", ThemeMode.SYSTEM.name) ?: ThemeMode.SYSTEM.name
         val lastSync = prefs.getLong("last_sync_ts", -1L).takeIf { it > 0L }
 
         val lang = SupportedLanguage.values().find { it.code == langCode } ?: SupportedLanguage.FR
         val units = runCatching { Units.valueOf(unitsName) }.getOrDefault(Units.METRIC)
         val currency = runCatching { SupportedCurrency.valueOf(currencyName) }.getOrDefault(SupportedCurrency.DZD)
+        val themeMode = runCatching { ThemeMode.valueOf(themeModeName) }.getOrDefault(ThemeMode.SYSTEM)
 
         return UserSettings(
             language = lang,
             units = units,
             currency = currency,
+            themeMode = themeMode,
             isDriveBackupConnected = false,
             connectedEmail = null,
             userId = null,
@@ -513,6 +517,7 @@ class NetCarRepository @Inject constructor(
                 .putString("lang", _userSettings.value.language.code)
                 .putString("units", _userSettings.value.units.name)
                 .putString("currency", _userSettings.value.currency.name)
+                .putString("theme_mode", _userSettings.value.themeMode.name)
                 .putString(
                     "custom_expense_categories_json",
                     gson.toJson(_userSettings.value.customExpenseCategories)
@@ -841,6 +846,11 @@ class NetCarRepository @Inject constructor(
 
     fun updateCurrency(currency: SupportedCurrency) {
         _userSettings.value = _userSettings.value.copy(currency = currency)
+        persistLocalData()
+    }
+
+    fun updateThemeMode(themeMode: ThemeMode) {
+        _userSettings.value = _userSettings.value.copy(themeMode = themeMode)
         persistLocalData()
     }
 
@@ -1777,6 +1787,7 @@ class NetCarRepository @Inject constructor(
                     "preferredLang" to _userSettings.value.language.code,
                     "units" to if (_userSettings.value.units == Units.METRIC) "metric" else "imperial",
                     "currency" to _userSettings.value.currency.code,
+                    "themeMode" to _userSettings.value.themeMode.code,
                     "createdAt" to FieldValue.serverTimestamp(),
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
@@ -1826,6 +1837,28 @@ class NetCarRepository @Inject constructor(
                         TimeUnit.SECONDS
                     )
                 }
+            }
+
+            // 1c. Best-effort sync of the theme preference with the profile.
+            val remoteThemeMode = (profileData["themeMode"] as? String)?.lowercase(Locale.US)
+            if (!remoteThemeMode.isNullOrBlank() && remoteThemeMode != _userSettings.value.themeMode.code) {
+                val parsedTheme = ThemeMode.values().firstOrNull { it.code == remoteThemeMode }
+                if (parsedTheme != null) {
+                    _userSettings.value = _userSettings.value.copy(themeMode = parsedTheme)
+                    persistLocalData()
+                }
+            }
+            runCatching {
+                Tasks.await(
+                    userDocRef.update(
+                        mapOf(
+                            "themeMode" to _userSettings.value.themeMode.code,
+                            "updatedAt" to FieldValue.serverTimestamp()
+                        )
+                    ),
+                    15,
+                    TimeUnit.SECONDS
+                )
             }
 
             // 2. Sync Vehicles (/users/{uid}/vehicles)

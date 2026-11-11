@@ -9,36 +9,42 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
-private val LightColorScheme = lightColorScheme(
-    primary = PrimaryLight,
-    onPrimary = OnPrimaryLight,
-    primaryContainer = PrimaryContainerLight,
-    onPrimaryContainer = OnPrimaryContainerLight,
-    secondary = SecondaryLight,
-    onSecondary = OnSecondaryLight,
-    secondaryContainer = SecondaryContainerLight,
-    onSecondaryContainer = OnSecondaryContainerLight,
-    tertiary = TertiaryLight,
-    onTertiary = OnTertiaryLight,
-    tertiaryContainer = TertiaryContainerLight,
-    onTertiaryContainer = OnTertiaryContainerLight,
-    error = ErrorLight,
-    onError = OnErrorLight,
-    errorContainer = ErrorContainerLight,
-    onErrorContainer = OnErrorContainerLight,
-    background = BackgroundLight,
-    onBackground = OnBackgroundLight,
-    surface = SurfaceLight,
-    onSurface = OnSurfaceLight,
-    surfaceVariant = SurfaceVariantLight,
-    onSurfaceVariant = OnSurfaceVariantLight,
-    outline = OutlineLight
+/**
+ * White (CarLog) theme: paper background, white cards, ink typography and the
+ * amber / teal accents of the CarLog mockup.
+ */
+private val CarLogLightColorScheme = lightColorScheme(
+    primary = Ink,
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFD7E3E7),
+    onPrimaryContainer = Ink,
+    secondary = Amber,
+    onSecondary = Ink,
+    secondaryContainer = Sand,
+    onSecondaryContainer = AmberDeep,
+    tertiary = Teal,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFD5E9EB),
+    onTertiaryContainer = TealDark,
+    error = Alert,
+    onError = Color.White,
+    errorContainer = Color(0xFFF7DDD7),
+    onErrorContainer = Color(0xFF7A2417),
+    background = Paper,
+    onBackground = Ink,
+    surface = Color.White,
+    onSurface = Ink,
+    surfaceVariant = Color(0xFFDDE5E8),
+    onSurfaceVariant = Mute,
+    outline = Color(0xFF8FA3AA)
 )
 
 private val DarkColorScheme = darkColorScheme(
@@ -79,7 +85,7 @@ fun NetCARTheme(
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
         darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+        else -> CarLogLightColorScheme
     }
 
     val view = LocalView.current
@@ -97,9 +103,14 @@ fun NetCARTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = Typography,
-        content = content
-    )
+    CompositionLocalProvider(
+        LocalNetCarPalette provides if (darkTheme) DarkNetCarPalette else LightNetCarPalette,
+        LocalIsDarkTheme provides darkTheme
+    ) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = Typography,
+            content = content
+        )
+    }
 }

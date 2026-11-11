@@ -61,6 +61,12 @@ enum class SupportedLanguage(val code: String, val displayName: String) {
     FR("fr", "Français")
 }
 
+enum class ThemeMode(val code: String, val displayName: String, val displayNameFr: String) {
+    SYSTEM("system", "System", "Système"),
+    LIGHT("light", "Light", "Clair"),
+    DARK("dark", "Dark", "Sombre")
+}
+
 data class Vehicle(
     val id: String = UUID.randomUUID().toString(),
     val name: String = "",
@@ -187,6 +193,7 @@ data class UserSettings(
     val language: SupportedLanguage = SupportedLanguage.FR,
     val units: Units = Units.METRIC,
     val currency: SupportedCurrency = SupportedCurrency.DZD,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val isDriveBackupConnected: Boolean = false,
     val connectedEmail: String? = null,
     val userId: String? = null,

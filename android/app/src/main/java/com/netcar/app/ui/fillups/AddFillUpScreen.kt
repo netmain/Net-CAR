@@ -112,7 +112,7 @@ fun AddFillUpScreen(
                     onValueChange = { viewModel.updatePricePerUnit(it) },
                     label = {
                         Text(
-                            (if (isFr) "Prix" else "Price") + " ($currencySymbol/$volUnit)"
+                            (if (isFr) "Prix" else "Price") + " ($currencySymbol / $volUnit)"
                         )
                     },
                     placeholder = { Text(if (isFr) "ex. 29,00" else "e.g. 29.00") },

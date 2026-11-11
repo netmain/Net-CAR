@@ -1,5 +1,8 @@
 package com.netcar.app.ui.theme
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 // Primary Brand Colors (Net-CAR Modern Electric Cobalt / Sky)
@@ -63,25 +66,173 @@ val OnErrorDark = Color(0xFF4C0519)
 val ErrorContainerDark = Color(0xFF881337)
 val OnErrorContainerDark = Color(0xFFFFE4E6)
 
-// Functional Category Colors for Net-CAR (Modern High-Contrast Telemetry Palette)
-val FuelGreen = Color(0xFF10B981)
-val FuelGreenContainer = Color(0xFF064E3B)
-val OnFuelGreen = Color(0xFFECFDF5)
+// ---------------------------------------------------------------------------
+// CarLog white theme palette (taken from the CarLog mockup design)
+// ---------------------------------------------------------------------------
+val Paper = Color(0xFFE9EEF0)
+val Ink = Color(0xFF12303B)
+val InkSoft = Color(0xFFC9D6DB)
+val Amber = Color(0xFFF2A900)
+val AmberDeep = Color(0xFF7A5200)
+val Teal = Color(0xFF0E7C86)
+val TealDark = Color(0xFF0A6770)
+val Alert = Color(0xFFC8452F)
+val Mute = Color(0xFF4F656E)
+val Sand = Color(0xFFF6DFA0)
 
-val MaintenanceBlue = Color(0xFF38BDF8)
-val MaintenanceBlueContainer = Color(0xFF0C4A6E)
-val OnMaintenanceBlue = Color(0xFFE0F2FE)
+/**
+ * Semantic accent colors used across the app (fuel, expense, maintenance,
+ * reminders...). They are provided by the theme so the same screens look
+ * correct in both the dark and the white (CarLog) theme.
+ */
+data class NetCarPalette(
+    val fuel: Color,
+    val fuelContainer: Color,
+    val onFuelContainer: Color,
+    val expense: Color,
+    val expenseContainer: Color,
+    val onExpenseContainer: Color,
+    val maintenance: Color,
+    val maintenanceContainer: Color,
+    val onMaintenanceContainer: Color,
+    val overdue: Color,
+    val overdueContainer: Color,
+    val onOverdueContainer: Color,
+    val success: Color,
+    val successContainer: Color,
+    val onSuccessContainer: Color,
+    val warning: Color,
+    val warningContainer: Color
+)
 
-val ExpenseAmber = Color(0xFFF59E0B)
-val ExpenseAmberContainer = Color(0xFF78350F)
-val OnExpenseAmber = Color(0xFFFEF3C7)
+val DarkNetCarPalette = NetCarPalette(
+    fuel = Color(0xFF10B981),
+    fuelContainer = Color(0xFF064E3B),
+    onFuelContainer = Color(0xFFECFDF5),
+    expense = Color(0xFFF59E0B),
+    expenseContainer = Color(0xFF78350F),
+    onExpenseContainer = Color(0xFFFEF3C7),
+    maintenance = Color(0xFF38BDF8),
+    maintenanceContainer = Color(0xFF0C4A6E),
+    onMaintenanceContainer = Color(0xFFE0F2FE),
+    overdue = Color(0xFFFB7185),
+    overdueContainer = Color(0xFF881337),
+    onOverdueContainer = Color(0xFFFFE4E6),
+    success = Color(0xFF10B981),
+    successContainer = Color(0xFF064E3B),
+    onSuccessContainer = Color(0xFFECFDF5),
+    warning = Color(0xFFF97316),
+    warningContainer = Color(0xFF7C2D12)
+)
 
-val OverdueRed = Color(0xFFFB7185)
-val OverdueRedContainer = Color(0xFF881337)
-val OnOverdueRed = Color(0xFFFFE4E6)
+val LightNetCarPalette = NetCarPalette(
+    fuel = Color(0xFFB07800),
+    fuelContainer = Sand,
+    onFuelContainer = Color(0xFF4A3200),
+    expense = Alert,
+    expenseContainer = Color(0xFFF7DDD7),
+    onExpenseContainer = Color(0xFF7A2417),
+    maintenance = TealDark,
+    maintenanceContainer = Color(0xFFD5E9EB),
+    onMaintenanceContainer = Color(0xFF064C52),
+    overdue = Color(0xFFB3261E),
+    overdueContainer = Color(0xFFF9DEDC),
+    onOverdueContainer = Color(0xFF6E1512),
+    success = TealDark,
+    successContainer = Color(0xFFD5E9EB),
+    onSuccessContainer = Color(0xFF064C52),
+    warning = Color(0xFFB07800),
+    warningContainer = Sand
+)
 
-val WarningOrange = Color(0xFFF97316)
-val WarningOrangeContainer = Color(0xFF7C2D12)
+val LocalNetCarPalette = compositionLocalOf { DarkNetCarPalette }
 
-val SuccessGreen = Color(0xFF10B981)
-val SuccessGreenContainer = Color(0xFF064E3B)
+/** True when the dark theme is currently applied. */
+val LocalIsDarkTheme = compositionLocalOf { true }
+
+// Theme aware accessors: the existing screens keep using these names and now
+// automatically follow the selected theme.
+val FuelGreen: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.fuel
+
+val FuelGreenContainer: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.fuelContainer
+
+val OnFuelGreen: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.onFuelContainer
+
+val MaintenanceBlue: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.maintenance
+
+val MaintenanceBlueContainer: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.maintenanceContainer
+
+val OnMaintenanceBlue: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.onMaintenanceContainer
+
+val ExpenseAmber: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.expense
+
+val ExpenseAmberContainer: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.expenseContainer
+
+val OnExpenseAmber: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.onExpenseContainer
+
+val OverdueRed: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.overdue
+
+val OverdueRedContainer: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.overdueContainer
+
+val OnOverdueRed: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.onOverdueContainer
+
+val WarningOrange: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.warning
+
+val WarningOrangeContainer: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.warningContainer
+
+val SuccessGreen: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.success
+
+val SuccessGreenContainer: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.successContainer
+
+val OnSuccessGreen: Color
+    @Composable
+    @ReadOnlyComposable
+    get() = LocalNetCarPalette.current.onSuccessContainer

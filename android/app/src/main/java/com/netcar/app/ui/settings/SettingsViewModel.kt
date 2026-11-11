@@ -7,6 +7,7 @@ import com.netcar.app.MainActivity
 import com.netcar.app.data.NetCarRepository
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
+import com.netcar.app.model.ThemeMode
 import com.netcar.app.model.Units
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
@@ -106,6 +107,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setCurrency(currency: SupportedCurrency) {
         repository.updateCurrency(currency)
+    }
+
+    fun setThemeMode(themeMode: ThemeMode) {
+        repository.updateThemeMode(themeMode)
     }
 
     fun clearMessages() {

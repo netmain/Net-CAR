@@ -62,7 +62,7 @@ fun StatCard(
     ) {
         Column(
             modifier = Modifier
-                .padding(16.dp)
+                .padding(12.dp)
                 .fillMaxWidth()
         ) {
             Row(
@@ -72,7 +72,7 @@ fun StatCard(
             ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -81,7 +81,7 @@ fun StatCard(
 
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(30.dp)
                         .clip(CircleShape)
                         .background(iconContainerColor),
                     contentAlignment = Alignment.Center
@@ -90,12 +90,12 @@ fun StatCard(
                         imageVector = icon,
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(17.dp)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
             Row(
                 verticalAlignment = Alignment.Bottom,
@@ -103,7 +103,7 @@ fun StatCard(
             ) {
                 Text(
                     text = value,
-                    style = MaterialTheme.typography.headlineMedium.copy(
+                    style = MaterialTheme.typography.headlineSmall.copy(
                         fontWeight = FontWeight.Bold,
                         letterSpacing = (-0.5).sp
                     ),
@@ -116,15 +116,15 @@ fun StatCard(
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = unit,
-                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 3.dp)
+                        modifier = Modifier.padding(bottom = 2.dp)
                     )
                 }
             }
 
             if (trend != null) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 val trendColor = when (trendPositive) {
                     true -> SuccessGreen
                     false -> OverdueRed
