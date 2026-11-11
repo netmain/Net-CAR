@@ -13,6 +13,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.netcar.app.MainActivity
+import com.netcar.app.R
 import com.netcar.app.model.Reminder
 import com.netcar.app.model.Vehicle
 import java.text.SimpleDateFormat
@@ -79,7 +80,7 @@ object ReminderNotificationHelper {
             )
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_popup_reminder)
+                .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(body))
