@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/lib/app-context';
-import { ServiceType, Reminder } from '@/types';
+import { Reminder } from '@/types';
 import { 
   Bell, 
   Plus, 
@@ -17,7 +17,9 @@ import {
   X, 
   Repeat, 
   AlertCircle,
-  Filter
+  Filter,
+  Pencil,
+  Tag
 } from 'lucide-react';
 
 export default function RemindersPage() {
@@ -26,8 +28,10 @@ export default function RemindersPage() {
     activeVehicle, 
     reminders, 
     addReminder, 
+    updateReminder,
     completeReminder, 
     deleteReminder, 
+    addCustomServiceType,
     userProfile, 
     lang,
     t 
@@ -35,10 +39,14 @@ export default function RemindersPage() {
 
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingReminderId, setEditingReminderId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
 
   // Form State
-  const [type, setType] = useState<ServiceType>('oilChange');
+  const [type, setType] = useState<string>('oilChange');
   const [title, setTitle] = useState('');
   const [intervalKm, setIntervalKm] = useState<number | ''>(15000);
   const [intervalDays, setIntervalDays] = useState<number | ''>(365);
@@ -115,6 +123,7 @@ export default function RemindersPage() {
   };
 
   const handleOpenAdd = () => {
+    setEditingReminderId(null);
     setType('oilChange');
     setTitle('');
     setIntervalKm(15000);
@@ -126,7 +135,20 @@ export default function RemindersPage() {
     setIsModalOpen(true);
   };
 
-  const handleTypeChange = (selected: ServiceType) => {
+  const handleOpenEdit = (r: Reminder) => {
+    setEditingReminderId(r.id);
+    setType(r.type || 'other');
+    setTitle(r.title || '');
+    setIntervalKm(r.intervalKm !== undefined ? Number(r.intervalKm) : '');
+    setIntervalDays(r.intervalDays !== undefined ? Number(r.intervalDays) : '');
+    setDueDate(r.nextDueDate ? new Date(r.nextDueDate).toISOString().split('T')[0] : '');
+    setDueOdometer(r.nextDueOdometer !== undefined ? Number(r.nextDueOdometer) : '');
+    setIsRecurring(Boolean(r.isRecurring));
+    setFormErrors({});
+    setIsModalOpen(true);
+  };
+
+  const handleTypeChange = (selected: string) => {
     setType(selected);
     // Provide sensible defaults based on service type
     if (selected === 'oilChange') {
@@ -151,6 +173,30 @@ export default function RemindersPage() {
     }
   };
 
+  const handleServiceTypeSelect = (selected: string) => {
+    if (selected === '__add_custom__') {
+      setNewCategoryName('');
+      setCategoryError('');
+      setShowCategoryDialog(true);
+      return;
+    }
+    handleTypeChange(selected);
+  };
+
+  const handleAddCategory = () => {
+    const clean = newCategoryName.trim().replace(/\s+/g, ' ');
+    if (!clean) {
+      setCategoryError(lang === 'fr' ? 'Saisissez un nom de catégorie' : 'Enter a category name');
+      return;
+    }
+    addCustomServiceType(clean);
+    setType(clean);
+    if (!title.trim()) setTitle(clean);
+    setShowCategoryDialog(false);
+    setNewCategoryName('');
+    setCategoryError('');
+  };
+
   const handleSaveReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeVehicle) return;
@@ -168,21 +214,30 @@ export default function RemindersPage() {
 
     setSubmitting(true);
     try {
-      await addReminder({
-        vehicleId: activeVehicle.id,
+      const payload = {
         type,
         title: title.trim(),
         intervalKm: intervalKm !== '' ? Number(intervalKm) : undefined,
         intervalDays: intervalDays !== '' ? Number(intervalDays) : undefined,
-        lastServiceDate: new Date().toISOString(),
-        lastServiceOdometer: activeVehicle.currentOdometer,
         nextDueDate: dueDate ? new Date(dueDate).toISOString() : undefined,
         nextDueOdometer: dueOdometer !== '' ? Number(dueOdometer) : undefined,
         isRecurring,
         isActive: true,
-      });
+      };
+
+      if (editingReminderId) {
+        await updateReminder(editingReminderId, payload);
+      } else {
+        await addReminder({
+          vehicleId: activeVehicle.id,
+          ...payload,
+          lastServiceDate: new Date().toISOString(),
+          lastServiceOdometer: activeVehicle.currentOdometer,
+        });
+      }
 
       setIsModalOpen(false);
+      setEditingReminderId(null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -195,7 +250,13 @@ export default function RemindersPage() {
     setDeleteConfirmId(null);
   };
 
-  const allServiceTypes = Object.keys(t.serviceTypes) as ServiceType[];
+  const allServiceTypes = Array.from(
+    new Set([
+      ...Object.keys(t.serviceTypes),
+      ...(userProfile.customServiceTypes || []),
+      ...vehicleReminders.map((r) => r.type).filter(Boolean),
+    ])
+  );
 
   return (
     <div className="space-y-8">
@@ -349,6 +410,13 @@ export default function RemindersPage() {
                         </button>
                       )}
                       <button
+                        onClick={() => handleOpenEdit(r)}
+                        className="rounded-xl p-1.5 text-slate-500 hover:bg-amber-500/10 hover:text-amber-400 transition"
+                        title={t.reminders.editReminder}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
                         onClick={() => setDeleteConfirmId(r.id)}
                         className="rounded-xl p-1.5 text-slate-500 hover:bg-red-500/10 hover:text-red-400 transition"
                         title={t.common.delete}
@@ -360,7 +428,7 @@ export default function RemindersPage() {
 
                   {/* Title & Service Type */}
                   <h3 className="mt-3.5 text-lg font-black text-white">
-                    {r.title || t.serviceTypes[r.type as ServiceType] || r.type}
+                    {r.title || t.serviceTypes[r.type] || r.type}
                   </h3>
 
                   {/* Due Targets Info */}
@@ -444,7 +512,9 @@ export default function RemindersPage() {
                   <Bell className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-100 font-mono tracking-tight">{t.reminders.addReminder}</h2>
+                  <h2 className="text-lg font-bold text-slate-100 font-mono tracking-tight">
+                    {editingReminderId ? t.reminders.editReminder : t.reminders.addReminder}
+                  </h2>
                   <p className="text-xs text-slate-400">
                     {activeVehicle?.make} {activeVehicle?.model} {activeVehicle?.plate ? `(${activeVehicle.plate})` : ''}
                   </p>
@@ -465,14 +535,17 @@ export default function RemindersPage() {
                 </label>
                 <select
                   value={type}
-                  onChange={(e) => handleTypeChange(e.target.value as ServiceType)}
+                  onChange={(e) => handleServiceTypeSelect(e.target.value)}
                   className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-semibold text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 >
                   {allServiceTypes.map((st) => (
                     <option key={st} value={st} className="bg-slate-900 text-slate-100">
-                      {t.serviceTypes[st]}
+                      {t.serviceTypes[st] || st}
                     </option>
                   ))}
+                  <option value="__add_custom__" className="bg-slate-900 text-amber-400">
+                    {lang === 'fr' ? '＋ Ajouter une catégorie…' : '＋ Add a category…'}
+                  </option>
                 </select>
               </div>
 
@@ -579,10 +652,61 @@ export default function RemindersPage() {
                   disabled={submitting}
                   className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 disabled:opacity-50 transition"
                 >
-                  {submitting ? t.common.loading : t.common.save}
+                  {submitting
+                    ? t.common.loading
+                    : editingReminderId
+                      ? t.reminders.saveChanges
+                      : t.common.save}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Category Dialog */}
+      {showCategoryDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="relative w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                <Tag className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-bold text-slate-100 font-mono">
+                {lang === 'fr' ? 'Nouvelle catégorie' : 'New category'}
+              </h2>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              {lang === 'fr'
+                ? 'Ajoutez un type de service ou de rappel personnalisé.'
+                : 'Add a custom service or reminder type.'}
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={newCategoryName}
+              onChange={(e) => {
+                setNewCategoryName(e.target.value);
+                setCategoryError('');
+              }}
+              placeholder={lang === 'fr' ? 'ex. Assurance flotte' : 'e.g. Fleet insurance'}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-medium text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+            {categoryError && <p className="mt-1 text-xs text-red-400 font-mono">{categoryError}</p>}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowCategoryDialog(false)}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 transition"
+              >
+                {t.common.cancel}
+              </button>
+              <button
+                onClick={handleAddCategory}
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition"
+              >
+                {lang === 'fr' ? 'Ajouter' : 'Add'}
+              </button>
+            </div>
           </div>
         </div>
       )}

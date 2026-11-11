@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
 import com.netcar.app.model.Expense
 import com.netcar.app.model.ExpenseCategory
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,7 +20,7 @@ import javax.inject.Inject
 data class ExpenseUiState(
     val expenses: List<Expense> = emptyList(),
     val filteredExpenses: List<Expense> = emptyList(),
-    val selectedCategory: ExpenseCategory? = null,
+    val selectedCategory: String? = null,
     val selectedVehicle: Vehicle? = null,
     val totalExpenses: Double = 0.0,
     val monthlyExpenses: Double = 0.0,
@@ -29,6 +30,7 @@ data class ExpenseUiState(
 
 data class AddExpenseFormState(
     val category: ExpenseCategory = ExpenseCategory.PARKING,
+    val customCategory: String = "",
     val amount: String = "",
     val description: String = "",
     val odometer: String = "",
@@ -41,8 +43,11 @@ class ExpenseViewModel @Inject constructor(
     private val repository: NetCarRepository
 ) : ViewModel() {
 
-    private val _selectedCategoryFilter = MutableStateFlow<ExpenseCategory?>(null)
-    val selectedCategoryFilter: StateFlow<ExpenseCategory?> = _selectedCategoryFilter.asStateFlow()
+    private val _selectedCategoryFilter = MutableStateFlow<String?>(null)
+    val selectedCategoryFilter: StateFlow<String?> = _selectedCategoryFilter.asStateFlow()
+
+    private fun filterKey(expense: Expense): String =
+        expense.customCategory.ifBlank { expense.category.name }
 
     val uiState: StateFlow<ExpenseUiState> = combine(
         repository.expenses,
@@ -57,7 +62,7 @@ class ExpenseViewModel @Inject constructor(
             .sortedByDescending { it.date }
 
         val filtered = if (filterCat != null) {
-            vehicleExpenses.filter { it.category == filterCat }
+            vehicleExpenses.filter { filterKey(it) == filterCat }
         } else {
             vehicleExpenses
         }
@@ -84,11 +89,20 @@ class ExpenseViewModel @Inject constructor(
     private val _formState = MutableStateFlow(AddExpenseFormState())
     val formState: StateFlow<AddExpenseFormState> = _formState.asStateFlow()
 
-    fun setCategoryFilter(category: ExpenseCategory?) {
+    fun setCategoryFilter(category: String?) {
         _selectedCategoryFilter.value = category
     }
 
-    fun updateCategory(category: ExpenseCategory) = _formState.apply { value = value.copy(category = category) }
+    fun updateCategory(category: ExpenseCategory) = _formState.apply {
+        value = value.copy(category = category, customCategory = "")
+    }
+    fun updateCustomCategory(name: String) = _formState.apply {
+        value = value.copy(category = ExpenseCategory.OTHER, customCategory = name.trim())
+    }
+    fun addCustomExpenseCategory(name: String) {
+        repository.addCustomExpenseCategory(name)
+        updateCustomCategory(name)
+    }
     fun updateAmount(amount: String) = _formState.apply { value = value.copy(amount = amount) }
     fun updateDescription(desc: String) = _formState.apply { value = value.copy(description = desc) }
     fun updateOdometer(odo: String) = _formState.apply { value = value.copy(odometer = odo) }
@@ -101,15 +115,28 @@ class ExpenseViewModel @Inject constructor(
     fun saveExpense(onSuccess: () -> Unit) {
         val state = _formState.value
         val vehicle = uiState.value.selectedVehicle ?: return
+        val isFr = uiState.value.userSettings.language == SupportedLanguage.FR
 
         val amountDouble = state.amount.toDoubleOrNull()
         if (amountDouble == null || amountDouble <= 0) {
-            _formState.value = state.copy(errorMessage = "Please enter a valid amount")
+            _formState.value = state.copy(
+                errorMessage = if (isFr) {
+                    "Veuillez saisir un montant valide"
+                } else {
+                    "Please enter a valid amount"
+                }
+            )
             return
         }
 
         if (state.description.isBlank()) {
-            _formState.value = state.copy(errorMessage = "Please enter a short description")
+            _formState.value = state.copy(
+                errorMessage = if (isFr) {
+                    "Veuillez saisir une courte description"
+                } else {
+                    "Please enter a short description"
+                }
+            )
             return
         }
 
@@ -118,6 +145,7 @@ class ExpenseViewModel @Inject constructor(
         val expense = Expense(
             vehicleId = vehicle.id,
             category = state.category,
+            customCategory = state.customCategory,
             amount = amountDouble,
             description = state.description.trim(),
             odometer = odoInt,

@@ -37,6 +37,7 @@ enum class ServiceType(val displayName: String, val displayNameFr: String) {
     SPARK_PLUGS("Spark Plugs", "Bougies"),
     TIMING_BELT("Timing Belt", "Courroie de distribution"),
     INSPECTION("Inspection", "Contrôle technique"),
+    INSURANCE("Insurance", "Assurance"),
     OTHER("Other", "Autre")
 }
 
@@ -98,19 +99,24 @@ data class Expense(
     val vehicleId: String,
     val date: Long = System.currentTimeMillis(),
     val category: ExpenseCategory,
+    val customCategory: String = "",
     val amount: Double,
     val description: String,
     val receiptUrl: String = "",
     val odometer: Int? = null,
     val notes: String = "",
     val updatedAt: Long = 0L
-)
+) {
+    fun categoryLabel(isFr: Boolean): String =
+        customCategory.ifBlank { if (isFr) category.displayNameFr else category.displayName }
+}
 
 data class ServiceRecord(
     val id: String = UUID.randomUUID().toString(),
     val vehicleId: String,
     val date: Long = System.currentTimeMillis(),
     val type: ServiceType,
+    val customType: String = "",
     val odometer: Int,
     val cost: Double,
     val description: String,
@@ -118,13 +124,17 @@ data class ServiceRecord(
     val receiptUrl: String = "",
     val notes: String = "",
     val updatedAt: Long = 0L
-)
+) {
+    fun typeLabel(isFr: Boolean): String =
+        customType.ifBlank { if (isFr) type.displayNameFr else type.displayName }
+}
 
 data class Reminder(
     val id: String = UUID.randomUUID().toString(),
     val vehicleId: String,
     val title: String,
     val type: ServiceType = ServiceType.OTHER,
+    val customType: String = "",
     val intervalKm: Int? = null,
     val intervalDays: Int? = null,
     val lastServiceDate: Long? = null,
@@ -135,6 +145,9 @@ data class Reminder(
     val isCompleted: Boolean = false,
     val updatedAt: Long = 0L
 ) {
+    fun typeLabel(isFr: Boolean): String =
+        customType.ifBlank { if (isFr) type.displayNameFr else type.displayName }
+
     fun isOverdue(currentOdometer: Int, currentDate: Long = System.currentTimeMillis()): Boolean {
         if (isCompleted) return false
         val odometerOverdue = nextDueOdometer?.let { currentOdometer >= it } ?: false
@@ -177,5 +190,7 @@ data class UserSettings(
     val isDriveBackupConnected: Boolean = false,
     val connectedEmail: String? = null,
     val userId: String? = null,
-    val lastBackupTimestamp: Long? = null
+    val lastBackupTimestamp: Long? = null,
+    val customExpenseCategories: List<String> = emptyList(),
+    val customServiceTypes: List<String> = emptyList()
 )

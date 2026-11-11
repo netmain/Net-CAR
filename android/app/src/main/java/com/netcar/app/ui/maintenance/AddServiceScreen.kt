@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
@@ -22,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -33,8 +35,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.ServiceType
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.MaintenanceBlue
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,12 +51,33 @@ fun AddServiceScreen(
     val uiState by viewModel.uiState.collectAsState()
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
     var serviceDropdownExpanded by remember { mutableStateOf(false) }
+    var showAddTypeDialog by remember { mutableStateOf(false) }
+    var newTypeName by remember { mutableStateOf("") }
+    var newTypeError by remember { mutableStateOf<String?>(null) }
+
+    val customTypes = remember(
+        uiState.userSettings.customServiceTypes,
+        uiState.serviceRecords
+    ) {
+        (
+            uiState.userSettings.customServiceTypes +
+                uiState.serviceRecords.map { it.customType }
+            )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+    }
+
+    val selectedTypeLabel = formState.customType.ifBlank {
+        if (isFr) formState.type.displayNameFr else formState.type.displayName
+    }
 
     Scaffold(
         topBar = {
             TopBar(
-                title = "Log Maintenance Service",
+                title = if (isFr) "Enregistrer un entretien" else "Log Maintenance Service",
                 canNavigateBack = true,
                 onNavigateBack = onNavigateBack
             )
@@ -68,7 +93,9 @@ fun AddServiceScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Vehicle: ${uiState.selectedVehicle?.displayName ?: "Selected Car"}",
+                text = (if (isFr) "Véhicule : " else "Vehicle: ") +
+                    (uiState.selectedVehicle?.displayName
+                        ?: if (isFr) "Véhicule sélectionné" else "Selected Car"),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
@@ -79,10 +106,10 @@ fun AddServiceScreen(
                 onExpandedChange = { serviceDropdownExpanded = !serviceDropdownExpanded }
             ) {
                 OutlinedTextField(
-                    value = formState.type.displayName,
+                    value = selectedTypeLabel,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Service Type *") },
+                    label = { Text(if (isFr) "Type de service *" else "Service Type *") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = serviceDropdownExpanded) },
                     modifier = Modifier
                         .menuAnchor()
@@ -96,13 +123,36 @@ fun AddServiceScreen(
                 ) {
                     ServiceType.values().forEach { st ->
                         DropdownMenuItem(
-                            text = { Text(st.displayName) },
+                            text = { Text(if (isFr) st.displayNameFr else st.displayName) },
                             onClick = {
                                 viewModel.updateType(st)
                                 serviceDropdownExpanded = false
                             }
                         )
                     }
+                    customTypes.forEach { custom ->
+                        DropdownMenuItem(
+                            text = { Text(custom) },
+                            onClick = {
+                                viewModel.updateCustomType(custom)
+                                serviceDropdownExpanded = false
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (isFr) "＋ Ajouter une catégorie…" else "＋ Add a category…",
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        onClick = {
+                            serviceDropdownExpanded = false
+                            newTypeName = ""
+                            newTypeError = null
+                            showAddTypeDialog = true
+                        }
+                    )
                 }
             }
 
@@ -113,7 +163,9 @@ fun AddServiceScreen(
                 OutlinedTextField(
                     value = formState.odometer,
                     onValueChange = { viewModel.updateOdometer(it) },
-                    label = { Text("Odometer ($distUnit) *") },
+                    label = {
+                        Text(if (isFr) "Kilométrage ($distUnit) *" else "Odometer ($distUnit) *")
+                    },
                     placeholder = { Text("e.g. ${uiState.selectedVehicle?.currentOdometer ?: 0}") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
@@ -124,7 +176,9 @@ fun AddServiceScreen(
                 OutlinedTextField(
                     value = formState.cost,
                     onValueChange = { viewModel.updateCost(it) },
-                    label = { Text("Cost ($currencySymbol) *") },
+                    label = {
+                        Text(if (isFr) "Coût ($currencySymbol) *" else "Cost ($currencySymbol) *")
+                    },
                     placeholder = { Text("0.00") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
@@ -136,8 +190,16 @@ fun AddServiceScreen(
             OutlinedTextField(
                 value = formState.description,
                 onValueChange = { viewModel.updateDescription(it) },
-                label = { Text("Description (Optional)") },
-                placeholder = { Text("e.g. Full synthetic 5W-30 oil change + filter") },
+                label = { Text(if (isFr) "Description (facultatif)" else "Description (Optional)") },
+                placeholder = {
+                    Text(
+                        if (isFr) {
+                            "ex. Vidange huile synthétique 5W-30 + filtre"
+                        } else {
+                            "e.g. Full synthetic 5W-30 oil change + filter"
+                        }
+                    )
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
@@ -146,8 +208,21 @@ fun AddServiceScreen(
             OutlinedTextField(
                 value = formState.parts,
                 onValueChange = { viewModel.updateParts(it) },
-                label = { Text("Parts Replaced (comma separated)") },
-                placeholder = { Text("e.g. Oil filter, Air filter, Brembo brake pads") },
+                label = {
+                    Text(
+                        if (isFr) "Pièces remplacées (séparées par des virgules)"
+                        else "Parts Replaced (comma separated)"
+                    )
+                },
+                placeholder = {
+                    Text(
+                        if (isFr) {
+                            "ex. Filtre à huile, Filtre à air, Plaquettes avant"
+                        } else {
+                            "e.g. Oil filter, Air filter, Brembo brake pads"
+                        }
+                    )
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
@@ -156,7 +231,12 @@ fun AddServiceScreen(
             OutlinedTextField(
                 value = formState.notes,
                 onValueChange = { viewModel.updateNotes(it) },
-                label = { Text("Garage / Mechanic / DIY Notes (Optional)") },
+                label = {
+                    Text(
+                        if (isFr) "Garage / Mécanicien / Notes (facultatif)"
+                        else "Garage / Mechanic / DIY Notes (Optional)"
+                    )
+                },
                 minLines = 3,
                 maxLines = 5,
                 modifier = Modifier.fillMaxWidth(),
@@ -182,10 +262,69 @@ fun AddServiceScreen(
                     .height(52.dp)
             ) {
                 Text(
-                    text = "Save Service Record",
+                    text = if (isFr) "Enregistrer l'entretien" else "Save Service Record",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }
         }
+    }
+
+    if (showAddTypeDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddTypeDialog = false },
+            title = { Text(if (isFr) "Nouvelle catégorie" else "New category") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isFr) {
+                            "Ajoutez un type de service ou de rappel personnalisé."
+                        } else {
+                            "Add a custom service or reminder type."
+                        }
+                    )
+                    OutlinedTextField(
+                        value = newTypeName,
+                        onValueChange = {
+                            newTypeName = it
+                            newTypeError = null
+                        },
+                        singleLine = true,
+                        label = { Text(if (isFr) "Nom de la catégorie" else "Category name") },
+                        placeholder = {
+                            Text(if (isFr) "ex. Assurance flotte" else "e.g. Fleet insurance")
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    if (newTypeError != null) {
+                        Text(
+                            text = newTypeError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val clean = newTypeName.trim().replace(Regex("\\s+"), " ")
+                        if (clean.isBlank()) {
+                            newTypeError =
+                                if (isFr) "Saisissez un nom de catégorie" else "Enter a category name"
+                            return@TextButton
+                        }
+                        viewModel.addCustomServiceType(clean)
+                        showAddTypeDialog = false
+                    }
+                ) {
+                    Text(if (isFr) "Ajouter" else "Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddTypeDialog = false }) {
+                    Text(if (isFr) "Annuler" else "Cancel")
+                }
+            }
+        )
     }
 }

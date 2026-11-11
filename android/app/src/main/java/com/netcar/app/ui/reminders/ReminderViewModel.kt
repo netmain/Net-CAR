@@ -33,6 +33,7 @@ data class AddReminderFormState(
     val editingReminderId: String? = null,
     val title: String = "",
     val type: ServiceType = ServiceType.OIL_CHANGE,
+    val customType: String = "",
     val intervalKm: String = "15000",
     val intervalDays: String = "365",
     val dueOdometer: String = "",
@@ -106,7 +107,16 @@ class ReminderViewModel @Inject constructor(
     }
 
     fun updateTitle(title: String) = _formState.apply { value = value.copy(title = title) }
-    fun updateType(type: ServiceType) = _formState.apply { value = value.copy(type = type) }
+    fun updateType(type: ServiceType) = _formState.apply {
+        value = value.copy(type = type, customType = "")
+    }
+    fun updateCustomType(name: String) = _formState.apply {
+        value = value.copy(type = ServiceType.OTHER, customType = name.trim())
+    }
+    fun addCustomServiceType(name: String) {
+        repository.addCustomServiceType(name)
+        updateCustomType(name)
+    }
     fun updateIntervalKm(km: String) = _formState.apply { value = value.copy(intervalKm = km) }
     fun updateIntervalDays(days: String) = _formState.apply { value = value.copy(intervalDays = days) }
     fun updateDueOdometer(odo: String) = _formState.apply { value = value.copy(dueOdometer = odo) }
@@ -123,6 +133,7 @@ class ReminderViewModel @Inject constructor(
             editingReminderId = reminder.id,
             title = reminder.title,
             type = reminder.type,
+            customType = reminder.customType,
             intervalKm = reminder.intervalKm?.toString() ?: "",
             intervalDays = reminder.intervalDays?.toString() ?: "",
             dueOdometer = reminder.nextDueOdometer?.toString() ?: "",
@@ -161,7 +172,17 @@ class ReminderViewModel @Inject constructor(
         val vehicle = uiState.value.selectedVehicle
         val vehicleId = original?.vehicleId ?: vehicle?.id ?: return
 
-        val title = if (state.title.isNotBlank()) state.title.trim() else state.type.displayName
+        val title = if (state.title.isNotBlank()) {
+            state.title.trim()
+        } else {
+            state.customType.ifBlank {
+                if (repository.userSettings.value.language == SupportedLanguage.FR) {
+                    state.type.displayNameFr
+                } else {
+                    state.type.displayName
+                }
+            }
+        }
 
         val intervalKmInt = state.intervalKm.toIntOrNull()
         val intervalDaysInt = state.intervalDays.toIntOrNull()
@@ -203,6 +224,7 @@ class ReminderViewModel @Inject constructor(
             vehicleId = vehicleId,
             title = title,
             type = state.type,
+            customType = state.customType,
             intervalKm = intervalKmInt,
             intervalDays = intervalDaysInt,
             lastServiceDate = lastServiceDate,

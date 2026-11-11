@@ -1,4 +1,4 @@
-import { FuelType, ExpenseCategory, ServiceType } from '@/types';
+import { FuelType } from '@/types';
 
 export const translations = {
   en: {
@@ -139,6 +139,8 @@ export const translations = {
       title: 'Maintenance Reminders',
       subtitle: 'Never miss an oil change, inspection, or insurance renewal',
       addReminder: 'Create Reminder',
+      editReminder: 'Edit Reminder',
+      saveChanges: 'Save Changes',
       reminderType: 'Reminder For',
       intervalKm: 'Repeat every (km / mi)',
       intervalDays: 'Repeat every (days)',
@@ -196,7 +198,7 @@ export const translations = {
       repairs: 'Repairs',
       maintenance: 'Maintenance',
       other: 'Other',
-    } as Record<ExpenseCategory, string>,
+    } as Record<string, string>,
     serviceTypes: {
       oilChange: 'Engine Oil Change',
       tireRotation: 'Tire Rotation / Replacement',
@@ -208,8 +210,9 @@ export const translations = {
       sparkPlugs: 'Spark Plugs',
       timing: 'Timing Belt / Chain',
       inspection: 'Technical Inspection',
+      insurance: 'Insurance Renewal',
       other: 'Other Maintenance',
-    } as Record<ServiceType, string>,
+    } as Record<string, string>,
   },
   fr: {
     common: {
@@ -349,6 +352,8 @@ export const translations = {
       title: "Rappels d'Entretien",
       subtitle: 'Ne manquez plus jamais une vidange, un contrôle technique ou une assurance',
       addReminder: 'Créer un rappel',
+      editReminder: 'Modifier le rappel',
+      saveChanges: 'Enregistrer les modifications',
       reminderType: 'Rappel pour',
       intervalKm: 'Répéter tous les (km / mi)',
       intervalDays: 'Répéter tous les (jours)',
@@ -406,7 +411,7 @@ export const translations = {
       repairs: 'Réparations imprévues',
       maintenance: 'Entretien régulier',
       other: 'Autre',
-    } as Record<ExpenseCategory, string>,
+    } as Record<string, string>,
     serviceTypes: {
       oilChange: 'Vidange huile moteur',
       tireRotation: 'Permutation / Pneus',
@@ -418,7 +423,8 @@ export const translations = {
       sparkPlugs: "Bougies d'allumage",
       timing: 'Courroie de distribution',
       inspection: 'Contrôle technique périodique',
+      insurance: "Renouvellement d'assurance",
       other: 'Autre intervention',
-    } as Record<ServiceType, string>,
+    } as Record<string, string>,
   },
 };

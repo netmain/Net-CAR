@@ -24,6 +24,7 @@ export type ServiceType =
   | 'sparkPlugs' 
   | 'timing' 
   | 'inspection' 
+  | 'insurance'
   | 'other';
 
 export type Units = 'metric' | 'imperial';
@@ -38,6 +39,8 @@ export interface UserProfile {
   units: Units;
   currency: SupportedCurrency;
   activeVehicleId?: string;
+  customExpenseCategories?: string[];
+  customServiceTypes?: string[];
   createdAt?: any;
   updatedAt?: any;
 }
@@ -78,7 +81,7 @@ export interface Expense {
   id: string;
   vehicleId: string;
   date: any;
-  category: ExpenseCategory;
+  category: ExpenseCategory | string;
   amount: number;
   description: string;
   receiptUrl?: string;
@@ -92,7 +95,7 @@ export interface Service {
   id: string;
   vehicleId: string;
   date: any;
-  type: ServiceType;
+  type: ServiceType | string;
   odometer: number;
   cost: number;
   description: string;

@@ -74,6 +74,28 @@ fun AddReminderScreen(
     var showDueDatePicker by remember { mutableStateOf(false) }
     var showLastServiceDatePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var showAddTypeDialog by remember { mutableStateOf(false) }
+    var newTypeName by remember { mutableStateOf("") }
+    var newTypeError by remember { mutableStateOf<String?>(null) }
+
+    val customTypes = remember(
+        uiState.userSettings.customServiceTypes,
+        uiState.activeReminders,
+        uiState.completedReminders
+    ) {
+        (
+            uiState.userSettings.customServiceTypes +
+                uiState.activeReminders.map { it.customType } +
+                uiState.completedReminders.map { it.customType }
+            )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinctBy { it.lowercase(Locale.US) }
+    }
+
+    val selectedTypeLabel = formState.customType.ifBlank {
+        if (isFr) formState.type.displayNameFr else formState.type.displayName
+    }
 
     Scaffold(
         topBar = {
@@ -111,7 +133,7 @@ fun AddReminderScreen(
                 onExpandedChange = { serviceDropdownExpanded = !serviceDropdownExpanded }
             ) {
                 OutlinedTextField(
-                    value = formState.type.displayName,
+                    value = selectedTypeLabel,
                     onValueChange = {},
                     readOnly = true,
                     label = { Text(if (isFr) "Type de service *" else "Service Type *") },
@@ -128,16 +150,42 @@ fun AddReminderScreen(
                 ) {
                     ServiceType.values().forEach { st ->
                         DropdownMenuItem(
-                            text = { Text(st.displayName) },
+                            text = { Text(if (isFr) st.displayNameFr else st.displayName) },
                             onClick = {
                                 viewModel.updateType(st)
                                 if (formState.title.isBlank()) {
-                                    viewModel.updateTitle(st.displayName)
+                                    viewModel.updateTitle(if (isFr) st.displayNameFr else st.displayName)
                                 }
                                 serviceDropdownExpanded = false
                             }
                         )
                     }
+                    customTypes.forEach { custom ->
+                        DropdownMenuItem(
+                            text = { Text(custom) },
+                            onClick = {
+                                viewModel.updateCustomType(custom)
+                                if (formState.title.isBlank()) {
+                                    viewModel.updateTitle(custom)
+                                }
+                                serviceDropdownExpanded = false
+                            }
+                        )
+                    }
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (isFr) "＋ Ajouter une catégorie…" else "＋ Add a category…",
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        },
+                        onClick = {
+                            serviceDropdownExpanded = false
+                            newTypeName = ""
+                            newTypeError = null
+                            showAddTypeDialog = true
+                        }
+                    )
                 }
             }
 
@@ -342,6 +390,68 @@ fun AddReminderScreen(
         }
     }
 
+    if (showAddTypeDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddTypeDialog = false },
+            title = { Text(if (isFr) "Nouvelle catégorie" else "New category") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        if (isFr) {
+                            "Ajoutez un type de service ou de rappel personnalisé."
+                        } else {
+                            "Add a custom service or reminder type."
+                        }
+                    )
+                    OutlinedTextField(
+                        value = newTypeName,
+                        onValueChange = {
+                            newTypeName = it
+                            newTypeError = null
+                        },
+                        singleLine = true,
+                        label = { Text(if (isFr) "Nom de la catégorie" else "Category name") },
+                        placeholder = {
+                            Text(if (isFr) "ex. Assurance flotte" else "e.g. Fleet insurance")
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    if (newTypeError != null) {
+                        Text(
+                            text = newTypeError ?: "",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val clean = newTypeName.trim().replace(Regex("\\s+"), " ")
+                        if (clean.isBlank()) {
+                            newTypeError =
+                                if (isFr) "Saisissez un nom de catégorie" else "Enter a category name"
+                            return@TextButton
+                        }
+                        viewModel.addCustomServiceType(clean)
+                        if (formState.title.isBlank()) {
+                            viewModel.updateTitle(clean)
+                        }
+                        showAddTypeDialog = false
+                    }
+                ) {
+                    Text(if (isFr) "Ajouter" else "Add")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddTypeDialog = false }) {
+                    Text(if (isFr) "Annuler" else "Cancel")
+                }
+            }
+        )
+    }
+
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
@@ -383,7 +493,8 @@ fun AddReminderScreen(
         ReminderDatePickerDialog(
             initialDateMillis = formState.dueDateMillis,
             onDismiss = { showDueDatePicker = false },
-            onDateSelected = { viewModel.updateDueDate(it) }
+            onDateSelected = { viewModel.updateDueDate(it) },
+            isFrench = isFr
         )
     }
 
@@ -391,7 +502,8 @@ fun AddReminderScreen(
         ReminderDatePickerDialog(
             initialDateMillis = formState.lastServiceDateMillis,
             onDismiss = { showLastServiceDatePicker = false },
-            onDateSelected = { viewModel.updateLastServiceDate(it) }
+            onDateSelected = { viewModel.updateLastServiceDate(it) },
+            isFrench = isFr
         )
     }
 }
@@ -461,7 +573,8 @@ private fun ReminderDateField(
 private fun ReminderDatePickerDialog(
     initialDateMillis: Long?,
     onDismiss: () -> Unit,
-    onDateSelected: (Long?) -> Unit
+    onDateSelected: (Long?) -> Unit,
+    isFrench: Boolean = false
 ) {
     val state = rememberDatePickerState(
         initialSelectedDateMillis = initialDateMillis?.let { localDateToUtcMillis(it) }
@@ -481,7 +594,7 @@ private fun ReminderDatePickerDialog(
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text(if (isFrench) "Annuler" else "Cancel")
             }
         }
     ) {

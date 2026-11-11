@@ -56,6 +56,35 @@ function reportFirestoreErrorSafely(
   }
 }
 
+const MAX_CUSTOM_CATEGORIES = 100;
+const MAX_CUSTOM_CATEGORY_LENGTH = 60;
+
+function sanitizeCustomCategory(name: string): string {
+  return String(name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, MAX_CUSTOM_CATEGORY_LENGTH);
+}
+
+function mergeUniqueStrings(...lists: Array<unknown>): string[] {
+  const merged: string[] = [];
+  const seen = new Set<string>();
+  for (const list of lists) {
+    if (!Array.isArray(list)) continue;
+    for (const raw of list) {
+      if (typeof raw !== 'string') continue;
+      const clean = sanitizeCustomCategory(raw);
+      if (!clean) continue;
+      const key = clean.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(clean);
+      if (merged.length >= MAX_CUSTOM_CATEGORIES) return merged;
+    }
+  }
+  return merged;
+}
+
 export type SyncStatus = 'synced' | 'syncing' | 'local' | 'error';
 
 interface AppUser {
@@ -117,8 +146,13 @@ interface AppContextType {
   deleteService: (id: string) => Promise<void>;
 
   addReminder: (r: Omit<Reminder, 'id'>) => Promise<string>;
+  updateReminder: (id: string, updates: Partial<Reminder>) => Promise<void>;
   completeReminder: (id: string) => Promise<void>;
   deleteReminder: (id: string) => Promise<void>;
+
+  // Custom categories (stored locally and best-effort synced to the profile)
+  addCustomExpenseCategory: (name: string) => void;
+  addCustomServiceType: (name: string) => void;
 
   // Backup & Preferences
   updatePreferences: (prefs: Partial<UserProfile>) => void;
@@ -144,6 +178,8 @@ const defaultProfile: UserProfile = {
   units: 'metric',
   currency: 'DZD',
   activeVehicleId: 'veh-1',
+  customExpenseCategories: [],
+  customServiceTypes: [],
 };
 
 const initialVehicles: Vehicle[] = [
@@ -1158,10 +1194,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
+        const baseUserDocWithCategories = {
+          ...baseUserDoc,
+          customExpenseCategories: mergeUniqueStrings(userProfile.customExpenseCategories),
+          customServiceTypes: mergeUniqueStrings(userProfile.customServiceTypes),
+        };
 
         const userSnap = await getDoc(userDocRef);
         if (!userSnap.exists()) {
-          await setDoc(userDocRef, baseUserDoc);
+          try {
+            await setDoc(userDocRef, baseUserDocWithCategories);
+          } catch {
+            // Older Firestore rules may reject the custom category fields.
+            // Create the core profile anyway; categories stay local for now.
+            await setDoc(userDocRef, baseUserDoc);
+          }
         }
         isCloudReadyRef.current = true;
 
@@ -1332,11 +1379,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               units: data.units || 'metric',
               currency: data.currency || 'DZD',
               activeVehicleId: data.activeVehicleId,
+              customExpenseCategories: Array.isArray(data.customExpenseCategories)
+                ? data.customExpenseCategories
+                : [],
+              customServiceTypes: Array.isArray(data.customServiceTypes)
+                ? data.customServiceTypes
+                : [],
               createdAt: normalizeTimestampField(data.createdAt),
               updatedAt: normalizeTimestampField(data.updatedAt),
             };
-            setUserProfile(syncedProfile);
-            saveToLocal('netcar_profile', syncedProfile);
+            setUserProfile((prev) => {
+              const mergedProfile: UserProfile = {
+                ...syncedProfile,
+                customExpenseCategories: mergeUniqueStrings(
+                  prev.customExpenseCategories,
+                  syncedProfile.customExpenseCategories
+                ),
+                customServiceTypes: mergeUniqueStrings(
+                  prev.customServiceTypes,
+                  syncedProfile.customServiceTypes
+                ),
+              };
+              saveToLocal('netcar_profile', mergedProfile);
+              return mergedProfile;
+            });
             if (data.preferredLang === 'en' || data.preferredLang === 'fr') {
               setLangState(data.preferredLang);
               localStorage.setItem('netcar_lang', data.preferredLang);
@@ -1923,6 +1989,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return id;
   };
 
+  const updateReminder = async (id: string, updates: Partial<Reminder>) => {
+    const target = reminders.find((r) => r.id === id);
+    if (!target) return;
+
+    const nowIso = new Date().toISOString();
+    const merged: Reminder = { ...target, ...updates, updatedAt: nowIso };
+
+    setReminders((prev) => {
+      const updated = prev.map((r) => (r.id === id ? merged : r));
+      saveToLocal('netcar_reminders', updated);
+      return updated;
+    });
+
+    const currentUid = auth.currentUser?.uid;
+    if (currentUid && isCloudReadyRef.current) {
+      const path = `users/${currentUid}/reminders/${id}`;
+      setSyncStatus('syncing');
+      try {
+        await updateDoc(
+          doc(db, 'users', currentUid, 'reminders', id),
+          buildReminderUpdateData(merged, merged.vehicleId)
+        );
+        setSyncStatus('synced');
+        setLastSyncedAt(new Date().toISOString());
+      } catch (error) {
+        setSyncStatus('error');
+        reportFirestoreErrorSafely(error, OperationType.UPDATE, path);
+      }
+    }
+  };
+
   const completeReminder = async (id: string) => {
     const target = reminders.find((r) => r.id === id);
     if (!target) return;
@@ -2022,18 +2119,78 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         units: prefs.units,
         currency: prefs.currency,
         activeVehicleId: prefs.activeVehicleId,
+        customExpenseCategories:
+          prefs.customExpenseCategories !== undefined
+            ? mergeUniqueStrings(prefs.customExpenseCategories)
+            : undefined,
+        customServiceTypes:
+          prefs.customServiceTypes !== undefined
+            ? mergeUniqueStrings(prefs.customServiceTypes)
+            : undefined,
         updatedAt: serverTimestamp(),
       });
-      updateDoc(doc(db, 'users', currentUid), cleanPrefs)
+      const hasCustomCategoryFields =
+        cleanPrefs.customExpenseCategories !== undefined ||
+        cleanPrefs.customServiceTypes !== undefined;
+      const cleanPrefsWithoutCategories = stripUndefined({
+        name: prefs.name !== undefined ? prefs.name.slice(0, 200) : undefined,
+        email: prefs.email !== undefined ? prefs.email.slice(0, 320) : undefined,
+        preferredLang: prefs.preferredLang,
+        units: prefs.units,
+        currency: prefs.currency,
+        activeVehicleId: prefs.activeVehicleId,
+        updatedAt: serverTimestamp(),
+      });
+
+      const writePreferences = async () => {
+        try {
+          await updateDoc(doc(db, 'users', currentUid), cleanPrefs);
+        } catch (error) {
+          if (!hasCustomCategoryFields) throw error;
+          // Best-effort category sync: older rules may reject the new fields.
+          // Retry the remaining preferences so the rest of the change is saved.
+          await updateDoc(doc(db, 'users', currentUid), cleanPrefsWithoutCategories);
+        }
+      };
+
+      writePreferences()
         .then(() => {
           setSyncStatus('synced');
           setLastSyncedAt(new Date().toISOString());
         })
         .catch((error) => {
           setSyncStatus('error');
-          handleFirestoreError(error, OperationType.UPDATE, userDocPath);
+          reportFirestoreErrorSafely(error, OperationType.UPDATE, userDocPath);
         });
     }
+  };
+
+  const addCustomExpenseCategory = (name: string) => {
+    const clean = sanitizeCustomCategory(name);
+    if (!clean) return;
+    const builtIn = Object.keys(translations.en.categories);
+    const current = userProfile.customExpenseCategories || [];
+    const exists = [...builtIn, ...current].some(
+      (item) => item.toLowerCase() === clean.toLowerCase()
+    );
+    if (exists) return;
+    updatePreferences({
+      customExpenseCategories: [...current, clean].slice(-MAX_CUSTOM_CATEGORIES),
+    });
+  };
+
+  const addCustomServiceType = (name: string) => {
+    const clean = sanitizeCustomCategory(name);
+    if (!clean) return;
+    const builtIn = Object.keys(translations.en.serviceTypes);
+    const current = userProfile.customServiceTypes || [];
+    const exists = [...builtIn, ...current].some(
+      (item) => item.toLowerCase() === clean.toLowerCase()
+    );
+    if (exists) return;
+    updatePreferences({
+      customServiceTypes: [...current, clean].slice(-MAX_CUSTOM_CATEGORIES),
+    });
   };
 
   const syncToCloudNow = async (): Promise<{
@@ -2249,27 +2406,49 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         desiredActiveId = mergedVehicles[0].id;
       }
 
+      const remoteCustomExpenseCategories = Array.isArray(remoteProfile?.customExpenseCategories)
+        ? remoteProfile.customExpenseCategories
+        : [];
+      const remoteCustomServiceTypes = Array.isArray(remoteProfile?.customServiceTypes)
+        ? remoteProfile.customServiceTypes
+        : [];
+      const mergedCustomExpenseCategories = mergeUniqueStrings(
+        userProfile.customExpenseCategories,
+        remoteCustomExpenseCategories
+      );
+      const mergedCustomServiceTypes = mergeUniqueStrings(
+        userProfile.customServiceTypes,
+        remoteCustomServiceTypes
+      );
+
       if (!remoteProfile) {
-        await setDoc(
-          userDocRef,
-          stripUndefined({
-            userId: uid,
-            name:
-              (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) ||
-              'Pilot',
-            email:
-              (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
-              'driver@netcar.app',
-            preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
-            units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
-            currency: VALID_CURRENCIES.includes(userProfile.currency)
-              ? userProfile.currency
-              : 'DZD',
-            activeVehicleId: desiredActiveId || undefined,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          })
-        );
+        const coreProfileData = stripUndefined({
+          userId: uid,
+          name:
+            (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) ||
+            'Pilot',
+          email:
+            (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
+            'driver@netcar.app',
+          preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
+          units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
+          currency: VALID_CURRENCIES.includes(userProfile.currency)
+            ? userProfile.currency
+            : 'DZD',
+          activeVehicleId: desiredActiveId || undefined,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        try {
+          await setDoc(userDocRef, {
+            ...coreProfileData,
+            customExpenseCategories: mergedCustomExpenseCategories,
+            customServiceTypes: mergedCustomServiceTypes,
+          });
+        } catch {
+          // Best-effort category sync: older rules may reject the new fields.
+          await setDoc(userDocRef, coreProfileData);
+        }
       } else {
         const remoteActive =
           typeof remoteProfile.activeVehicleId === 'string' ? remoteProfile.activeVehicleId : '';
@@ -2289,28 +2468,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (localProfileWins) {
-          await updateDoc(
-            userDocRef,
-            stripUndefined({
-              userId: uid,
-              name:
-                (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) ||
-                'Pilot',
-              email:
-                (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
-                'driver@netcar.app',
-              preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
-              units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
-              currency: VALID_CURRENCIES.includes(userProfile.currency)
-                ? userProfile.currency
-                : 'DZD',
-              activeVehicleId: desiredActiveId || undefined,
-              updatedAt: serverTimestamp(),
-            })
-          );
+          const profileUpdateData = stripUndefined({
+            userId: uid,
+            name:
+              (userProfile.name || fbUser.displayName || 'Pilot').trim().slice(0, 200) ||
+              'Pilot',
+            email:
+              (fbUser.email || userProfile.email || 'driver@netcar.app').trim().slice(0, 320) ||
+              'driver@netcar.app',
+            preferredLang: lang === 'en' || lang === 'fr' ? lang : 'fr',
+            units: userProfile.units === 'imperial' ? 'imperial' : 'metric',
+            currency: VALID_CURRENCIES.includes(userProfile.currency)
+              ? userProfile.currency
+              : 'DZD',
+            activeVehicleId: desiredActiveId || undefined,
+            updatedAt: serverTimestamp(),
+          });
+          try {
+            await updateDoc(userDocRef, {
+              ...profileUpdateData,
+              customExpenseCategories: mergedCustomExpenseCategories,
+              customServiceTypes: mergedCustomServiceTypes,
+            });
+          } catch {
+            // Best-effort category sync: older rules may reject the new fields.
+            await updateDoc(userDocRef, profileUpdateData);
+          }
           setUserProfile((prev) => ({
             ...prev,
             activeVehicleId: desiredActiveId || prev.activeVehicleId,
+            customExpenseCategories: mergeUniqueStrings(
+              prev.customExpenseCategories,
+              mergedCustomExpenseCategories
+            ),
+            customServiceTypes: mergeUniqueStrings(
+              prev.customServiceTypes,
+              mergedCustomServiceTypes
+            ),
             updatedAt: new Date().toISOString(),
           }));
         } else {
@@ -2327,6 +2521,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             });
             desiredActiveId = mergedVehicles[0].id;
           }
+          setUserProfile((prev) => ({
+            ...prev,
+            customExpenseCategories: mergeUniqueStrings(
+              prev.customExpenseCategories,
+              mergedCustomExpenseCategories
+            ),
+            customServiceTypes: mergeUniqueStrings(
+              prev.customServiceTypes,
+              mergedCustomServiceTypes
+            ),
+          }));
         }
       }
 
@@ -2849,8 +3054,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       addService,
       deleteService,
       addReminder,
+      updateReminder,
       completeReminder,
       deleteReminder,
+      addCustomExpenseCategory,
+      addCustomServiceType,
       updatePreferences,
       syncToCloudNow,
       exportBackupJson,

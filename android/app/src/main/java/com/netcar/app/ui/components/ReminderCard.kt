@@ -61,7 +61,8 @@ fun ReminderCard(
     onComplete: () -> Unit,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    onEdit: (() -> Unit)? = null
+    onEdit: (() -> Unit)? = null,
+    isFrench: Boolean = false
 ) {
     val now = System.currentTimeMillis()
     val isOverdue = reminder.isOverdue(currentOdometer, now)
@@ -83,13 +84,16 @@ fun ReminderCard(
     }
 
     val statusText = when {
-        reminder.isCompleted -> "Completed"
-        isOverdue -> "Overdue"
-        isDueSoon -> "Due Soon"
-        else -> "Upcoming"
+        reminder.isCompleted -> if (isFrench) "Terminé" else "Completed"
+        isOverdue -> if (isFrench) "En retard" else "Overdue"
+        isDueSoon -> if (isFrench) "Bientôt dû" else "Due Soon"
+        else -> if (isFrench) "À venir" else "Upcoming"
     }
 
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat(
+        "dd MMM yyyy",
+        if (isFrench) Locale.FRENCH else Locale.getDefault()
+    )
 
     Card(
         shape = RoundedCornerShape(20.dp),
@@ -151,7 +155,7 @@ fun ReminderCard(
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = reminder.type.displayName,
+                            text = reminder.typeLabel(isFrench),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -192,9 +196,17 @@ fun ReminderCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             val kmText = if (kmDiff < 0) {
-                                "${abs(kmDiff)} km overdue (at ${reminder.nextDueOdometer} km)"
+                                if (isFrench) {
+                                    "${abs(kmDiff)} km de retard (à ${reminder.nextDueOdometer} km)"
+                                } else {
+                                    "${abs(kmDiff)} km overdue (at ${reminder.nextDueOdometer} km)"
+                                }
                             } else {
-                                "in $kmDiff km (at ${reminder.nextDueOdometer} km)"
+                                if (isFrench) {
+                                    "dans $kmDiff km (à ${reminder.nextDueOdometer} km)"
+                                } else {
+                                    "in $kmDiff km (at ${reminder.nextDueOdometer} km)"
+                                }
                             }
                             Text(
                                 text = kmText,
@@ -217,9 +229,17 @@ fun ReminderCard(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             val dateText = if (daysDiff < 0) {
-                                "${abs(daysDiff)} days overdue (${dateFormatter.format(Date(reminder.nextDueDate))})"
+                                if (isFrench) {
+                                    "${abs(daysDiff)} jours de retard (${dateFormatter.format(Date(reminder.nextDueDate))})"
+                                } else {
+                                    "${abs(daysDiff)} days overdue (${dateFormatter.format(Date(reminder.nextDueDate))})"
+                                }
                             } else {
-                                "in $daysDiff days (${dateFormatter.format(Date(reminder.nextDueDate))})"
+                                if (isFrench) {
+                                    "dans $daysDiff jours (${dateFormatter.format(Date(reminder.nextDueDate))})"
+                                } else {
+                                    "in $daysDiff days (${dateFormatter.format(Date(reminder.nextDueDate))})"
+                                }
                             }
                             Text(
                                 text = dateText,
@@ -242,7 +262,7 @@ fun ReminderCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Reminder",
+                                contentDescription = if (isFrench) "Modifier le rappel" else "Edit Reminder",
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -259,7 +279,7 @@ fun ReminderCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Mark Complete",
+                                contentDescription = if (isFrench) "Marquer comme terminé" else "Mark Complete",
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -270,7 +290,7 @@ fun ReminderCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Check,
-                                contentDescription = "Completed",
+                                contentDescription = if (isFrench) "Terminé" else "Completed",
                                 tint = SuccessGreen,
                                 modifier = Modifier.size(18.dp)
                             )

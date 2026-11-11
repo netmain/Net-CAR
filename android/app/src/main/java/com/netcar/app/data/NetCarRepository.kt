@@ -482,8 +482,18 @@ class NetCarRepository @Inject constructor(
             isDriveBackupConnected = false,
             connectedEmail = null,
             userId = null,
-            lastBackupTimestamp = lastSync
+            lastBackupTimestamp = lastSync,
+            customExpenseCategories = loadStringList("custom_expense_categories_json"),
+            customServiceTypes = loadStringList("custom_service_types_json")
         )
+    }
+
+    private fun loadStringList(key: String): List<String> {
+        val raw = prefs.getString(key, null) ?: return emptyList()
+        return runCatching {
+            val type = object : TypeToken<List<String>>() {}.type
+            gson.fromJson<List<String>>(raw, type) ?: emptyList()
+        }.getOrElse { emptyList() }
     }
 
     private fun persistLocalData() {
@@ -498,6 +508,14 @@ class NetCarRepository @Inject constructor(
                 .putString("lang", _userSettings.value.language.code)
                 .putString("units", _userSettings.value.units.name)
                 .putString("currency", _userSettings.value.currency.name)
+                .putString(
+                    "custom_expense_categories_json",
+                    gson.toJson(_userSettings.value.customExpenseCategories)
+                )
+                .putString(
+                    "custom_service_types_json",
+                    gson.toJson(_userSettings.value.customServiceTypes)
+                )
                 .apply()
         }
     }
@@ -641,6 +659,52 @@ class NetCarRepository @Inject constructor(
     fun updateCurrency(currency: SupportedCurrency) {
         _userSettings.value = _userSettings.value.copy(currency = currency)
         persistLocalData()
+    }
+
+    fun addCustomExpenseCategory(name: String) {
+        val clean = sanitizeCustomCategory(name)
+        if (clean.isBlank()) return
+        val builtIn = ExpenseCategory.values().flatMap {
+            listOf(it.name, it.displayName, it.displayNameFr)
+        }
+        val current = _userSettings.value.customExpenseCategories
+        if ((builtIn + current).any { it.equals(clean, ignoreCase = true) }) return
+        _userSettings.value = _userSettings.value.copy(
+            customExpenseCategories = (current + clean).takeLast(100)
+        )
+        persistLocalData()
+    }
+
+    fun addCustomServiceType(name: String) {
+        val clean = sanitizeCustomCategory(name)
+        if (clean.isBlank()) return
+        val builtIn = ServiceType.values().flatMap {
+            listOf(it.name, it.displayName, it.displayNameFr)
+        }
+        val current = _userSettings.value.customServiceTypes
+        if ((builtIn + current).any { it.equals(clean, ignoreCase = true) }) return
+        _userSettings.value = _userSettings.value.copy(
+            customServiceTypes = (current + clean).takeLast(100)
+        )
+        persistLocalData()
+    }
+
+    private fun sanitizeCustomCategory(raw: String): String =
+        raw.trim().replace(Regex("\\s+"), " ").take(60)
+
+    private fun mergeCustomCategoryLists(vararg lists: List<String>): List<String> {
+        val merged = mutableListOf<String>()
+        val seen = mutableSetOf<String>()
+        for (list in lists) {
+            for (raw in list) {
+                val clean = sanitizeCustomCategory(raw)
+                if (clean.isBlank()) continue
+                if (!seen.add(clean.lowercase(Locale.US))) continue
+                merged.add(clean)
+                if (merged.size >= 100) return merged
+            }
+        }
+        return merged
     }
 
     fun signOutCloud() {
@@ -998,7 +1062,7 @@ class NetCarRepository @Inject constructor(
         return System.currentTimeMillis()
     }
 
-    private fun serviceTypeToCloud(type: ServiceType): String = when (type) {
+    private fun serviceTypeKeyToCloud(type: ServiceType): String = when (type) {
         ServiceType.OIL_CHANGE -> "oilChange"
         ServiceType.TIRE_ROTATION -> "tireRotation"
         ServiceType.BRAKES -> "brakes"
@@ -1009,12 +1073,13 @@ class NetCarRepository @Inject constructor(
         ServiceType.SPARK_PLUGS -> "sparkPlugs"
         ServiceType.TIMING_BELT -> "timing"
         ServiceType.INSPECTION -> "inspection"
+        ServiceType.INSURANCE -> "insurance"
         ServiceType.OTHER -> "other"
     }
 
-    private fun serviceTypeFromCloud(raw: Any?): ServiceType {
+    private fun serviceTypeKeyFromCloud(raw: Any?): ServiceType? {
         val key = (raw as? String)?.trim()?.lowercase(Locale.US)
-            ?.replace("_", "")?.replace("-", "") ?: return ServiceType.OTHER
+            ?.replace("_", "")?.replace("-", "")?.replace(" ", "") ?: return null
         return when (key) {
             "oilchange" -> ServiceType.OIL_CHANGE
             "tirerotation" -> ServiceType.TIRE_ROTATION
@@ -1026,9 +1091,68 @@ class NetCarRepository @Inject constructor(
             "sparkplugs" -> ServiceType.SPARK_PLUGS
             "timing", "timingbelt" -> ServiceType.TIMING_BELT
             "inspection" -> ServiceType.INSPECTION
-            else -> ServiceType.OTHER
+            "insurance" -> ServiceType.INSURANCE
+            "other" -> ServiceType.OTHER
+            else -> null
         }
     }
+
+    private fun serviceTypeFromCloud(raw: Any?): ServiceType =
+        serviceTypeKeyFromCloud(raw) ?: ServiceType.OTHER
+
+    private fun serviceTypeAndCustomFromCloud(raw: Any?): Pair<ServiceType, String> {
+        val known = serviceTypeKeyFromCloud(raw)
+        if (known != null) return known to ""
+        val custom = (raw as? String)?.trim().orEmpty().take(60)
+        return ServiceType.OTHER to custom
+    }
+
+    private fun serviceTypeToCloud(service: ServiceRecord): String =
+        service.customType.trim().ifBlank { serviceTypeKeyToCloud(service.type) }
+
+    private fun reminderTypeToCloud(reminder: Reminder): String =
+        reminder.customType.trim().ifBlank { serviceTypeKeyToCloud(reminder.type) }
+
+    private fun expenseCategoryKeyToCloud(category: ExpenseCategory): String = when (category) {
+        ExpenseCategory.INSURANCE -> "insurance"
+        ExpenseCategory.PARKING -> "parking"
+        ExpenseCategory.TOLLS -> "tolls"
+        ExpenseCategory.FINES -> "fines"
+        ExpenseCategory.CAR_WASH -> "carWash"
+        ExpenseCategory.TAXES -> "taxes"
+        ExpenseCategory.REGISTRATION -> "registration"
+        ExpenseCategory.FINANCING -> "financing"
+        ExpenseCategory.REPAIRS -> "repairs"
+        ExpenseCategory.MAINTENANCE -> "maintenance"
+        ExpenseCategory.OTHER -> "other"
+    }
+
+    private fun expenseCategoryFromCloud(raw: Any?): Pair<ExpenseCategory, String> {
+        val str = (raw as? String)?.trim().orEmpty()
+        if (str.isBlank()) return ExpenseCategory.OTHER to ""
+        val key = str.lowercase(Locale.US)
+            .replace("_", "").replace("-", "").replace(" ", "")
+        val known = when (key) {
+            "insurance" -> ExpenseCategory.INSURANCE
+            "parking" -> ExpenseCategory.PARKING
+            "tolls", "toll" -> ExpenseCategory.TOLLS
+            "fines", "fine" -> ExpenseCategory.FINES
+            "carwash" -> ExpenseCategory.CAR_WASH
+            "taxes", "tax" -> ExpenseCategory.TAXES
+            "registration" -> ExpenseCategory.REGISTRATION
+            "financing", "loan" -> ExpenseCategory.FINANCING
+            "repairs", "repair" -> ExpenseCategory.REPAIRS
+            "maintenance" -> ExpenseCategory.MAINTENANCE
+            "other" -> ExpenseCategory.OTHER
+            else -> null
+        }
+        return if (known != null) known to "" else ExpenseCategory.OTHER to str.take(60)
+    }
+
+    private fun expenseCategoryToCloud(expense: Expense): String =
+        expense.customCategory.trim().ifBlank {
+            expenseCategoryKeyToCloud(expense.category)
+        }
 
     private fun parseIsoDateOrNull(raw: Any?): Long? {
         if (raw == null) return null
@@ -1313,9 +1437,9 @@ class NetCarRepository @Inject constructor(
             "userId" to uid,
             "vehicleId" to vehicleId,
             "date" to formatIsoDate(expense.date),
-            "category" to expense.category.name.lowercase(Locale.US),
+            "category" to expenseCategoryToCloud(expense),
             "amount" to expense.amount.coerceAtLeast(0.0),
-            "description" to expense.description.ifBlank { expense.category.displayName }
+            "description" to expense.description.ifBlank { expense.categoryLabel(false) }
                 .ifBlank { "Expense" }.take(500),
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -1329,9 +1453,9 @@ class NetCarRepository @Inject constructor(
         val map = hashMapOf<String, Any>(
             "vehicleId" to vehicleId,
             "date" to formatIsoDate(expense.date),
-            "category" to expense.category.name.lowercase(Locale.US),
+            "category" to expenseCategoryToCloud(expense),
             "amount" to expense.amount.coerceAtLeast(0.0),
-            "description" to expense.description.ifBlank { expense.category.displayName }
+            "description" to expense.description.ifBlank { expense.categoryLabel(false) }
                 .ifBlank { "Expense" }.take(500),
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -1351,10 +1475,10 @@ class NetCarRepository @Inject constructor(
             "userId" to uid,
             "vehicleId" to vehicleId,
             "date" to formatIsoDate(service.date),
-            "type" to serviceTypeToCloud(service.type),
+            "type" to serviceTypeToCloud(service),
             "odometer" to service.odometer.coerceAtLeast(0),
             "cost" to service.cost.coerceAtLeast(0.0),
-            "description" to service.description.ifBlank { service.type.displayName }
+            "description" to service.description.ifBlank { service.typeLabel(false) }
                 .ifBlank { "Service" }.take(500),
             "createdAt" to FieldValue.serverTimestamp(),
             "updatedAt" to FieldValue.serverTimestamp()
@@ -1371,10 +1495,10 @@ class NetCarRepository @Inject constructor(
         val map = hashMapOf<String, Any>(
             "vehicleId" to vehicleId,
             "date" to formatIsoDate(service.date),
-            "type" to serviceTypeToCloud(service.type),
+            "type" to serviceTypeToCloud(service),
             "odometer" to service.odometer.coerceAtLeast(0),
             "cost" to service.cost.coerceAtLeast(0.0),
-            "description" to service.description.ifBlank { service.type.displayName }
+            "description" to service.description.ifBlank { service.typeLabel(false) }
                 .ifBlank { "Service" }.take(500),
             "updatedAt" to FieldValue.serverTimestamp()
         )
@@ -1398,7 +1522,7 @@ class NetCarRepository @Inject constructor(
             "id" to docId,
             "userId" to uid,
             "vehicleId" to vehicleId,
-            "type" to serviceTypeToCloud(reminder.type),
+            "type" to reminderTypeToCloud(reminder),
             "isRecurring" to reminder.isRecurring,
             "isActive" to !reminder.isCompleted,
             "createdAt" to FieldValue.serverTimestamp(),
@@ -1420,7 +1544,7 @@ class NetCarRepository @Inject constructor(
     ): HashMap<String, Any> {
         val map = hashMapOf<String, Any>(
             "vehicleId" to vehicleId,
-            "type" to serviceTypeToCloud(reminder.type),
+            "type" to reminderTypeToCloud(reminder),
             "isRecurring" to reminder.isRecurring,
             "isActive" to !reminder.isCompleted,
             "updatedAt" to FieldValue.serverTimestamp()
@@ -1475,6 +1599,50 @@ class NetCarRepository @Inject constructor(
                 )
                 _selectedVehicleId.value?.let { userDoc["activeVehicleId"] = sanitizeDocId(it, "veh") }
                 Tasks.await(userDocRef.set(userDoc), 15, TimeUnit.SECONDS)
+            }
+
+            // 1b. Best-effort merge of user-defined categories with the profile
+            // document. Older Firestore rules may reject the new fields, so a
+            // failure here must never abort the rest of the sync.
+            val profileData: Map<String, Any> =
+                if (userSnap.exists()) userSnap.data.orEmpty() else emptyMap()
+            val remoteExpenseCategories = (profileData["customExpenseCategories"] as? List<*>)
+                ?.mapNotNull { it as? String }.orEmpty()
+            val remoteServiceTypes = (profileData["customServiceTypes"] as? List<*>)
+                ?.mapNotNull { it as? String }.orEmpty()
+            val mergedExpenseCategories = mergeCustomCategoryLists(
+                _userSettings.value.customExpenseCategories,
+                remoteExpenseCategories
+            )
+            val mergedServiceTypes = mergeCustomCategoryLists(
+                _userSettings.value.customServiceTypes,
+                remoteServiceTypes
+            )
+            if (mergedExpenseCategories != _userSettings.value.customExpenseCategories ||
+                mergedServiceTypes != _userSettings.value.customServiceTypes
+            ) {
+                _userSettings.value = _userSettings.value.copy(
+                    customExpenseCategories = mergedExpenseCategories,
+                    customServiceTypes = mergedServiceTypes
+                )
+                persistLocalData()
+            }
+            if (remoteExpenseCategories != mergedExpenseCategories ||
+                remoteServiceTypes != mergedServiceTypes
+            ) {
+                runCatching {
+                    Tasks.await(
+                        userDocRef.update(
+                            mapOf(
+                                "customExpenseCategories" to mergedExpenseCategories,
+                                "customServiceTypes" to mergedServiceTypes,
+                                "updatedAt" to FieldValue.serverTimestamp()
+                            )
+                        ),
+                        15,
+                        TimeUnit.SECONDS
+                    )
+                }
             }
 
             // 2. Sync Vehicles (/users/{uid}/vehicles)
@@ -1650,8 +1818,7 @@ class NetCarRepository @Inject constructor(
             for (doc in remoteExpSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                val catStr = (data["category"] as? String)?.uppercase(Locale.US)?.replace("-", "_") ?: "OTHER"
-                val cat = runCatching { ExpenseCategory.valueOf(catStr) }.getOrDefault(ExpenseCategory.OTHER)
+                val (cat, customCat) = expenseCategoryFromCloud(data["category"])
                 val updatedAt = parseTimestampMillis(data["updatedAt"])
                 remoteExpenses[id] = RemoteEntry(
                     model = Expense(
@@ -1659,6 +1826,7 @@ class NetCarRepository @Inject constructor(
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
                         category = cat,
+                        customCategory = customCat,
                         amount = (data["amount"] as? Number)?.toDouble() ?: 0.0,
                         description = (data["description"] as? String) ?: "",
                         odometer = (data["odometer"] as? Number)?.toInt(),
@@ -1733,7 +1901,7 @@ class NetCarRepository @Inject constructor(
             for (doc in remoteSvcSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                val svcType = serviceTypeFromCloud(data["type"])
+                val (svcType, customSvcType) = serviceTypeAndCustomFromCloud(data["type"])
                 val rawParts = (data["parts"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
                 val updatedAt = parseTimestampMillis(data["updatedAt"])
                 remoteServices[id] = RemoteEntry(
@@ -1742,6 +1910,7 @@ class NetCarRepository @Inject constructor(
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
                         date = parseIsoDate(data["date"]),
                         type = svcType,
+                        customType = customSvcType,
                         odometer = (data["odometer"] as? Number)?.toInt() ?: 0,
                         cost = (data["cost"] as? Number)?.toDouble() ?: 0.0,
                         description = (data["description"] as? String) ?: "",
@@ -1818,14 +1987,15 @@ class NetCarRepository @Inject constructor(
             for (doc in remoteRemSnap.documents) {
                 val data = doc.data ?: continue
                 val id = (data["id"] as? String) ?: doc.id
-                val remType = serviceTypeFromCloud(data["type"])
+                val (remType, customRemType) = serviceTypeAndCustomFromCloud(data["type"])
                 val updatedAt = parseTimestampMillis(data["updatedAt"])
                 remoteReminders[id] = RemoteEntry(
                     model = Reminder(
                         id = id,
                         vehicleId = (data["vehicleId"] as? String) ?: defaultVehicleId,
-                        title = (data["title"] as? String) ?: remType.displayName,
+                        title = (data["title"] as? String) ?: customRemType.ifBlank { remType.displayName },
                         type = remType,
+                        customType = customRemType,
                         intervalKm = (data["intervalKm"] as? Number)?.toInt(),
                         intervalDays = (data["intervalDays"] as? Number)?.toInt(),
                         lastServiceDate = parseIsoDateOrNull(data["lastServiceDate"]),

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.netcar.app.model.ServiceRecord
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.MaintenanceBlue
 import com.netcar.app.ui.theme.MaintenanceBlueContainer
@@ -63,11 +64,12 @@ fun ServiceListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
 
     Scaffold(
         topBar = {
             TopBar(
-                title = "Maintenance & Services",
+                title = if (isFr) "Entretien & Services" else "Maintenance & Services",
                 canNavigateBack = onOpenDrawer == null,
                 onNavigateBack = onNavigateBack,
                 onOpenDrawer = onOpenDrawer
@@ -80,7 +82,10 @@ fun ServiceListScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Service Record")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = if (isFr) "Ajouter un entretien" else "Add Service Record"
+                )
             }
         },
         modifier = modifier
@@ -108,7 +113,7 @@ fun ServiceListScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Total Maintenance Spend",
+                                text = if (isFr) "Dépenses d'entretien totales" else "Total Maintenance Spend",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -125,7 +130,11 @@ fun ServiceListScreen(
                             color = MaterialTheme.colorScheme.surface
                         ) {
                             Text(
-                                text = "${uiState.totalServicesCount} Services",
+                                text = if (isFr) {
+                                    "${uiState.totalServicesCount} interventions"
+                                } else {
+                                    "${uiState.totalServicesCount} Services"
+                                },
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
@@ -151,13 +160,17 @@ fun ServiceListScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No maintenance records yet",
+                            text = if (isFr) "Aucun entretien enregistré" else "No maintenance records yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + below to record oil changes, brakes, filters, and repairs.",
+                            text = if (isFr) {
+                                "Appuyez sur + pour enregistrer vidanges, freins, filtres et réparations."
+                            } else {
+                                "Tap + below to record oil changes, brakes, filters, and repairs."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -169,6 +182,7 @@ fun ServiceListScreen(
                         service = service,
                         currencySymbol = currencySymbol,
                         distUnit = distUnit,
+                        isFrench = isFr,
                         onDelete = { viewModel.deleteServiceRecord(service.id) }
                     )
                 }
@@ -183,9 +197,13 @@ private fun ServiceItemCard(
     service: ServiceRecord,
     currencySymbol: String,
     distUnit: String,
+    isFrench: Boolean,
     onDelete: () -> Unit
 ) {
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat(
+        "dd MMM yyyy",
+        if (isFrench) Locale.FRENCH else Locale.getDefault()
+    )
     val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
 
     Card(
@@ -249,7 +267,7 @@ private fun ServiceItemCard(
                     IconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete",
+                            contentDescription = if (isFrench) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -269,7 +287,7 @@ private fun ServiceItemCard(
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Text(
-                        text = service.type.displayName,
+                        text = service.typeLabel(isFrench),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

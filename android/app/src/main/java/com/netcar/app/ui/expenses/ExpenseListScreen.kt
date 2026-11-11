@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -38,14 +37,15 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.netcar.app.model.Expense
 import com.netcar.app.model.ExpenseCategory
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.ExpenseAmber
 import com.netcar.app.ui.theme.ExpenseAmberContainer
@@ -53,6 +53,9 @@ import java.text.NumberFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private fun expenseFilterKey(expense: Expense): String =
+    expense.customCategory.ifBlank { expense.category.name }
 
 @Composable
 fun ExpenseListScreen(
@@ -65,11 +68,34 @@ fun ExpenseListScreen(
     val uiState by viewModel.uiState.collectAsState()
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
 
+    val categoryFilters = remember(
+        uiState.userSettings.customExpenseCategories,
+        uiState.expenses
+    ) {
+        val filters = mutableListOf<Pair<String, String>>()
+        ExpenseCategory.values().forEach { cat ->
+            filters.add(cat.name to if (isFr) cat.displayNameFr else cat.displayName)
+        }
+        val seen = filters.map { it.first.lowercase(Locale.US) }.toMutableSet()
+        (
+            uiState.userSettings.customExpenseCategories +
+                uiState.expenses.map { it.customCategory }
+            )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .forEach { custom ->
+                if (seen.add(custom.lowercase(Locale.US))) {
+                    filters.add(custom to custom)
+                }
+            }
+        filters
+    }
     Scaffold(
         topBar = {
             TopBar(
-                title = "Expenses",
+                title = if (isFr) "Dépenses" else "Expenses",
                 canNavigateBack = onOpenDrawer == null,
                 onNavigateBack = onNavigateBack,
                 onOpenDrawer = onOpenDrawer
@@ -82,7 +108,10 @@ fun ExpenseListScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Expense")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = if (isFr) "Ajouter une dépense" else "Add Expense"
+                )
             }
         },
         modifier = modifier
@@ -112,7 +141,7 @@ fun ExpenseListScreen(
                     ) {
                         Column {
                             Text(
-                                text = "Monthly Expenses",
+                                text = if (isFr) "Dépenses du mois" else "Monthly Expenses",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -126,7 +155,7 @@ fun ExpenseListScreen(
 
                         Column(horizontalAlignment = Alignment.End) {
                             Text(
-                                text = "All-Time Total",
+                                text = if (isFr) "Total cumulé" else "All-Time Total",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -150,21 +179,29 @@ fun ExpenseListScreen(
                         FilterChip(
                             selected = uiState.selectedCategory == null,
                             onClick = { viewModel.setCategoryFilter(null) },
-                            label = { Text("All (${uiState.expenses.size})") }
+                            label = {
+                                Text(
+                                    if (isFr) {
+                                        "Toutes (${uiState.expenses.size})"
+                                    } else {
+                                        "All (${uiState.expenses.size})"
+                                    }
+                                )
+                            }
                         )
                     }
 
-                    items(ExpenseCategory.values()) { category ->
-                        val count = uiState.expenses.count { it.category == category }
-                        if (count > 0 || uiState.selectedCategory == category) {
+                    items(categoryFilters) { (key, label) ->
+                        val count = uiState.expenses.count { expenseFilterKey(it) == key }
+                        if (count > 0 || uiState.selectedCategory == key) {
                             FilterChip(
-                                selected = uiState.selectedCategory == category,
+                                selected = uiState.selectedCategory == key,
                                 onClick = {
                                     viewModel.setCategoryFilter(
-                                        if (uiState.selectedCategory == category) null else category
+                                        if (uiState.selectedCategory == key) null else key
                                     )
                                 },
-                                label = { Text("${category.displayName} ($count)") }
+                                label = { Text("$label ($count)") }
                             )
                         }
                     }
@@ -187,13 +224,17 @@ fun ExpenseListScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No expenses recorded",
+                            text = if (isFr) "Aucune dépense enregistrée" else "No expenses recorded",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap + to add parking, tolls, insurance, or car wash.",
+                            text = if (isFr) {
+                                "Appuyez sur + pour ajouter stationnement, péage, assurance ou lavage."
+                            } else {
+                                "Tap + to add parking, tolls, insurance, or car wash."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -206,6 +247,7 @@ fun ExpenseListScreen(
                             expense = expense,
                             currencySymbol = currencySymbol,
                             distUnit = distUnit,
+                            isFrench = isFr,
                             onDelete = { viewModel.deleteExpense(expense.id) }
                         )
                     }
@@ -220,9 +262,13 @@ private fun ExpenseItemCard(
     expense: Expense,
     currencySymbol: String,
     distUnit: String,
+    isFrench: Boolean,
     onDelete: () -> Unit
 ) {
-    val dateFormatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
+    val dateFormatter = SimpleDateFormat(
+        "dd MMM yyyy",
+        if (isFrench) Locale.FRENCH else Locale.getDefault()
+    )
     val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
 
     Card(
@@ -286,7 +332,7 @@ private fun ExpenseItemCard(
                     IconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete",
+                            contentDescription = if (isFrench) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -306,7 +352,7 @@ private fun ExpenseItemCard(
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Text(
-                        text = expense.category.displayName,
+                        text = expense.categoryLabel(isFrench),
                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)

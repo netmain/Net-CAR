@@ -2,7 +2,6 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/lib/app-context';
-import { ServiceType } from '@/types';
 import {
   getLatestVehicleOdometer,
   validateVehicleOdometer,
@@ -18,7 +17,8 @@ import {
   Package, 
   X, 
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  Tag
 } from 'lucide-react';
 
 export default function MaintenancePage() {
@@ -29,6 +29,7 @@ export default function MaintenancePage() {
     expenses,
     addService, 
     deleteService, 
+    addCustomServiceType,
     userProfile, 
     lang,
     t 
@@ -38,10 +39,13 @@ export default function MaintenancePage() {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
 
   // Form State
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [type, setType] = useState<ServiceType>('oilChange');
+  const [type, setType] = useState<string>('oilChange');
   const [odometer, setOdometer] = useState<number | ''>(activeVehicle?.currentOdometer || '');
   const [cost, setCost] = useState<number | ''>('');
   const [description, setDescription] = useState('');
@@ -160,7 +164,36 @@ export default function MaintenancePage() {
     setDeleteConfirmId(null);
   };
 
-  const allServiceTypes = Object.keys(t.serviceTypes) as ServiceType[];
+  const allServiceTypes = Array.from(
+    new Set([
+      ...Object.keys(t.serviceTypes),
+      ...(userProfile.customServiceTypes || []),
+      ...services.map((s) => s.type).filter(Boolean),
+    ])
+  );
+
+  const handleServiceTypeSelect = (selected: string) => {
+    if (selected === '__add_custom__') {
+      setNewCategoryName('');
+      setCategoryError('');
+      setShowCategoryDialog(true);
+      return;
+    }
+    setType(selected);
+  };
+
+  const handleAddCategory = () => {
+    const clean = newCategoryName.trim().replace(/\s+/g, ' ');
+    if (!clean) {
+      setCategoryError(lang === 'fr' ? 'Saisissez un nom de catégorie' : 'Enter a category name');
+      return;
+    }
+    addCustomServiceType(clean);
+    setType(clean);
+    setShowCategoryDialog(false);
+    setNewCategoryName('');
+    setCategoryError('');
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -254,7 +287,7 @@ export default function MaintenancePage() {
             </span>
           </div>
           <p className="mt-1.5 text-xs text-slate-400 font-mono">
-            {latestService ? `${new Date(latestService.date).toLocaleDateString()} · ${t.serviceTypes[latestService.type]}` : (lang === 'fr' ? 'Aucune révision enregistrée' : 'No services logged')}
+            {latestService ? `${new Date(latestService.date).toLocaleDateString()} · ${t.serviceTypes[latestService.type] || latestService.type}` : (lang === 'fr' ? 'Aucune révision enregistrée' : 'No services logged')}
           </p>
         </div>
       </div>
@@ -284,7 +317,7 @@ export default function MaintenancePage() {
             </option>
             {allServiceTypes.map((st) => (
               <option key={st} value={st} className="bg-slate-900">
-                {t.serviceTypes[st]}
+                {t.serviceTypes[st] || st}
               </option>
             ))}
           </select>
@@ -452,14 +485,17 @@ export default function MaintenancePage() {
                   </label>
                   <select
                     value={type}
-                    onChange={(e) => setType(e.target.value as ServiceType)}
+                    onChange={(e) => handleServiceTypeSelect(e.target.value)}
                     className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-semibold text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   >
                     {allServiceTypes.map((st) => (
                       <option key={st} value={st} className="bg-slate-900 text-slate-100">
-                        {t.serviceTypes[st]}
+                        {t.serviceTypes[st] || st}
                       </option>
                     ))}
+                    <option value="__add_custom__" className="bg-slate-900 text-amber-400">
+                      {lang === 'fr' ? '＋ Ajouter une catégorie…' : '＋ Add a category…'}
+                    </option>
                   </select>
                 </div>
 
@@ -619,6 +655,53 @@ export default function MaintenancePage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Category Dialog */}
+      {showCategoryDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="relative w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                <Tag className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-bold text-slate-100 font-mono">
+                {lang === 'fr' ? 'Nouvelle catégorie' : 'New category'}
+              </h2>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              {lang === 'fr'
+                ? 'Ajoutez un type de service ou de rappel personnalisé.'
+                : 'Add a custom service or reminder type.'}
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={newCategoryName}
+              onChange={(e) => {
+                setNewCategoryName(e.target.value);
+                setCategoryError('');
+              }}
+              placeholder={lang === 'fr' ? 'ex. Assurance flotte' : 'e.g. Fleet insurance'}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-medium text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+            {categoryError && <p className="mt-1 text-xs text-red-400 font-mono">{categoryError}</p>}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowCategoryDialog(false)}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 transition"
+              >
+                {t.common.cancel}
+              </button>
+              <button
+                onClick={handleAddCategory}
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition"
+              >
+                {lang === 'fr' ? 'Ajouter' : 'Add'}
+              </button>
+            </div>
           </div>
         </div>
       )}

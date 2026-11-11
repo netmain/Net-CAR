@@ -46,11 +46,19 @@ service cloud.firestore {
       return !(field in data) || (data[field] is number && data[field] >= minVal);
     }
 
+    function isValidCustomCategoryList(data, field) {
+      return !(field in data) || (
+        data[field] is list &&
+        data[field].size() <= 100 &&
+        (data[field].size() == 0 || (data[field][0] is string && data[field][0].size() <= 60))
+      );
+    }
+
     // 3. Validation Blueprints (Anti-Update-Gap)
 
     function isValidUserProfile(data, userId) {
       let requiredKeys = ['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'createdAt', 'updatedAt'];
-      let allowedKeys = ['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'createdAt', 'updatedAt'];
+      let allowedKeys = ['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'customExpenseCategories', 'customServiceTypes', 'createdAt', 'updatedAt'];
       return data.keys().hasAll(requiredKeys) &&
              data.keys().hasOnly(allowedKeys) &&
              data.userId is string && data.userId == userId && data.userId.size() <= 128 &&
@@ -60,6 +68,8 @@ service cloud.firestore {
              data.units is string && data.units.size() <= 20 && data.units in ['metric', 'imperial'] &&
              data.currency is string && data.currency.size() <= 10 && data.currency in ['DZD', 'EUR', 'USD', 'CAD', 'GBP', 'MAD', 'CHF'] &&
              isValidOptionalString(data, 'activeVehicleId', 128) &&
+             isValidCustomCategoryList(data, 'customExpenseCategories') &&
+             isValidCustomCategoryList(data, 'customServiceTypes') &&
              data.createdAt is timestamp &&
              data.updatedAt is timestamp;
     }
@@ -193,7 +203,7 @@ service cloud.firestore {
                        (!('userId' in existing()) || incoming().userId == existing().userId) &&
                        (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
                        incoming().updatedAt == request.time &&
-                       incoming().diff(existing()).affectedKeys().hasOnly(['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'createdAt', 'updatedAt']);
+                       incoming().diff(existing()).affectedKeys().hasOnly(['userId', 'name', 'email', 'preferredLang', 'units', 'currency', 'activeVehicleId', 'customExpenseCategories', 'customServiceTypes', 'createdAt', 'updatedAt']);
 
       allow delete: if isOwner(userId) && isValidId(userId);
 

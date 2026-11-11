@@ -2,7 +2,6 @@
 
 import React, { useState, useMemo } from 'react';
 import { useApp } from '@/lib/app-context';
-import { ExpenseCategory } from '@/types';
 import { 
   Receipt, 
   Plus, 
@@ -21,7 +20,7 @@ import {
   Tag
 } from 'lucide-react';
 
-const CATEGORY_ICONS: Record<ExpenseCategory, React.ElementType> = {
+const CATEGORY_ICONS: Record<string, React.ElementType> = {
   insurance: Shield,
   parking: ParkingCircle,
   tolls: Receipt,
@@ -35,7 +34,7 @@ const CATEGORY_ICONS: Record<ExpenseCategory, React.ElementType> = {
   other: Tag,
 };
 
-const CATEGORY_COLORS: Record<ExpenseCategory, { bg: string; text: string; border: string }> = {
+const CATEGORY_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   insurance: { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30' },
   parking: { bg: 'bg-purple-500/15', text: 'text-purple-400', border: 'border-purple-500/30' },
   tolls: { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30' },
@@ -55,6 +54,7 @@ export default function ExpensesPage() {
     expenses, 
     addExpense, 
     deleteExpense, 
+    addCustomExpenseCategory,
     userProfile, 
     lang,
     t 
@@ -64,10 +64,13 @@ export default function ExpensesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showCategoryDialog, setShowCategoryDialog] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
 
   // Form State
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [category, setCategory] = useState<ExpenseCategory>('parking');
+  const [category, setCategory] = useState<string>('parking');
   const [amount, setAmount] = useState<number | ''>('');
   const [description, setDescription] = useState('');
   const [odometer, setOdometer] = useState<number | ''>(activeVehicle?.currentOdometer || '');
@@ -105,17 +108,17 @@ export default function ExpensesPage() {
   // Memoize stats
   const { totalAmount, topCategory, topCategoryAmount } = useMemo(() => {
     let total = 0;
-    const categoryTotals: Partial<Record<ExpenseCategory, number>> = {};
+    const categoryTotals: Record<string, number> = {};
     for (const exp of vehicleExpenses) {
       total += exp.amount;
       categoryTotals[exp.category] = (categoryTotals[exp.category] || 0) + exp.amount;
     }
-    let bestCat: ExpenseCategory | null = null;
+    let bestCat: string | null = null;
     let bestAmount = 0;
     for (const [cat, sum] of Object.entries(categoryTotals)) {
       if ((sum || 0) > bestAmount) {
         bestAmount = sum || 0;
-        bestCat = cat as ExpenseCategory;
+        bestCat = cat;
       }
     }
     return { totalAmount: total, topCategory: bestCat, topCategoryAmount: bestAmount };
@@ -173,7 +176,36 @@ export default function ExpensesPage() {
     setDeleteConfirmId(null);
   };
 
-  const allCategories = Object.keys(t.categories) as ExpenseCategory[];
+  const allCategories = Array.from(
+    new Set([
+      ...Object.keys(t.categories),
+      ...(userProfile.customExpenseCategories || []),
+      ...vehicleExpenses.map((e) => e.category).filter(Boolean),
+    ])
+  );
+
+  const handleCategorySelect = (selected: string) => {
+    if (selected === '__add_custom__') {
+      setNewCategoryName('');
+      setCategoryError('');
+      setShowCategoryDialog(true);
+      return;
+    }
+    setCategory(selected);
+  };
+
+  const handleAddCategory = () => {
+    const clean = newCategoryName.trim().replace(/\s+/g, ' ');
+    if (!clean) {
+      setCategoryError(lang === 'fr' ? 'Saisissez un nom de catégorie' : 'Enter a category name');
+      return;
+    }
+    addCustomExpenseCategory(clean);
+    setCategory(clean);
+    setShowCategoryDialog(false);
+    setNewCategoryName('');
+    setCategoryError('');
+  };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
@@ -240,7 +272,7 @@ export default function ExpensesPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold font-mono text-cyan-400 truncate">
-              {topCategory ? t.categories[topCategory] : '—'}
+              {topCategory ? (t.categories[topCategory] || topCategory) : '—'}
             </span>
           </div>
           <p className="mt-1.5 text-xs text-slate-400 font-mono">
@@ -297,7 +329,7 @@ export default function ExpensesPage() {
                   : 'border border-slate-800 bg-[#0F1522] text-slate-300 hover:bg-slate-800/60 hover:text-white'
               }`}
             >
-              {t.categories[cat]} {count > 0 ? `(${count})` : ''}
+              {t.categories[cat] || cat} {count > 0 ? `(${count})` : ''}
             </button>
           );
         })}
@@ -372,7 +404,7 @@ export default function ExpensesPage() {
                       <td className="px-5 py-4 whitespace-nowrap">
                         <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-mono font-bold ${colors.bg} ${colors.text} ${colors.border}`}>
                           <Icon className="h-3.5 w-3.5" />
-                          <span>{t.categories[exp.category]}</span>
+                          <span>{t.categories[exp.category] || exp.category}</span>
                         </span>
                       </td>
 
@@ -467,14 +499,17 @@ export default function ExpensesPage() {
                   </label>
                   <select
                     value={category}
-                    onChange={(e) => setCategory(e.target.value as ExpenseCategory)}
+                    onChange={(e) => handleCategorySelect(e.target.value)}
                     className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-semibold text-slate-100 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                   >
                     {allCategories.map((cat) => (
                       <option key={cat} value={cat} className="bg-slate-900 text-slate-100">
-                        {t.categories[cat]}
+                        {t.categories[cat] || cat}
                       </option>
                     ))}
+                    <option value="__add_custom__" className="bg-slate-900 text-amber-400">
+                      {lang === 'fr' ? '＋ Ajouter une catégorie…' : '＋ Add a category…'}
+                    </option>
                   </select>
                 </div>
 
@@ -579,6 +614,53 @@ export default function ExpensesPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Category Dialog */}
+      {showCategoryDialog && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
+          <div className="relative w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                <Tag className="h-5 w-5" />
+              </div>
+              <h2 className="text-lg font-bold text-slate-100 font-mono">
+                {lang === 'fr' ? 'Nouvelle catégorie' : 'New category'}
+              </h2>
+            </div>
+            <p className="mt-3 text-sm text-slate-300">
+              {lang === 'fr'
+                ? 'Ajoutez une catégorie de dépense personnalisée.'
+                : 'Add a custom expense category.'}
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={newCategoryName}
+              onChange={(e) => {
+                setNewCategoryName(e.target.value);
+                setCategoryError('');
+              }}
+              placeholder={lang === 'fr' ? 'ex. Location de voiture' : 'e.g. Car rental'}
+              className="mt-4 w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-medium text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+            {categoryError && <p className="mt-1 text-xs text-red-400 font-mono">{categoryError}</p>}
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                onClick={() => setShowCategoryDialog(false)}
+                className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 transition"
+              >
+                {t.common.cancel}
+              </button>
+              <button
+                onClick={handleAddCategory}
+                className="rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 px-5 py-2 text-sm font-bold text-slate-950 shadow-lg shadow-amber-500/20 hover:from-amber-400 hover:to-amber-500 transition"
+              >
+                {lang === 'fr' ? 'Ajouter' : 'Add'}
+              </button>
+            </div>
           </div>
         </div>
       )}

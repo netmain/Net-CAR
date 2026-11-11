@@ -276,7 +276,8 @@ fun ReminderListScreen(
                             currentOdometer = currentOdo,
                             onComplete = { viewModel.toggleComplete(reminder.id) },
                             onClick = { onEditReminder(reminder.id) },
-                            onEdit = { onEditReminder(reminder.id) }
+                            onEdit = { onEditReminder(reminder.id) },
+                            isFrench = isFr
                         )
                     }
                 }
