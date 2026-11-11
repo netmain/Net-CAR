@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LocalGasStation
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Payments
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.outlined.BarChart
@@ -56,13 +57,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.netcar.app.model.FillUp
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Vehicle
 import com.netcar.app.ui.components.ReminderCard
 import com.netcar.app.ui.components.StatCard
 import com.netcar.app.ui.components.TopBar
+import com.netcar.app.ui.components.VehiclePhotoDialog
+import com.netcar.app.ui.components.VehiclePhotoThumbnail
 import com.netcar.app.ui.theme.ExpenseAmber
 import com.netcar.app.ui.theme.ExpenseAmberContainer
 import com.netcar.app.ui.theme.FuelGreen
@@ -93,10 +98,12 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
     val consUnit = uiState.userSettings.units.consUnit
     val numberFormat = remember { NumberFormat.getNumberInstance(Locale.getDefault()) }
+    var showPhotoDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = modifier
@@ -110,21 +117,21 @@ fun DashboardScreen(
                 IconButton(onClick = onNavigateToVehicles) {
                     Icon(
                         imageVector = Icons.Default.DirectionsCar,
-                        contentDescription = "Vehicles",
+                        contentDescription = if (isFr) "Véhicules" else "Vehicles",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 IconButton(onClick = onNavigateToReports) {
                     Icon(
                         imageVector = Icons.Outlined.BarChart,
-                        contentDescription = "Reports",
+                        contentDescription = if (isFr) "Rapports" else "Reports",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 IconButton(onClick = onNavigateToSettings) {
                     Icon(
                         imageVector = Icons.Outlined.Settings,
-                        contentDescription = "Settings",
+                        contentDescription = if (isFr) "Paramètres" else "Settings",
                         tint = MaterialTheme.colorScheme.onSurface
                     )
                 }
@@ -141,9 +148,11 @@ fun DashboardScreen(
                 VehicleSwitcherCard(
                     selectedVehicle = uiState.selectedVehicle,
                     vehicles = uiState.vehicles,
+                    isFr = isFr,
                     onSelectVehicle = { viewModel.selectVehicle(it) },
                     onManageVehicles = onNavigateToVehicles,
                     onAddVehicle = onNavigateToAddVehicle,
+                    onChangePhoto = { showPhotoDialog = true },
                     distUnit = distUnit
                 )
             }
@@ -156,11 +165,11 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         StatCard(
-                            title = "Avg Consumption",
+                            title = if (isFr) "Consommation moy." else "Avg Consumption",
                             value = String.format(Locale.US, "%.1f", uiState.stats.averageConsumption),
                             unit = consUnit,
                             icon = Icons.Default.Speed,
-                            trend = "-0.2 vs last month",
+                            trend = if (isFr) "-0,2 vs mois dernier" else "-0.2 vs last month",
                             trendPositive = true,
                             iconTint = FuelGreen,
                             iconContainerColor = FuelGreenContainer,
@@ -168,11 +177,11 @@ fun DashboardScreen(
                         )
 
                         StatCard(
-                            title = "Monthly Cost",
-                            value = "$currencySymbol${String.format(Locale.US, "%.0f", uiState.stats.totalMonthlyCost)}",
+                            title = if (isFr) "Coût mensuel" else "Monthly Cost",
+                            value = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.stats.totalMonthlyCost)}",
                             unit = "",
                             icon = Icons.Default.Payments,
-                            trend = "+5.4% this mo",
+                            trend = if (isFr) "+5,4 % ce mois" else "+5.4% this mo",
                             trendPositive = false,
                             iconTint = ExpenseAmber,
                             iconContainerColor = ExpenseAmberContainer,
@@ -185,9 +194,13 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         StatCard(
-                            title = "Reminders Due",
+                            title = if (isFr) "Rappels dus" else "Reminders Due",
                             value = "${uiState.stats.dueRemindersCount}",
-                            unit = if (uiState.stats.dueRemindersCount == 1) "alert" else "alerts",
+                            unit = if (isFr) {
+                                if (uiState.stats.dueRemindersCount == 1) "alerte" else "alertes"
+                            } else {
+                                if (uiState.stats.dueRemindersCount == 1) "alert" else "alerts"
+                            },
                             icon = Icons.Default.NotificationsActive,
                             iconTint = if (uiState.stats.dueRemindersCount > 0) OverdueRed else MaterialTheme.colorScheme.primary,
                             iconContainerColor = if (uiState.stats.dueRemindersCount > 0) OverdueRedContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
@@ -196,7 +209,7 @@ fun DashboardScreen(
                         )
 
                         StatCard(
-                            title = "Odometer",
+                            title = if (isFr) "Compteur" else "Odometer",
                             value = numberFormat.format(uiState.stats.currentOdometer),
                             unit = distUnit,
                             icon = Icons.Default.DirectionsCar,
@@ -212,7 +225,7 @@ fun DashboardScreen(
             item {
                 Column {
                     Text(
-                        text = "Quick Actions",
+                        text = if (isFr) "Actions rapides" else "Quick Actions",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -223,7 +236,7 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         QuickActionButton(
-                            title = "Log Fuel",
+                            title = if (isFr) "Carburant" else "Log Fuel",
                             icon = Icons.Default.LocalGasStation,
                             containerColor = FuelGreenContainer,
                             contentColor = FuelGreen,
@@ -232,7 +245,7 @@ fun DashboardScreen(
                         )
 
                         QuickActionButton(
-                            title = "Log Expense",
+                            title = if (isFr) "Dépense" else "Log Expense",
                             icon = Icons.Default.Receipt,
                             containerColor = ExpenseAmberContainer,
                             contentColor = ExpenseAmber,
@@ -241,7 +254,7 @@ fun DashboardScreen(
                         )
 
                         QuickActionButton(
-                            title = "Log Service",
+                            title = if (isFr) "Entretien" else "Log Service",
                             icon = Icons.Default.Build,
                             containerColor = MaintenanceBlueContainer,
                             contentColor = MaintenanceBlue,
@@ -260,12 +273,15 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Upcoming Reminders",
+                        text = if (isFr) "Rappels à venir" else "Upcoming Reminders",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     TextButton(onClick = onNavigateToReminders) {
-                        Text(text = "View all", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            text = if (isFr) "Voir tout" else "View all",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
             }
@@ -278,7 +294,11 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "No pending reminders for this vehicle. You are all set!",
+                            text = if (isFr) {
+                                "Aucun rappel en attente pour ce véhicule. Tout est à jour !"
+                            } else {
+                                "No pending reminders for this vehicle. You are all set!"
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(20.dp)
@@ -303,12 +323,15 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recent Fill-ups",
+                        text = if (isFr) "Pleins récents" else "Recent Fill-ups",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     TextButton(onClick = onNavigateToFuel) {
-                        Text(text = "View all", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            text = if (isFr) "Voir tout" else "View all",
+                            style = MaterialTheme.typography.labelLarge
+                        )
                     }
                 }
             }
@@ -321,7 +344,11 @@ fun DashboardScreen(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "No fill-up history recorded yet.",
+                            text = if (isFr) {
+                                "Aucun historique de plein enregistré."
+                            } else {
+                                "No fill-up history recorded yet."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(20.dp)
@@ -332,6 +359,7 @@ fun DashboardScreen(
                 items(uiState.recentFillUps) { fillUp ->
                     RecentFillUpCard(
                         fillUp = fillUp,
+                        isFr = isFr,
                         currencySymbol = currencySymbol,
                         distUnit = distUnit,
                         volUnit = uiState.userSettings.units.volUnit
@@ -344,15 +372,36 @@ fun DashboardScreen(
             }
         }
     }
+
+    val photoVehicle = uiState.selectedVehicle
+    if (showPhotoDialog && photoVehicle != null) {
+        VehiclePhotoDialog(
+            vehicleName = photoVehicle.displayName,
+            photoUrl = photoVehicle.photoUrl,
+            isFr = isFr,
+            isBusy = uiState.photoState.isBusy &&
+                uiState.photoState.vehicleId == photoVehicle.id,
+            errorMessage = uiState.photoState.errorMessage,
+            onDismiss = {
+                showPhotoDialog = false
+                viewModel.clearPhotoMessage()
+            },
+            onPickPhoto = { uri -> viewModel.uploadVehiclePhoto(photoVehicle.id, uri) },
+            onApplyUrl = { url -> viewModel.applyVehiclePhotoUrl(photoVehicle.id, url) },
+            onRemove = { viewModel.removeVehiclePhoto(photoVehicle.id) }
+        )
+    }
 }
 
 @Composable
 private fun VehicleSwitcherCard(
     selectedVehicle: Vehicle?,
     vehicles: List<Vehicle>,
+    isFr: Boolean,
     onSelectVehicle: (String) -> Unit,
     onManageVehicles: () -> Unit,
     onAddVehicle: () -> Unit,
+    onChangePhoto: () -> Unit,
     distUnit: String
 ) {
     var dropdownExpanded by remember { mutableStateOf(false) }
@@ -372,64 +421,81 @@ private fun VehicleSwitcherCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { dropdownExpanded = true }
-                            .padding(4.dp)
-                    ) {
-                        Text(
-                            text = selectedVehicle?.displayName ?: "No vehicle",
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Icon(
-                            imageVector = Icons.Default.ExpandMore,
-                            contentDescription = "Switch Vehicle",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                VehiclePhotoThumbnail(
+                    photoUrl = selectedVehicle?.photoUrl.orEmpty(),
+                    iconSize = 26,
+                    modifier = Modifier.size(56.dp)
+                )
 
-                    DropdownMenu(
-                        expanded = dropdownExpanded,
-                        onDismissRequest = { dropdownExpanded = false }
-                    ) {
-                        vehicles.forEach { vehicle ->
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Box {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(12.dp))
+                                .clickable { dropdownExpanded = true }
+                                .padding(4.dp)
+                        ) {
+                            Text(
+                                text = selectedVehicle?.displayName
+                                    ?: if (isFr) "Aucun véhicule" else "No vehicle",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            Icon(
+                                imageVector = Icons.Default.ExpandMore,
+                                contentDescription = if (isFr) "Changer de véhicule" else "Switch Vehicle",
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.size(24.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = dropdownExpanded,
+                            onDismissRequest = { dropdownExpanded = false }
+                        ) {
+                            vehicles.forEach { vehicle ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                text = vehicle.displayName,
+                                                fontWeight = if (vehicle.id == selectedVehicle?.id) FontWeight.Bold else FontWeight.Normal
+                                            )
+                                            Text(
+                                                text = "${vehicle.plate} • ${numberFormat.format(vehicle.currentOdometer)} $distUnit",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        onSelectVehicle(vehicle.id)
+                                        dropdownExpanded = false
+                                    }
+                                )
+                            }
                             DropdownMenuItem(
                                 text = {
-                                    Column {
-                                        Text(
-                                            text = vehicle.displayName,
-                                            fontWeight = if (vehicle.id == selectedVehicle?.id) FontWeight.Bold else FontWeight.Normal
-                                        )
-                                        Text(
-                                            text = "${vehicle.plate} • ${numberFormat.format(vehicle.currentOdometer)} $distUnit",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    Text(if (isFr) "+ Ajouter un véhicule" else "+ Add New Vehicle")
                                 },
                                 onClick = {
-                                    onSelectVehicle(vehicle.id)
                                     dropdownExpanded = false
+                                    onAddVehicle()
                                 }
                             )
                         }
-                        DropdownMenuItem(
-                            text = { Text("+ Add New Vehicle") },
-                            onClick = {
-                                dropdownExpanded = false
-                                onAddVehicle()
-                            }
-                        )
                     }
                 }
+
+                Spacer(modifier = Modifier.width(8.dp))
 
                 Surface(
                     shape = RoundedCornerShape(8.dp),
@@ -461,7 +527,11 @@ private fun VehicleSwitcherCard(
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
                     ) {
                         Text(
-                            text = selectedVehicle?.fuelType?.displayName ?: "Fuel",
+                            text = when {
+                                selectedVehicle == null -> if (isFr) "Carburant" else "Fuel"
+                                isFr -> selectedVehicle.fuelType.displayNameFr
+                                else -> selectedVehicle.fuelType.displayName
+                            },
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -471,7 +541,11 @@ private fun VehicleSwitcherCard(
                     Spacer(modifier = Modifier.width(8.dp))
 
                     Text(
-                        text = "${selectedVehicle?.year ?: ""} Model",
+                        text = if (isFr) {
+                            "Modèle ${selectedVehicle?.year ?: ""}"
+                        } else {
+                            "${selectedVehicle?.year ?: ""} Model"
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                     )
@@ -481,6 +555,23 @@ private fun VehicleSwitcherCard(
                     text = "${numberFormat.format(selectedVehicle?.currentOdometer ?: 0)} $distUnit",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+
+            TextButton(
+                onClick = onChangePhoto,
+                enabled = selectedVehicle != null,
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PhotoCamera,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = if (isFr) "Modifier la photo" else "Change photo",
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
             }
         }
@@ -538,6 +629,7 @@ private fun QuickActionButton(
 @Composable
 private fun RecentFillUpCard(
     fillUp: FillUp,
+    isFr: Boolean,
     currencySymbol: String,
     distUnit: String,
     volUnit: String
@@ -581,7 +673,11 @@ private fun RecentFillUpCard(
 
                 Column {
                     Text(
-                        text = if (fillUp.station.isNotBlank()) fillUp.station else "Fill-up",
+                        text = when {
+                            fillUp.station.isNotBlank() -> fillUp.station
+                            isFr -> "Plein"
+                            else -> "Fill-up"
+                        },
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )

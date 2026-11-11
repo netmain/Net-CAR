@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -30,23 +31,28 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.Vehicle
 import com.netcar.app.ui.components.TopBar
-import com.netcar.app.ui.theme.SuccessGreen
+import com.netcar.app.ui.components.VehiclePhotoDialog
+import com.netcar.app.ui.components.VehiclePhotoThumbnail
+import com.netcar.app.ui.theme.OverdueRed
+import com.netcar.app.ui.theme.OverdueRedContainer
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -60,12 +66,15 @@ fun VehicleListScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
     val distUnit = uiState.userSettings.units.distUnit
+    var editingPhotoVehicleId by remember { mutableStateOf<String?>(null) }
+    val editingPhotoVehicle = uiState.vehicles.find { it.id == editingPhotoVehicleId }
 
     Scaffold(
         topBar = {
             TopBar(
-                title = "My Vehicles",
+                title = if (isFr) "Mes véhicules" else "My Vehicles",
                 canNavigateBack = onOpenDrawer == null,
                 onNavigateBack = onNavigateBack,
                 onOpenDrawer = onOpenDrawer
@@ -78,7 +87,10 @@ fun VehicleListScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Vehicle")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = if (isFr) "Ajouter un véhicule" else "Add Vehicle"
+                )
             }
         },
         modifier = modifier
@@ -90,13 +102,46 @@ fun VehicleListScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            val photoError = uiState.photoState.errorMessage
+            if (!photoError.isNullOrBlank() && editingPhotoVehicle == null) {
+                item(key = "photo_error") {
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(containerColor = OverdueRedContainer),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = photoError,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = OverdueRed,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = { viewModel.clearPhotoMessage() }) {
+                                Text(
+                                    text = if (isFr) "Fermer" else "Dismiss",
+                                    color = OverdueRed
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             items(uiState.vehicles, key = { it.id }) { vehicle ->
                 val isSelected = vehicle.id == uiState.selectedVehicleId
                 VehicleCard(
                     vehicle = vehicle,
                     isSelected = isSelected,
+                    isFr = isFr,
                     distUnit = distUnit,
                     onSelect = { viewModel.selectVehicle(vehicle.id) },
+                    onChangePhoto = { editingPhotoVehicleId = vehicle.id },
                     onDelete = { viewModel.deleteVehicle(vehicle.id) }
                 )
             }
@@ -117,13 +162,17 @@ fun VehicleListScreen(
                         )
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = "No vehicles added yet",
+                            text = if (isFr) "Aucun véhicule ajouté" else "No vehicles added yet",
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Tap the + button to add your first vehicle.",
+                            text = if (isFr) {
+                                "Appuyez sur + pour ajouter votre premier véhicule."
+                            } else {
+                                "Tap the + button to add your first vehicle."
+                            },
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -132,14 +181,34 @@ fun VehicleListScreen(
             }
         }
     }
+
+    if (editingPhotoVehicle != null) {
+        VehiclePhotoDialog(
+            vehicleName = editingPhotoVehicle.displayName,
+            photoUrl = editingPhotoVehicle.photoUrl,
+            isFr = isFr,
+            isBusy = uiState.photoState.isBusy &&
+                uiState.photoState.vehicleId == editingPhotoVehicle.id,
+            errorMessage = uiState.photoState.errorMessage,
+            onDismiss = {
+                editingPhotoVehicleId = null
+                viewModel.clearPhotoMessage()
+            },
+            onPickPhoto = { uri -> viewModel.uploadVehiclePhoto(editingPhotoVehicle.id, uri) },
+            onApplyUrl = { url -> viewModel.applyVehiclePhotoUrl(editingPhotoVehicle.id, url) },
+            onRemove = { viewModel.removeVehiclePhoto(editingPhotoVehicle.id) }
+        )
+    }
 }
 
 @Composable
 private fun VehicleCard(
     vehicle: Vehicle,
     isSelected: Boolean,
+    isFr: Boolean,
     distUnit: String,
     onSelect: () -> Unit,
+    onChangePhoto: () -> Unit,
     onDelete: () -> Unit
 ) {
     val numberFormat = NumberFormat.getNumberInstance(Locale.getDefault())
@@ -168,22 +237,11 @@ private fun VehicleCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = null,
-                            tint = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                    VehiclePhotoThumbnail(
+                        photoUrl = vehicle.photoUrl,
+                        iconSize = 26,
+                        modifier = Modifier.size(52.dp)
+                    )
 
                     Spacer(modifier = Modifier.width(12.dp))
 
@@ -201,6 +259,14 @@ private fun VehicleCard(
                     }
                 }
 
+                IconButton(onClick = onChangePhoto) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoCamera,
+                        contentDescription = if (isFr) "Modifier la photo" else "Change photo",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
                 if (isSelected) {
                     Surface(
                         shape = RoundedCornerShape(12.dp),
@@ -212,13 +278,13 @@ private fun VehicleCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CheckCircle,
-                                contentDescription = "Active",
+                                contentDescription = if (isFr) "Actif" else "Active",
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Active",
+                                text = if (isFr) "Actif" else "Active",
                                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
@@ -228,7 +294,7 @@ private fun VehicleCard(
                     IconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete",
+                            contentDescription = if (isFr) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -265,7 +331,7 @@ private fun VehicleCard(
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {
                         Text(
-                            text = vehicle.fuelType.displayName,
+                            text = if (isFr) vehicle.fuelType.displayNameFr else vehicle.fuelType.displayName,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
@@ -292,7 +358,7 @@ private fun VehicleCard(
             if (vehicle.vin.isNotBlank()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "VIN: ${vehicle.vin}",
+                    text = (if (isFr) "VIN : " else "VIN: ") + vehicle.vin,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                 )

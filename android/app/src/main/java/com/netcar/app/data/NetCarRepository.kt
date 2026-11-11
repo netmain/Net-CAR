@@ -2,6 +2,7 @@ package com.netcar.app.data
 
 import android.app.Activity
 import android.content.Context
+import android.net.Uri
 import com.google.android.gms.tasks.Tasks
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
@@ -10,6 +11,7 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.storage.FirebaseStorage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.netcar.app.di.FirebaseModule
@@ -32,6 +34,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLDecoder
 import java.net.URLEncoder
 import java.text.SimpleDateFormat
@@ -551,6 +556,131 @@ class NetCarRepository @Inject constructor(
         persistLocalData()
         checkRemindersAndNotify(forceAllActive = false)
     }
+
+    fun updateVehiclePhoto(vehicleId: String, photoUrl: String) {
+        val normalized = photoUrl.trim().take(2048)
+        _vehicles.value = _vehicles.value.map { vehicle ->
+            if (vehicle.id == vehicleId) {
+                vehicle.copy(photoUrl = normalized, updatedAt = localMutationTimestamp())
+            } else {
+                vehicle
+            }
+        }
+        persistLocalData()
+    }
+
+    suspend fun uploadVehiclePhoto(vehicleId: String, uri: Uri): Result<String> =
+        withContext(Dispatchers.IO) {
+            val isFr = _userSettings.value.language == SupportedLanguage.FR
+            try {
+                val user = FirebaseAuth.getInstance().currentUser
+                if (user == null || user.isAnonymous) {
+                    return@withContext Result.failure(
+                        IllegalStateException(
+                            if (isFr) {
+                                "Connectez-vous avec Google ou Email pour envoyer une photo."
+                            } else {
+                                "Sign in with Google or Email to upload a photo."
+                            }
+                        )
+                    )
+                }
+
+                val reference = FirebaseStorage.getInstance().reference
+                    .child("users/${user.uid}/vehicles/${sanitizeDocId(vehicleId, "veh")}.jpg")
+                Tasks.await(reference.putFile(uri), 60, TimeUnit.SECONDS)
+                val downloadUrl = Tasks.await(reference.downloadUrl, 20, TimeUnit.SECONDS).toString()
+                updateVehiclePhoto(vehicleId, downloadUrl)
+                Result.success(downloadUrl)
+            } catch (e: Exception) {
+                Result.failure(
+                    IllegalStateException(
+                        if (isFr) {
+                            "Échec de l'envoi de la photo. Vérifiez votre connexion."
+                        } else {
+                            "Failed to upload the photo. Check your connection."
+                        },
+                        e
+                    )
+                )
+            }
+        }
+
+    suspend fun validateVehiclePhotoUrl(rawUrl: String): Result<String> =
+        withContext(Dispatchers.IO) {
+            val isFr = _userSettings.value.language == SupportedLanguage.FR
+            val urlText = rawUrl.trim()
+            if (urlText.isBlank()) {
+                return@withContext Result.failure(
+                    IllegalArgumentException(
+                        if (isFr) "Saisissez une adresse d'image." else "Enter an image address."
+                    )
+                )
+            }
+            if (!urlText.startsWith("http://") && !urlText.startsWith("https://")) {
+                return@withContext Result.failure(
+                    IllegalArgumentException(
+                        if (isFr) {
+                            "L'adresse doit commencer par http:// ou https://."
+                        } else {
+                            "The address must start with http:// or https://."
+                        }
+                    )
+                )
+            }
+
+            var connection: HttpURLConnection? = null
+            try {
+                val conn = URL(urlText).openConnection() as HttpURLConnection
+                connection = conn
+                conn.connectTimeout = 15000
+                conn.readTimeout = 15000
+                conn.instanceFollowRedirects = true
+                conn.requestMethod = "GET"
+                conn.setRequestProperty("User-Agent", "Net-CAR/1.0 (Android)")
+
+                val code = conn.responseCode
+                if (code !in 200..299) {
+                    return@withContext Result.failure(
+                        IOException(
+                            if (isFr) {
+                                "Impossible de charger l'image (HTTP $code)."
+                            } else {
+                                "Could not load the image (HTTP $code)."
+                            }
+                        )
+                    )
+                }
+
+                val contentType = conn.contentType?.lowercase(Locale.US).orEmpty()
+                if (contentType.isNotBlank() && !contentType.startsWith("image/")) {
+                    return@withContext Result.failure(
+                        IllegalArgumentException(
+                            if (isFr) {
+                                "Le lien ne pointe pas vers une image valide."
+                            } else {
+                                "The link does not point to a valid image."
+                            }
+                        )
+                    )
+                }
+
+                Result.success(urlText.take(2048))
+            } catch (e: Exception) {
+                Result.failure(
+                    IllegalStateException(
+                        if (isFr) {
+                            "Impossible de charger l'image depuis cette adresse."
+                        } else {
+                            "Could not load the image from this address."
+                        },
+                        e
+                    )
+                )
+            } finally {
+                connection?.disconnect()
+            }
+        }
 
     fun addFillUp(fillUp: FillUp) {
         _fillUps.value = listOf(fillUp.copy(updatedAt = localMutationTimestamp())) + _fillUps.value

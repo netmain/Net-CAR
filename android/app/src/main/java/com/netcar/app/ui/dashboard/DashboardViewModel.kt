@@ -1,5 +1,6 @@
 package com.netcar.app.ui.dashboard
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netcar.app.data.NetCarRepository
@@ -10,11 +11,14 @@ import com.netcar.app.model.Reminder
 import com.netcar.app.model.ServiceRecord
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
+import com.netcar.app.ui.components.VehiclePhotoState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -24,6 +28,7 @@ data class DashboardUiState(
     val upcomingReminders: List<Reminder> = emptyList(),
     val recentFillUps: List<FillUp> = emptyList(),
     val userSettings: UserSettings = UserSettings(),
+    val photoState: VehiclePhotoState = VehiclePhotoState(),
     val isLoading: Boolean = false
 )
 
@@ -56,10 +61,13 @@ class DashboardViewModel @Inject constructor(
         DashboardRecords(fillUps, expenses, services, reminders)
     }
 
+    private val _photoState = MutableStateFlow(VehiclePhotoState())
+
     val uiState: StateFlow<DashboardUiState> = combine(
         vehicleDataFlow,
-        recordsFlow
-    ) { (vehicles, selectedId, settings), records ->
+        recordsFlow,
+        _photoState
+    ) { (vehicles, selectedId, settings), records, photoState ->
         val fillUps = records.fillUps
         val expenses = records.expenses
         val services = records.services
@@ -117,6 +125,7 @@ class DashboardViewModel @Inject constructor(
             upcomingReminders = upcoming,
             recentFillUps = recentFuel,
             userSettings = settings,
+            photoState = photoState,
             isLoading = false
         )
     }.stateIn(
@@ -131,5 +140,41 @@ class DashboardViewModel @Inject constructor(
 
     fun completeReminder(reminderId: String) {
         repository.toggleReminderCompleted(reminderId)
+    }
+
+    fun uploadVehiclePhoto(vehicleId: String, uri: Uri) {
+        viewModelScope.launch {
+            _photoState.value = VehiclePhotoState(vehicleId = vehicleId, isBusy = true)
+            val result = repository.uploadVehiclePhoto(vehicleId, uri)
+            _photoState.value = VehiclePhotoState(
+                vehicleId = vehicleId,
+                isBusy = false,
+                errorMessage = result.exceptionOrNull()?.message
+            )
+        }
+    }
+
+    fun applyVehiclePhotoUrl(vehicleId: String, rawUrl: String) {
+        viewModelScope.launch {
+            _photoState.value = VehiclePhotoState(vehicleId = vehicleId, isBusy = true)
+            val result = repository.validateVehiclePhotoUrl(rawUrl)
+            result.getOrNull()?.let { validatedUrl ->
+                repository.updateVehiclePhoto(vehicleId, validatedUrl)
+            }
+            _photoState.value = VehiclePhotoState(
+                vehicleId = vehicleId,
+                isBusy = false,
+                errorMessage = result.exceptionOrNull()?.message
+            )
+        }
+    }
+
+    fun removeVehiclePhoto(vehicleId: String) {
+        repository.updateVehiclePhoto(vehicleId, "")
+        _photoState.value = VehiclePhotoState()
+    }
+
+    fun clearPhotoMessage() {
+        _photoState.value = VehiclePhotoState()
     }
 }

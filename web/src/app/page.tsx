@@ -285,11 +285,11 @@ export default function DashboardPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-1">
             <span className="font-mono text-3xl font-black text-amber-400">
-              {currencySymbol}{totalSpent.toLocaleString()}
+              {currencySymbol}{totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </span>
           </div>
           <p className="mt-2 text-xs text-slate-400 truncate">
-            Carburant ({currencySymbol}{totalFuelCost.toFixed(0)}) · Entretien ({currencySymbol}{totalServiceCost.toFixed(0)})
+            {lang === 'fr' ? 'Carburant' : 'Fuel'} ({currencySymbol}{totalFuelCost.toFixed(0)}) · {lang === 'fr' ? 'Entretien' : 'Maintenance'} ({currencySymbol}{totalServiceCost.toFixed(0)})
           </p>
           <div className="mt-2 h-1 w-full rounded-full bg-slate-800 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500" style={{ width: '70%' }} />

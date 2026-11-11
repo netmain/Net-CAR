@@ -142,7 +142,10 @@ fun FillUpListScreen(
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = CircleShape
             ) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Fill-up")
+                Icon(
+                    imageVector = Icons.Default.Add,
+                    contentDescription = if (isFr) "Ajouter un plein" else "Add Fill-up"
+                )
             }
         },
         modifier = modifier
@@ -311,6 +314,7 @@ fun FillUpListScreen(
                 ) { fillUp ->
                     FillUpItemCard(
                         fillUp = fillUp,
+                        isFr = isFr,
                         currencySymbol = currencySymbol,
                         distUnit = distUnit,
                         volUnit = volUnit,
@@ -327,6 +331,7 @@ fun FillUpListScreen(
 @Composable
 private fun FillUpItemCard(
     fillUp: FillUp,
+    isFr: Boolean,
     currencySymbol: String,
     distUnit: String,
     volUnit: String,
@@ -373,7 +378,11 @@ private fun FillUpItemCard(
 
                     Column {
                         Text(
-                            text = if (fillUp.station.isNotBlank()) fillUp.station else "Fuel Refill",
+                            text = if (fillUp.station.isNotBlank()) {
+                                fillUp.station
+                            } else {
+                                if (isFr) "Plein de carburant" else "Fuel Refill"
+                            },
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -395,7 +404,7 @@ private fun FillUpItemCard(
                     IconButton(onClick = onDelete) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Delete",
+                            contentDescription = if (isFr) "Supprimer" else "Delete",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
@@ -453,7 +462,7 @@ private fun FillUpItemCard(
                                 )
                                 Spacer(modifier = Modifier.width(2.dp))
                                 Text(
-                                    text = "Full Tank",
+                                    text = if (isFr) "Plein complet" else "Full Tank",
                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
                                     color = FuelGreen
                                 )

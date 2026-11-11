@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.netcar.app.model.FuelType
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.FuelGreen
 
@@ -49,6 +50,7 @@ fun AddFillUpScreen(
 ) {
     val formState by viewModel.formState.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
     val volUnit = uiState.userSettings.units.volUnit
@@ -57,7 +59,7 @@ fun AddFillUpScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Log Fill-up",
+                title = if (isFr) "Enregistrer un plein" else "Log Fill-up",
                 canNavigateBack = true,
                 onNavigateBack = onNavigateBack
             )
@@ -73,7 +75,9 @@ fun AddFillUpScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Vehicle: ${uiState.selectedVehicle?.displayName ?: "Selected Car"}",
+                text = (if (isFr) "Véhicule : " else "Vehicle: ") +
+                    (uiState.selectedVehicle?.displayName
+                        ?: if (isFr) "Véhicule sélectionné" else "Selected Car"),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary
             )
@@ -81,8 +85,18 @@ fun AddFillUpScreen(
             OutlinedTextField(
                 value = formState.odometer,
                 onValueChange = { viewModel.updateOdometer(it) },
-                label = { Text("Odometer Reading ($distUnit) *") },
-                placeholder = { Text("Current: ${uiState.selectedVehicle?.currentOdometer ?: 0}") },
+                label = {
+                    Text(
+                        if (isFr) "Kilométrage ($distUnit) *"
+                        else "Odometer Reading ($distUnit) *"
+                    )
+                },
+                placeholder = {
+                    Text(
+                        (if (isFr) "Actuel : " else "Current: ") +
+                            "${uiState.selectedVehicle?.currentOdometer ?: 0}"
+                    )
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -96,8 +110,12 @@ fun AddFillUpScreen(
                 OutlinedTextField(
                     value = formState.pricePerUnit,
                     onValueChange = { viewModel.updatePricePerUnit(it) },
-                    label = { Text("Price ($currencySymbol/$volUnit)") },
-                    placeholder = { Text("e.g. 29.00") },
+                    label = {
+                        Text(
+                            (if (isFr) "Prix" else "Price") + " ($currencySymbol/$volUnit)"
+                        )
+                    },
+                    placeholder = { Text(if (isFr) "ex. 29,00" else "e.g. 29.00") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.weight(1f),
@@ -107,8 +125,21 @@ fun AddFillUpScreen(
                 OutlinedTextField(
                     value = formState.volume,
                     onValueChange = { viewModel.updateVolume(it) },
-                    label = { Text(if (formState.volume.isNotBlank() && formState.totalCost.isNotBlank() && formState.pricePerUnit.isNotBlank()) "Volume (Auto)" else "Volume ($volUnit) *") },
-                    placeholder = { Text("Auto from total") },
+                    label = {
+                        Text(
+                            if (formState.volume.isNotBlank() &&
+                                formState.totalCost.isNotBlank() &&
+                                formState.pricePerUnit.isNotBlank()
+                            ) {
+                                if (isFr) "Volume (auto)" else "Volume (Auto)"
+                            } else {
+                                "Volume ($volUnit) *"
+                            }
+                        )
+                    },
+                    placeholder = {
+                        Text(if (isFr) "Calculé automatiquement" else "Auto from total")
+                    },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     singleLine = true,
                     modifier = Modifier.weight(1f),
@@ -119,8 +150,17 @@ fun AddFillUpScreen(
             OutlinedTextField(
                 value = formState.totalCost,
                 onValueChange = { viewModel.updateTotalCost(it) },
-                label = { Text("Total Paid ($currencySymbol) *") },
-                placeholder = { Text("e.g. 2000 (calculates volume)") },
+                label = {
+                    Text(
+                        (if (isFr) "Total payé" else "Total Paid") + " ($currencySymbol) *"
+                    )
+                },
+                placeholder = {
+                    Text(
+                        if (isFr) "ex. 2000 (calcule le volume)"
+                        else "e.g. 2000 (calculates volume)"
+                    )
+                },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
@@ -142,11 +182,15 @@ fun AddFillUpScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Full Tank",
+                            text = if (isFr) "Plein complet" else "Full Tank",
                             style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
                         )
                         Text(
-                            text = "Required for accurate consumption calculations",
+                            text = if (isFr) {
+                                "Requis pour un calcul précis de la consommation"
+                            } else {
+                                "Required for accurate consumption calculations"
+                            },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -165,10 +209,10 @@ fun AddFillUpScreen(
                 onExpandedChange = { fuelDropdownExpanded = !fuelDropdownExpanded }
             ) {
                 OutlinedTextField(
-                    value = formState.fuelType.displayName,
+                    value = if (isFr) formState.fuelType.displayNameFr else formState.fuelType.displayName,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Fuel Type") },
+                    label = { Text(if (isFr) "Type de carburant" else "Fuel Type") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = fuelDropdownExpanded) },
                     modifier = Modifier
                         .menuAnchor()
@@ -182,7 +226,7 @@ fun AddFillUpScreen(
                 ) {
                     FuelType.values().forEach { fuel ->
                         DropdownMenuItem(
-                            text = { Text(fuel.displayName) },
+                            text = { Text(if (isFr) fuel.displayNameFr else fuel.displayName) },
                             onClick = {
                                 viewModel.updateFuelType(fuel)
                                 fuelDropdownExpanded = false
@@ -195,8 +239,15 @@ fun AddFillUpScreen(
             OutlinedTextField(
                 value = formState.station,
                 onValueChange = { viewModel.updateStation(it) },
-                label = { Text("Fuel Station Name (Optional)") },
-                placeholder = { Text("e.g. TotalEnergies, Shell, BP") },
+                label = {
+                    Text(
+                        if (isFr) "Nom de la station (facultatif)"
+                        else "Fuel Station Name (Optional)"
+                    )
+                },
+                placeholder = {
+                    Text(if (isFr) "ex. TotalEnergies, Shell, BP" else "e.g. TotalEnergies, Shell, BP")
+                },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp)
@@ -205,7 +256,7 @@ fun AddFillUpScreen(
             OutlinedTextField(
                 value = formState.notes,
                 onValueChange = { viewModel.updateNotes(it) },
-                label = { Text("Notes (Optional)") },
+                label = { Text(if (isFr) "Notes (facultatif)" else "Notes (Optional)") },
                 minLines = 2,
                 maxLines = 4,
                 modifier = Modifier.fillMaxWidth(),
@@ -231,7 +282,7 @@ fun AddFillUpScreen(
                     .height(52.dp)
             ) {
                 Text(
-                    text = "Save Fill-Up",
+                    text = if (isFr) "Enregistrer le plein" else "Save Fill-Up",
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                 )
             }

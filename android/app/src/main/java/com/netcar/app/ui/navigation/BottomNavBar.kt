@@ -34,41 +34,47 @@ sealed class BottomNavItem(
     val screen: Screen,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
-    val label: String
+    val label: String,
+    val labelFr: String
 ) {
     data object Dashboard : BottomNavItem(
         screen = Screen.Dashboard,
         selectedIcon = Icons.Filled.Dashboard,
         unselectedIcon = Icons.Outlined.Dashboard,
-        label = "Dashboard"
+        label = "Dashboard",
+        labelFr = "Tableau de bord"
     )
 
     data object Fuel : BottomNavItem(
         screen = Screen.Fuel,
         selectedIcon = Icons.Filled.LocalGasStation,
         unselectedIcon = Icons.Outlined.LocalGasStation,
-        label = "Fuel"
+        label = "Fuel",
+        labelFr = "Carburant"
     )
 
     data object Expenses : BottomNavItem(
         screen = Screen.Expenses,
         selectedIcon = Icons.Filled.Receipt,
         unselectedIcon = Icons.Outlined.Receipt,
-        label = "Expenses"
+        label = "Expenses",
+        labelFr = "Dépenses"
     )
 
     data object Maintenance : BottomNavItem(
         screen = Screen.Maintenance,
         selectedIcon = Icons.Filled.Build,
         unselectedIcon = Icons.Outlined.Build,
-        label = "Services"
+        label = "Services",
+        labelFr = "Entretien"
     )
 
     data object Reminders : BottomNavItem(
         screen = Screen.Reminders,
         selectedIcon = Icons.Filled.Notifications,
         unselectedIcon = Icons.Outlined.Notifications,
-        label = "Reminders"
+        label = "Reminders",
+        labelFr = "Rappels"
     )
 }
 
@@ -76,6 +82,7 @@ sealed class BottomNavItem(
 fun BottomNavBar(
     navController: NavController,
     modifier: Modifier = Modifier,
+    isFr: Boolean = false,
     overdueRemindersCount: Int = 0
 ) {
     val items = listOf(
@@ -96,6 +103,7 @@ fun BottomNavBar(
     ) {
         items.forEach { item ->
             val selected = currentDestination?.hierarchy?.any { it.route == item.screen.route } == true
+            val itemLabel = if (isFr) item.labelFr else item.label
 
             NavigationBarItem(
                 selected = selected,
@@ -124,19 +132,19 @@ fun BottomNavBar(
                         ) {
                             Icon(
                                 imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                                contentDescription = item.label
+                                contentDescription = itemLabel
                             )
                         }
                     } else {
                         Icon(
                             imageVector = if (selected) item.selectedIcon else item.unselectedIcon,
-                            contentDescription = item.label
+                            contentDescription = itemLabel
                         )
                     }
                 },
                 label = {
                     Text(
-                        text = item.label,
+                        text = itemLabel,
                         style = MaterialTheme.typography.labelSmall
                     )
                 },

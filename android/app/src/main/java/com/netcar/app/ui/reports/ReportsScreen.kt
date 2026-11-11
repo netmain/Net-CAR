@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.ui.components.StatCard
 import com.netcar.app.ui.components.TopBar
 import com.netcar.app.ui.theme.ExpenseAmber
@@ -62,6 +63,7 @@ fun ReportsScreen(
     modifier: Modifier = Modifier
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val isFr = uiState.userSettings.language == SupportedLanguage.FR
     val currencySymbol = uiState.userSettings.currency.symbol
     val distUnit = uiState.userSettings.units.distUnit
     val consUnit = uiState.userSettings.units.consUnit
@@ -70,7 +72,7 @@ fun ReportsScreen(
     Scaffold(
         topBar = {
             TopBar(
-                title = "Reports & Analytics",
+                title = if (isFr) "Rapports et analyses" else "Reports & Analytics",
                 canNavigateBack = onOpenDrawer == null,
                 onNavigateBack = onNavigateBack,
                 onOpenDrawer = onOpenDrawer
@@ -94,7 +96,7 @@ fun ReportsScreen(
                         FilterChip(
                             selected = uiState.selectedPeriod == period,
                             onClick = { viewModel.selectPeriod(period) },
-                            label = { Text(period.label) }
+                            label = { Text(if (isFr) period.labelFr else period.label) }
                         )
                     }
                 }
@@ -108,7 +110,7 @@ fun ReportsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         StatCard(
-                            title = "Total Spend",
+                            title = if (isFr) "Dépenses totales" else "Total Spend",
                             value = "$currencySymbol${String.format(Locale.US, "%.0f", uiState.totalSpend)}",
                             icon = Icons.Default.Payments,
                             iconTint = MaterialTheme.colorScheme.primary,
@@ -116,7 +118,7 @@ fun ReportsScreen(
                         )
 
                         StatCard(
-                            title = "Cost per $distUnit",
+                            title = (if (isFr) "Coût par " else "Cost per ") + distUnit,
                             value = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.costPerKm)}",
                             unit = "/$distUnit",
                             icon = Icons.Default.Speed,
@@ -131,7 +133,7 @@ fun ReportsScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         StatCard(
-                            title = "Avg Consumption",
+                            title = if (isFr) "Consommation moy." else "Avg Consumption",
                             value = String.format(Locale.US, "%.1f", uiState.avgConsumption),
                             unit = consUnit,
                             icon = Icons.Default.LocalGasStation,
@@ -141,7 +143,7 @@ fun ReportsScreen(
                         )
 
                         StatCard(
-                            title = "Distance",
+                            title = if (isFr) "Distance" else "Distance",
                             value = numberFormat.format(uiState.totalDistance),
                             unit = distUnit,
                             icon = Icons.Default.Speed,
@@ -177,7 +179,7 @@ fun ReportsScreen(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Cost Distribution",
+                                text = if (isFr) "Répartition des coûts" else "Cost Distribution",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
@@ -224,7 +226,7 @@ fun ReportsScreen(
 
                         // 3 Main pillars
                         DistributionPillar(
-                            title = "Fuel",
+                            title = if (isFr) "Carburant" else "Fuel",
                             amount = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.fuelSpend)}",
                             percentage = (uiState.fuelPercentage * 100).toInt(),
                             color = FuelGreen,
@@ -234,7 +236,7 @@ fun ReportsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         DistributionPillar(
-                            title = "Maintenance",
+                            title = if (isFr) "Entretien" else "Maintenance",
                             amount = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.maintenanceSpend)}",
                             percentage = (uiState.maintenancePercentage * 100).toInt(),
                             color = MaintenanceBlue,
@@ -244,7 +246,11 @@ fun ReportsScreen(
                         Spacer(modifier = Modifier.height(10.dp))
 
                         DistributionPillar(
-                            title = "Expenses (Parking, Tolls, Wash)",
+                            title = if (isFr) {
+                                "Dépenses (stationnement, péage, lavage)"
+                            } else {
+                                "Expenses (Parking, Tolls, Wash)"
+                            },
                             amount = "$currencySymbol${String.format(Locale.US, "%.2f", uiState.expensesSpend)}",
                             percentage = (uiState.expensesPercentage * 100).toInt(),
                             color = ExpenseAmber,
@@ -258,7 +264,7 @@ fun ReportsScreen(
             if (uiState.categoryBreakdown.isNotEmpty()) {
                 item {
                     Text(
-                        text = "Detailed Category Breakdown",
+                        text = if (isFr) "Détail par catégorie" else "Detailed Category Breakdown",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface
                     )

@@ -7,6 +7,7 @@ import com.netcar.app.model.Expense
 import com.netcar.app.model.ExpenseCategory
 import com.netcar.app.model.FillUp
 import com.netcar.app.model.ServiceRecord
+import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.UserSettings
 import com.netcar.app.model.Vehicle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -18,11 +19,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
-enum class ReportPeriod(val label: String, val days: Int) {
-    MONTH("30 Days", 30),
-    THREE_MONTHS("3 Months", 90),
-    YEAR("1 Year", 365),
-    ALL_TIME("All Time", 3650)
+enum class ReportPeriod(val label: String, val labelFr: String, val days: Int) {
+    MONTH("30 Days", "30 jours", 30),
+    THREE_MONTHS("3 Months", "3 mois", 90),
+    YEAR("1 Year", "1 an", 365),
+    ALL_TIME("All Time", "Tout l'historique", 3650)
 }
 
 data class CategoryCost(
@@ -124,15 +125,24 @@ class ReportsViewModel @Inject constructor(
         val avgCons = if (distance > 0 && fuelVol > 0) (fuelVol / distance) * 100.0 else 6.4
 
         // Detailed breakdown
+        val isFr = settings.language == SupportedLanguage.FR
         val breakdown = mutableListOf<CategoryCost>()
-        if (fuelTotal > 0) breakdown.add(CategoryCost("Fuel", fuelTotal, fuelPct))
-        if (svcTotal > 0) breakdown.add(CategoryCost("Maintenance", svcTotal, svcPct))
+        if (fuelTotal > 0) {
+            breakdown.add(CategoryCost(if (isFr) "Carburant" else "Fuel", fuelTotal, fuelPct))
+        }
+        if (svcTotal > 0) {
+            breakdown.add(CategoryCost(if (isFr) "Entretien" else "Maintenance", svcTotal, svcPct))
+        }
 
-        val expByCat = vExpenses.groupBy { it.category }
-        expByCat.forEach { (cat, list) ->
+        val expByCat = vExpenses.groupBy { expense ->
+            expense.customCategory.trim().ifBlank {
+                if (isFr) expense.category.displayNameFr else expense.category.displayName
+            }
+        }
+        expByCat.forEach { (label, list) ->
             val sum = list.sumOf { it.amount }
             val pct = if (grandTotal > 0) (sum / grandTotal).toFloat() else 0f
-            breakdown.add(CategoryCost(cat.displayName, sum, pct))
+            breakdown.add(CategoryCost(label, sum, pct))
         }
 
         ReportsUiState(
