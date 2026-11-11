@@ -320,3 +320,16 @@ export function buildGeneratedVehiclePhotoUrl(params: {
     label,
   };
 }
+
+/**
+ * Returns true when a photo URL can be rendered by the browser.
+ * Android stores photos picked from the device as local `file://` URIs;
+ * those are synced through Firestore but only exist on that phone, so the
+ * web app shows its normal car placeholder for them.
+ */
+export function isLoadableVehiclePhotoUrl(url?: string | null): boolean {
+  const value = (url || '').trim();
+  if (!value) return false;
+  if (/^(https?:|data:|blob:)/i.test(value)) return true;
+  return value.startsWith('/') && !value.startsWith('//');
+}

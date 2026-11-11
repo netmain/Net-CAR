@@ -117,10 +117,10 @@ class VehicleViewModel @Inject constructor(
         repository.deleteVehicle(id)
     }
 
-    fun uploadVehiclePhoto(vehicleId: String, uri: Uri) {
+    fun saveVehiclePhotoLocally(vehicleId: String, uri: Uri) {
         viewModelScope.launch {
             _photoState.value = VehiclePhotoState(vehicleId = vehicleId, isBusy = true)
-            val result = repository.uploadVehiclePhoto(vehicleId, uri)
+            val result = repository.saveVehiclePhotoLocally(vehicleId, uri)
             _photoState.value = VehiclePhotoState(
                 vehicleId = vehicleId,
                 isBusy = false,
@@ -196,7 +196,7 @@ class VehicleViewModel @Inject constructor(
         _formState.value = state.copy(isSaving = true)
         viewModelScope.launch {
             _photoState.value = VehiclePhotoState(vehicleId = newVehicle.id, isBusy = true)
-            val result = repository.uploadVehiclePhoto(newVehicle.id, Uri.parse(state.photoUri))
+            val result = repository.saveVehiclePhotoLocally(newVehicle.id, Uri.parse(state.photoUri))
             _photoState.value = VehiclePhotoState(
                 vehicleId = newVehicle.id,
                 isBusy = false,

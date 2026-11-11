@@ -45,7 +45,7 @@ import coil.compose.AsyncImage
 
 /**
  * Shared state used by the dashboard and vehicle screens while a photo is being
- * uploaded or fetched from a remote URL.
+ * saved locally or fetched from a remote URL.
  */
 data class VehiclePhotoState(
     val vehicleId: String? = null,

@@ -167,9 +167,9 @@ fun AddVehicleScreen(
 
             Text(
                 text = if (isFr) {
-                    "L'envoi d'une photo nécessite une connexion Google ou Email."
+                    "La photo est enregistrée localement sur cet appareil."
                 } else {
-                    "Uploading a photo requires a Google or Email sign-in."
+                    "The photo is saved locally on this device."
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -351,7 +351,7 @@ fun AddVehicleScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isFr) "Envoi de la photo…" else "Uploading photo…",
+                        text = if (isFr) "Enregistrement de la photo…" else "Saving photo…",
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold)
                     )
                 } else {

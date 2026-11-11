@@ -11,7 +11,6 @@ import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.storage.FirebaseStorage
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import com.netcar.app.di.FirebaseModule
@@ -34,6 +33,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -539,11 +539,13 @@ class NetCarRepository @Inject constructor(
     }
 
     fun deleteVehicle(vehicleId: String) {
+        val photoUrl = _vehicles.value.firstOrNull { it.id == vehicleId }?.photoUrl.orEmpty()
         markPendingDelete("vehicles", vehicleId)
         _vehicles.value = _vehicles.value.filter { it.id != vehicleId }
         if (_selectedVehicleId.value == vehicleId) {
             _selectedVehicleId.value = _vehicles.value.firstOrNull()?.id
         }
+        deleteLocalVehiclePhotoFile(photoUrl)
         persistLocalData()
     }
 
@@ -559,6 +561,13 @@ class NetCarRepository @Inject constructor(
 
     fun updateVehiclePhoto(vehicleId: String, photoUrl: String) {
         val normalized = photoUrl.trim().take(2048)
+        val previousPhotoUrl = _vehicles.value
+            .firstOrNull { it.id == vehicleId }
+            ?.photoUrl
+            .orEmpty()
+        if (previousPhotoUrl != normalized) {
+            deleteLocalVehiclePhotoFile(previousPhotoUrl)
+        }
         _vehicles.value = _vehicles.value.map { vehicle ->
             if (vehicle.id == vehicleId) {
                 vehicle.copy(photoUrl = normalized, updatedAt = localMutationTimestamp())
@@ -569,42 +578,86 @@ class NetCarRepository @Inject constructor(
         persistLocalData()
     }
 
-    suspend fun uploadVehiclePhoto(vehicleId: String, uri: Uri): Result<String> =
+    /**
+     * Copies a photo picked from the device into the app's private storage and
+     * stores its file URI on the vehicle. No cloud storage is required.
+     */
+    suspend fun saveVehiclePhotoLocally(vehicleId: String, uri: Uri): Result<String> =
         withContext(Dispatchers.IO) {
             val isFr = _userSettings.value.language == SupportedLanguage.FR
+            var target: File? = null
             try {
-                val user = FirebaseAuth.getInstance().currentUser
-                if (user == null || user.isAnonymous) {
+                val photoFile = localVehiclePhotoFile(vehicleId)
+                target = photoFile
+                photoFile.parentFile?.mkdirs()
+
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: return@withContext Result.failure(
+                        IllegalStateException(
+                            if (isFr) {
+                                "Impossible de lire l'image sélectionnée."
+                            } else {
+                                "Could not read the selected image."
+                            }
+                        )
+                    )
+
+                input.use { source ->
+                    photoFile.outputStream().use { destination ->
+                        source.copyTo(destination)
+                    }
+                }
+
+                if (photoFile.length() == 0L) {
+                    photoFile.delete()
                     return@withContext Result.failure(
                         IllegalStateException(
                             if (isFr) {
-                                "Connectez-vous avec Google ou Email pour envoyer une photo."
+                                "Le fichier image est vide."
                             } else {
-                                "Sign in with Google or Email to upload a photo."
+                                "The selected image file is empty."
                             }
                         )
                     )
                 }
 
-                val reference = FirebaseStorage.getInstance().reference
-                    .child("users/${user.uid}/vehicles/${sanitizeDocId(vehicleId, "veh")}.jpg")
-                Tasks.await(reference.putFile(uri), 60, TimeUnit.SECONDS)
-                val downloadUrl = Tasks.await(reference.downloadUrl, 20, TimeUnit.SECONDS).toString()
-                updateVehiclePhoto(vehicleId, downloadUrl)
-                Result.success(downloadUrl)
+                val localUri = Uri.fromFile(photoFile).toString()
+                updateVehiclePhoto(vehicleId, localUri)
+                Result.success(localUri)
             } catch (e: Exception) {
+                target?.delete()
                 Result.failure(
                     IllegalStateException(
                         if (isFr) {
-                            "Échec de l'envoi de la photo. Vérifiez votre connexion."
+                            "Échec de l'enregistrement de la photo sur l'appareil."
                         } else {
-                            "Failed to upload the photo. Check your connection."
+                            "Failed to save the photo on this device."
                         },
                         e
                     )
                 )
             }
         }
+
+    private fun localVehiclePhotoFile(vehicleId: String): File {
+        val directory = File(context.filesDir, "vehicle_photos")
+        // Unique names keep image loaders from reusing a stale cached bitmap
+        // when the user replaces a vehicle photo.
+        return File(
+            directory,
+            "${sanitizeDocId(vehicleId, "veh")}-${System.currentTimeMillis()}.jpg"
+        )
+    }
+
+    private fun deleteLocalVehiclePhotoFile(photoUrl: String) {
+        if (!photoUrl.startsWith("file://")) return
+        val path = runCatching { Uri.parse(photoUrl).path }.getOrNull() ?: return
+        val photosDirectory = File(context.filesDir, "vehicle_photos")
+        val file = File(path)
+        if (file.parentFile?.absolutePath == photosDirectory.absolutePath) {
+            runCatching { file.delete() }
+        }
+    }
 
     suspend fun validateVehiclePhotoUrl(rawUrl: String): Result<String> =
         withContext(Dispatchers.IO) {

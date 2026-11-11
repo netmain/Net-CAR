@@ -21,7 +21,7 @@ import {
   Activity,
   Wand2
 } from 'lucide-react';
-import { buildGeneratedVehiclePhotoUrl } from '@/lib/vehicle-photo';
+import { buildGeneratedVehiclePhotoUrl, isLoadableVehiclePhotoUrl } from '@/lib/vehicle-photo';
 
 export default function VehiclesPage() {
   const { 
@@ -178,7 +178,7 @@ export default function VehiclesPage() {
               >
                 {/* Photo Header */}
                 <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-[#0B0F19] to-[#1a2233]">
-                  {v.photoUrl ? (
+                  {isLoadableVehiclePhotoUrl(v.photoUrl) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={v.photoUrl}
@@ -192,7 +192,7 @@ export default function VehiclesPage() {
                   ) : null}
                   
                   {/* Fallback pattern */}
-                  <div className={`absolute inset-0 flex items-center justify-center ${v.photoUrl ? '-z-10' : ''}`}>
+                  <div className={`absolute inset-0 flex items-center justify-center ${isLoadableVehiclePhotoUrl(v.photoUrl) ? '-z-10' : ''}`}>
                     <Car className="h-16 w-16 text-slate-700" />
                   </div>
 

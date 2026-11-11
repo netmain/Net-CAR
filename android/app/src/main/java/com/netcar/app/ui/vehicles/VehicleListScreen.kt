@@ -194,7 +194,7 @@ fun VehicleListScreen(
                 editingPhotoVehicleId = null
                 viewModel.clearPhotoMessage()
             },
-            onPickPhoto = { uri -> viewModel.uploadVehiclePhoto(editingPhotoVehicle.id, uri) },
+            onPickPhoto = { uri -> viewModel.saveVehiclePhotoLocally(editingPhotoVehicle.id, uri) },
             onApplyUrl = { url -> viewModel.applyVehiclePhotoUrl(editingPhotoVehicle.id, url) },
             onRemove = { viewModel.removeVehiclePhoto(editingPhotoVehicle.id) }
         )

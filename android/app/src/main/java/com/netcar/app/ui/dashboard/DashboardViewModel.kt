@@ -142,10 +142,10 @@ class DashboardViewModel @Inject constructor(
         repository.toggleReminderCompleted(reminderId)
     }
 
-    fun uploadVehiclePhoto(vehicleId: String, uri: Uri) {
+    fun saveVehiclePhotoLocally(vehicleId: String, uri: Uri) {
         viewModelScope.launch {
             _photoState.value = VehiclePhotoState(vehicleId = vehicleId, isBusy = true)
-            val result = repository.uploadVehiclePhoto(vehicleId, uri)
+            val result = repository.saveVehiclePhotoLocally(vehicleId, uri)
             _photoState.value = VehiclePhotoState(
                 vehicleId = vehicleId,
                 isBusy = false,

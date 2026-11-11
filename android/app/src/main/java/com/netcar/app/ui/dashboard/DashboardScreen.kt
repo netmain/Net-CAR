@@ -386,7 +386,7 @@ fun DashboardScreen(
                 showPhotoDialog = false
                 viewModel.clearPhotoMessage()
             },
-            onPickPhoto = { uri -> viewModel.uploadVehiclePhoto(photoVehicle.id, uri) },
+            onPickPhoto = { uri -> viewModel.saveVehiclePhotoLocally(photoVehicle.id, uri) },
             onApplyUrl = { url -> viewModel.applyVehiclePhotoUrl(photoVehicle.id, url) },
             onRemove = { viewModel.removeVehiclePhoto(photoVehicle.id) }
         )
