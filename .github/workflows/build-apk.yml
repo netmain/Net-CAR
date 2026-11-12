@@ -80,12 +80,8 @@ jobs:
             echo "using_release_key=true" >> "$GITHUB_OUTPUT"
             echo "Release APK will be signed with the configured release keystore."
           else
-            if [ -n "$KEYSTORE_BASE64$KEYSTORE_PASSWORD$KEY_ALIAS$KEY_PASSWORD" ]; then
-              echo "::error::Incomplete signing secrets. Set ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS and ANDROID_KEY_PASSWORD together."
-              exit 1
-            fi
-            echo "using_release_key=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::No release keystore secrets configured. The release APK will be signed with this runner's debug key, which changes on every run, so existing installs must be uninstalled before updating."
+            echo "::error::Missing release signing secrets (ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD). The release APK MUST be signed with the permanent key - a throwaway debug key changes on every run and Android then refuses to install it over the previous version."
+            exit 1
           fi
 
       - name: Build debug and release APKs
@@ -101,6 +97,28 @@ jobs:
           cd ..
           sha256sum Net-CAR.apk Net-CAR-debug.apk > checksums.txt
           ls -lh Net-CAR.apk Net-CAR-debug.apk checksums.txt
+
+      - name: Verify the release signing key
+        # A release APK signed with a different key cannot be installed over
+        # the previous version, so fail loudly instead of publishing it.
+        run: |
+          set -euo pipefail
+          EXPECTED="$(echo '${{ vars.RELEASE_CERT_SHA256 }}' | tr -d ':' | tr 'A-F' 'a-f')"
+          if [ -z "$EXPECTED" ]; then
+            echo "::notice::RELEASE_CERT_SHA256 is not set - skipping the fingerprint check."
+            exit 0
+          fi
+          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          ACTUAL=$("$BUILD_TOOLS/apksigner" verify --print-certs Net-CAR.apk \
+            | grep 'Signer #1 certificate SHA-256 digest' \
+            | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          echo "expected: $EXPECTED"
+          echo "actual:   $ACTUAL"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::The release APK is signed with a different key than RELEASE_CERT_SHA256. Android would refuse to install it over the previous version."
+            exit 1
+          fi
+          echo "Release APK signature matches the permanent key."
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
