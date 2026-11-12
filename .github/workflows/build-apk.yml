@@ -3,6 +3,11 @@ name: Build Android APK
 on:
   push:
     branches: [ main, master ]
+    # Only Android changes need a new APK; web-only pushes (CSS, copy, ...)
+    # would otherwise publish a pointless new version.
+    paths:
+      - 'android/**'
+      - '.github/workflows/build-apk.yml'
   pull_request:
     branches: [ main, master ]
   workflow_dispatch:
