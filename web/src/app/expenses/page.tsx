@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { currencySymbolFor, formatMoney } from '@/lib/currency';
 import { useApp } from '@/lib/app-context';
+import Modal from '@/components/modal';
 import { 
   Receipt, 
   Plus, 
@@ -198,7 +199,7 @@ export default function ExpensesPage() {
   const handleAddCategory = () => {
     const clean = newCategoryName.trim().replace(/\s+/g, ' ');
     if (!clean) {
-      setCategoryError(lang === 'fr' ? 'Saisissez un nom de catégorie' : 'Enter a category name');
+      setCategoryError(lang === 'fr' ? 'Saisissez un nom de catأ©gorie' : 'Enter a category name');
       return;
     }
     addCustomExpenseCategory(clean);
@@ -257,7 +258,7 @@ export default function ExpensesPage() {
             <span className="text-sm font-bold text-amber-400 font-mono ml-1">{currencySymbol}</span>
           </div>
           <p className="mt-1.5 text-xs text-slate-400 font-mono">
-            {vehicleExpenses.length} {lang === 'fr' ? 'dépenses enregistrées' : 'total entries recorded'}
+            {vehicleExpenses.length} {lang === 'fr' ? 'dأ©penses enregistrأ©es' : 'total entries recorded'}
           </p>
         </div>
 
@@ -265,7 +266,7 @@ export default function ExpensesPage() {
         <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-              {lang === 'fr' ? 'Dépense principale' : 'Top Expense'}
+              {lang === 'fr' ? 'Dأ©pense principale' : 'Top Expense'}
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
               <Shield className="h-5 w-5" />
@@ -273,13 +274,13 @@ export default function ExpensesPage() {
           </div>
           <div className="mt-3 flex items-baseline gap-2">
             <span className="text-2xl sm:text-3xl font-extrabold font-mono text-cyan-400 truncate">
-              {topCategory ? (t.categories[topCategory] || topCategory) : '—'}
+              {topCategory ? (t.categories[topCategory] || topCategory) : 'â€”'}
             </span>
           </div>
           <p className="mt-1.5 text-xs text-slate-400 font-mono">
             {topCategory 
               ? `${topCategoryAmount.toFixed(2)} ${currencySymbol} (${Math.round((topCategoryAmount / (totalAmount || 1)) * 100)}%)` 
-              : (lang === 'fr' ? 'Aucune dépense' : 'No records yet')}
+              : (lang === 'fr' ? 'Aucune dأ©pense' : 'No records yet')}
           </p>
         </div>
 
@@ -287,7 +288,7 @@ export default function ExpensesPage() {
         <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
-              {lang === 'fr' ? 'Coût moyen' : 'Average Cost'}
+              {lang === 'fr' ? 'Coأ»t moyen' : 'Average Cost'}
             </span>
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400">
               <Receipt className="h-5 w-5" />
@@ -300,7 +301,7 @@ export default function ExpensesPage() {
             <span className="text-sm font-bold text-amber-400 font-mono ml-1">{currencySymbol}</span>
           </div>
           <p className="mt-1.5 text-xs text-slate-400 font-mono">
-            {lang === 'fr' ? 'Moyenne par entrée' : 'Average expense amount'}
+            {lang === 'fr' ? 'Moyenne par entrأ©e' : 'Average expense amount'}
           </p>
         </div>
       </div>
@@ -363,12 +364,12 @@ export default function ExpensesPage() {
             <Receipt className="h-7 w-7" />
           </div>
           <h2 className="mt-4 text-base font-bold font-mono text-slate-200">
-            {vehicleExpenses.length === 0 ? (lang === 'fr' ? 'Aucune dépense enregistrée' : 'No expenses recorded yet') : (lang === 'fr' ? 'Aucun résultat correspondant' : 'No expenses match your filters')}
+            {vehicleExpenses.length === 0 ? (lang === 'fr' ? 'Aucune dأ©pense enregistrأ©e' : 'No expenses recorded yet') : (lang === 'fr' ? 'Aucun rأ©sultat correspondant' : 'No expenses match your filters')}
           </h2>
           <p className="mt-1 text-xs text-slate-400 max-w-sm mx-auto">
             {vehicleExpenses.length === 0 
-              ? (lang === 'fr' ? 'Enregistrez vos frais d’assurance, péages, stationnement, vignettes et lavages pour suivre vos dépenses de bord.' : 'Log insurance payments, parking fees, highway tolls, taxes, and car washes to monitor running costs.')
-              : (lang === 'fr' ? 'Essayez de modifier votre recherche ou catégorie.' : 'Try clearing your category or search filter.')}
+              ? (lang === 'fr' ? 'Enregistrez vos frais dâ€™assurance, pأ©ages, stationnement, vignettes et lavages pour suivre vos dأ©penses de bord.' : 'Log insurance payments, parking fees, highway tolls, taxes, and car washes to monitor running costs.')
+              : (lang === 'fr' ? 'Essayez de modifier votre recherche ou catأ©gorie.' : 'Try clearing your category or search filter.')}
           </p>
           {vehicleExpenses.length === 0 && (
             <button
@@ -426,7 +427,7 @@ export default function ExpensesPage() {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 text-[11px] font-mono font-semibold text-cyan-400 hover:text-cyan-300 hover:underline mt-1"
                           >
-                            <span>{lang === 'fr' ? 'Voir le reçu' : 'View receipt'}</span>
+                            <span>{lang === 'fr' ? 'Voir le reأ§u' : 'View receipt'}</span>
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         )}
@@ -439,7 +440,7 @@ export default function ExpensesPage() {
 
                       {/* Odometer */}
                       <td className="px-5 py-4 whitespace-nowrap text-slate-300 font-mono text-xs">
-                        {exp.odometer ? `${exp.odometer.toLocaleString()} ${distUnit}` : '—'}
+                        {exp.odometer ? `${exp.odometer.toLocaleString()} ${distUnit}` : 'â€”'}
                       </td>
 
                       {/* Amount */}
@@ -469,16 +470,20 @@ export default function ExpensesPage() {
       )}
 
       {/* Add Expense Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md overflow-y-auto">
-          <div className="relative w-full max-w-lg rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+      <Modal
+        open={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        titleId="expense-add-title"
+        closedby="closerequest"
+      >
+          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
                   <Receipt className="h-5 w-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-slate-100 font-mono tracking-tight">{t.expenses.addExpense}</h2>
+                  <h2 id="expense-add-title" className="text-lg font-bold text-slate-100 font-mono tracking-tight">{t.expenses.addExpense}</h2>
                   <p className="text-xs text-slate-400">
                     {activeVehicle?.make} {activeVehicle?.model} {activeVehicle?.plate ? `(${activeVehicle.plate})` : ''}
                   </p>
@@ -509,7 +514,7 @@ export default function ExpensesPage() {
                       </option>
                     ))}
                     <option value="__add_custom__" className="bg-slate-900 text-amber-400">
-                      {lang === 'fr' ? '＋ Ajouter une catégorie…' : '＋ Add a category…'}
+                      {lang === 'fr' ? 'ï¼‹ Ajouter une catأ©gorieâ€¦' : 'ï¼‹ Add a categoryâ€¦'}
                     </option>
                   </select>
                 </div>
@@ -521,6 +526,7 @@ export default function ExpensesPage() {
                   <input
                     type="number"
                     step="0.01"
+                    autoFocus
                     placeholder="25.00"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))}
@@ -536,7 +542,7 @@ export default function ExpensesPage() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Assurance semestrielle, Parking aéroport"
+                  placeholder="e.g. Assurance semestrielle, Parking aأ©roport"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2.5 text-sm font-medium text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
@@ -616,24 +622,28 @@ export default function ExpensesPage() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
+
 
       {/* Custom Category Dialog */}
-      {showCategoryDialog && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-          <div className="relative w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+      <Modal
+        open={showCategoryDialog}
+        onClose={() => setShowCategoryDialog(false)}
+        titleId="expense-category-title"
+        closedby="closerequest"
+      >
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
                 <Tag className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-bold text-slate-100 font-mono">
-                {lang === 'fr' ? 'Nouvelle catégorie' : 'New category'}
+              <h2 id="expense-category-title" className="text-lg font-bold text-slate-100 font-mono">
+                {lang === 'fr' ? 'Nouvelle catأ©gorie' : 'New category'}
               </h2>
             </div>
             <p className="mt-3 text-sm text-slate-300">
               {lang === 'fr'
-                ? 'Ajoutez une catégorie de dépense personnalisée.'
+                ? 'Ajoutez une catأ©gorie de dأ©pense personnalisأ©e.'
                 : 'Add a custom expense category.'}
             </p>
             <input
@@ -663,39 +673,44 @@ export default function ExpensesPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
+
 
       {/* Delete Confirmation Dialog */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-          <div className="relative w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+      <Modal
+        open={!!deleteConfirmId}
+        onClose={() => setDeleteConfirmId(null)}
+        titleId="expense-delete-title"
+        closedby="closerequest"
+      >
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 border border-red-500/30 text-red-400">
                 <AlertTriangle className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-bold text-slate-100 font-mono">{t.common.delete}</h2>
+              <h2 id="expense-delete-title" className="text-lg font-bold text-slate-100 font-mono">{t.common.delete}</h2>
             </div>
             <p className="mt-3 text-sm text-slate-300 leading-relaxed">
               {t.common.confirmDelete}
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
+                autoFocus
                 onClick={() => setDeleteConfirmId(null)}
                 className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 transition"
               >
                 {t.common.cancel}
               </button>
               <button
-                onClick={() => handleDelete(deleteConfirmId)}
+                onClick={() => { if (deleteConfirmId) handleDelete(deleteConfirmId); }}
                 className="rounded-xl bg-gradient-to-r from-red-600 to-red-700 px-5 py-2 text-sm font-bold text-white shadow-lg shadow-red-600/25 hover:from-red-500 hover:to-red-600 transition"
               >
                 {t.common.confirm}
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
+
     </div>
   );
 }

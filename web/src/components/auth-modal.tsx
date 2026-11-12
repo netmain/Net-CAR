@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '@/lib/app-context';
+import Modal from './modal';
 import { 
   X, 
   Mail, 
@@ -39,8 +40,6 @@ export function AuthModal() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorConsoleUrl, setErrorConsoleUrl] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-
-  if (!authModalOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -131,8 +130,13 @@ export function AuthModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-md overflow-y-auto animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 sm:p-8 shadow-2xl shadow-black/80 animate-in zoom-in-95 duration-150">
+    <Modal
+      open={authModalOpen}
+      onClose={() => setAuthModalOpen(false)}
+      titleId="auth-title"
+      closedby="closerequest"
+    >
+      <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 sm:p-8 shadow-2xl shadow-black/80 animate-in zoom-in-95 duration-150">
         {/* Close Button */}
         <button
           onClick={() => setAuthModalOpen(false)}
@@ -148,7 +152,7 @@ export function AuthModal() {
             <div className="absolute inset-0 rounded-xl border border-white/20 pointer-events-none" />
           </div>
           <div>
-            <h2 className="text-xl font-extrabold tracking-tight text-slate-100 font-mono">
+            <h2 id="auth-title" className="text-xl font-extrabold tracking-tight text-slate-100 font-mono">
               Net-CAR <span className="text-amber-400 text-xs uppercase tracking-widest font-bold">Cloud Sync</span>
             </h2>
             <p className="text-xs text-slate-400">
@@ -279,6 +283,7 @@ export function AuthModal() {
               <input
                 type="email"
                 required
+                autoFocus
                 placeholder="name@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -360,6 +365,6 @@ export function AuthModal() {
           {t.auth.driveBackupNote}
         </p>
       </div>
-    </div>
+    </Modal>
   );
 }

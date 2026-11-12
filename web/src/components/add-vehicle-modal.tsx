@@ -8,6 +8,7 @@ import {
   PRESET_VEHICLE_PHOTOS,
   buildGeneratedVehiclePhotoUrl,
 } from '@/lib/vehicle-photo';
+import Modal from './modal';
 
 export function AddVehicleModal() {
   const {
@@ -36,8 +37,6 @@ export function AddVehicleModal() {
     type: 'success' | 'error';
     message: string;
   } | null>(null);
-
-  if (!addVehicleModalOpen) return null;
 
   const distUnit = userProfile.units === 'metric' ? 'km' : 'mi';
 
@@ -185,15 +184,20 @@ export function AddVehicleModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md overflow-y-auto">
-      <div className="relative w-full max-w-2xl rounded-3xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+    <Modal
+      open={addVehicleModalOpen}
+      onClose={handleClose}
+      titleId="add-vehicle-title"
+      closedby="closerequest"
+    >
+      <div className="relative mx-auto w-full max-w-2xl rounded-3xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
               <Car className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white">{t.vehicles.addVehicle}</h2>
+              <h2 id="add-vehicle-title" className="text-lg font-black text-white">{t.vehicles.addVehicle}</h2>
               <p className="text-xs text-slate-400">{t.vehicles.subtitle}</p>
             </div>
           </div>
@@ -224,6 +228,7 @@ export function AddVehicleModal() {
                 </label>
                 <input
                   type="text"
+                  autoFocus
                   placeholder="e.g. Toyota, BMW, Peugeot"
                   value={make}
                   onChange={(e) => setMake(e.target.value)}
@@ -496,6 +501,6 @@ export function AddVehicleModal() {
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -71,12 +71,15 @@ body {
 }
 
 /* Native modal dialogs: keep scroll gestures inside the dialog instead of
-   chaining them to the page behind it. */
+   chaining them to the page behind it, and paint the backdrop like the old
+   custom overlay did. */
 dialog:modal {
   overscroll-behavior: contain;
 }
 
 dialog::backdrop {
+  background: rgb(0 0 0 / 0.75);
+  backdrop-filter: blur(12px);
   overflow: hidden;
   overscroll-behavior: contain;
 }

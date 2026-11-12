@@ -22,6 +22,7 @@ import {
   Wand2
 } from 'lucide-react';
 import { buildGeneratedVehiclePhotoUrl, isLoadableVehiclePhotoUrl } from '@/lib/vehicle-photo';
+import Modal from '@/components/modal';
 
 export default function VehiclesPage() {
   const { 
@@ -328,11 +329,15 @@ export default function VehiclesPage() {
       )}
 
       {/* Edit Vehicle Modal */}
-      {editingVehicle && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md overflow-y-auto">
-          <div className="relative w-full max-w-lg rounded-3xl border border-slate-800 bg-[#0F1522] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      <Modal
+        open={!!editingVehicle}
+        onClose={() => setEditingVehicle(null)}
+        titleId="vehicles-edit-title"
+        closedby="closerequest"
+      >
+          <div className="relative mx-auto w-full max-w-lg rounded-3xl border border-slate-800 bg-[#0F1522] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h2 className="text-lg font-black text-white">{t.vehicles.editVehicle}</h2>
+              <h2 id="vehicles-edit-title" className="text-lg font-black text-white">{t.vehicles.editVehicle}</h2>
               <button
                 onClick={() => setEditingVehicle(null)}
                 className="rounded-xl p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition"
@@ -349,6 +354,7 @@ export default function VehiclesPage() {
                   </label>
                   <input
                     type="text"
+                    autoFocus
                     value={editForm.make || ''}
                     onChange={(e) => setEditForm({ ...editForm, make: e.target.value })}
                     className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
@@ -493,39 +499,42 @@ export default function VehiclesPage() {
               </div>
             </form>
           </div>
-        </div>
-      )}
+      </Modal>
 
       {/* Delete Confirmation Dialog */}
-      {deleteConfirmId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-md">
-          <div className="relative w-full max-w-md rounded-3xl border border-slate-800 bg-[#0F1522] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+      <Modal
+        open={!!deleteConfirmId}
+        onClose={() => setDeleteConfirmId(null)}
+        titleId="vehicles-delete-title"
+        closedby="closerequest"
+      >
+          <div className="relative mx-auto w-full max-w-md rounded-3xl border border-slate-800 bg-[#0F1522] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30">
                 <AlertTriangle className="h-5 w-5" />
               </div>
-              <h2 className="text-lg font-black text-white">{t.common.delete}</h2>
+              <h2 id="vehicles-delete-title" className="text-lg font-black text-white">{t.common.delete}</h2>
             </div>
             <p className="mt-3 text-sm text-slate-400 leading-relaxed">
               {t.vehicles.deleteConfirm}
             </p>
             <div className="mt-6 flex items-center justify-end gap-3">
               <button
+                autoFocus
                 onClick={() => setDeleteConfirmId(null)}
                 className="rounded-xl border border-slate-700 px-4 py-2 text-sm font-bold text-slate-300 hover:bg-slate-800 transition"
               >
                 {t.common.cancel}
               </button>
               <button
-                onClick={() => handleDelete(deleteConfirmId)}
+                onClick={() => { if (deleteConfirmId) handleDelete(deleteConfirmId); }}
                 className="rounded-xl bg-red-600 px-5 py-2 text-sm font-black text-white shadow-md hover:bg-red-700 transition"
               >
                 {t.common.confirm}
               </button>
             </div>
           </div>
-        </div>
-      )}
+      </Modal>
     </div>
   );
 }
