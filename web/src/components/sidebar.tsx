@@ -69,14 +69,59 @@ export function Sidebar() {
 
   const isCloudConnected = Boolean(user && !user.isDemo);
 
+  // Real status behind the small indicator next to the section label.
+  const liveIndicator = !isCloudConnected
+    ? {
+        label: lang === 'fr' ? 'demo' : 'demo',
+        dot: 'bg-amber-400',
+        text: 'text-amber-400',
+        title: lang === 'fr'
+          ? 'Mode local - cloud non connecte'
+          : 'Local mode - cloud not connected',
+      }
+    : syncStatus === 'syncing'
+      ? {
+          label: 'sync',
+          dot: 'bg-sky-400',
+          text: 'text-sky-400',
+          title: lang === 'fr' ? 'Synchronisation en cours' : 'Syncing',
+        }
+      : syncStatus === 'error'
+        ? {
+            label: lang === 'fr' ? 'erreur' : 'error',
+            dot: 'bg-rose-400',
+            text: 'text-rose-400',
+            title: lang === 'fr' ? 'Erreur de synchronisation' : 'Sync error',
+          }
+        : syncStatus === 'local'
+          ? {
+              label: 'local',
+              dot: 'bg-amber-400',
+              text: 'text-amber-400',
+              title: lang === 'fr' ? 'Donnees locales' : 'Local data',
+            }
+          : {
+              label: 'live',
+              dot: 'bg-emerald-400',
+              text: 'text-emerald-400',
+              title: lang === 'fr' ? 'Connecte et synchronise' : 'Connected and synced',
+            };
+
   return (
     <aside className="w-64 border-r border-slate-800/80 bg-[#090D16]/90 min-h-[calc(100vh-4rem)] flex flex-col justify-between py-6 px-3.5">
       <div className="space-y-1">
         <div className="px-3 pb-3 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
           <span>Cockpit</span>
-          <span className="flex items-center gap-1 text-[9px] text-sky-400 font-bold lowercase">
-            <span className="h-1.5 w-1.5 rounded-full bg-sky-400" />
-            live
+          <span
+            className={`flex items-center gap-1 text-[9px] font-bold lowercase ${liveIndicator.text}`}
+            title={liveIndicator.title}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${liveIndicator.dot} ${
+                syncStatus === 'syncing' ? 'animate-pulse' : ''
+              }`}
+            />
+            {liveIndicator.label}
           </span>
         </div>
         {navItems.map((item) => {
