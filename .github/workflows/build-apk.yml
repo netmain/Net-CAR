@@ -102,18 +102,23 @@ jobs:
         # A release APK signed with a different key cannot be installed over
         # the previous version, so fail loudly instead of publishing it.
         run: |
-          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
           EXPECTED="$(echo '${{ vars.RELEASE_CERT_SHA256 }}' | tr -d ':' | tr 'A-F' 'a-f')"
           if [ -z "$EXPECTED" ]; then
             echo "::notice::RELEASE_CERT_SHA256 is not set - skipping the fingerprint check."
             exit 0
           fi
-          BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          ACTUAL=$("$BUILD_TOOLS/apksigner" verify --print-certs Net-CAR.apk \
-            | grep 'Signer #1 certificate SHA-256 digest' \
-            | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          BUILD_TOOLS=$(ls -d "$SDK_ROOT"/build-tools/* 2>/dev/null | sort -V | tail -1)
+          echo "build-tools: $BUILD_TOOLS"
+          ACTUAL=$("$BUILD_TOOLS/apksigner" verify --print-certs Net-CAR.apk 2>&1 \
+            | grep -m1 'certificate SHA-256 digest' \
+            | sed 's/.*digest: //' | tr -d ':' | tr 'A-F' 'a-f' || true)
           echo "expected: $EXPECTED"
           echo "actual:   $ACTUAL"
+          if [ -z "$ACTUAL" ]; then
+            echo "::error::Could not read the signature of Net-CAR.apk."
+            exit 1
+          fi
           if [ "$ACTUAL" != "$EXPECTED" ]; then
             echo "::error::The release APK is signed with a different key than RELEASE_CERT_SHA256. Android would refuse to install it over the previous version."
             exit 1
