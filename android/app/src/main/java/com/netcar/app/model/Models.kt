@@ -189,6 +189,14 @@ data class DashboardStats(
     val currentOdometer: Int = 0
 )
 
+data class AppUpdateInfo(
+    val versionName: String,
+    val versionCode: Int,
+    val sizeBytes: Long,
+    val downloadUrl: String,
+    val releasePageUrl: String
+)
+
 data class UserSettings(
     val language: SupportedLanguage = SupportedLanguage.FR,
     val units: Units = Units.METRIC,

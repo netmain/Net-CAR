@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netcar.app.MainActivity
 import com.netcar.app.data.NetCarRepository
+import com.netcar.app.model.AppUpdateInfo
 import com.netcar.app.model.SupportedCurrency
 import com.netcar.app.model.SupportedLanguage
 import com.netcar.app.model.ThemeMode
@@ -50,6 +51,15 @@ class SettingsViewModel @Inject constructor(
 
     private val _csvStatusMessage = MutableStateFlow<String?>(null)
     private val _csvIsError = MutableStateFlow(false)
+
+    private val _isCheckingUpdate = MutableStateFlow(false)
+    private val _availableUpdate = MutableStateFlow<AppUpdateInfo?>(null)
+    private val _updateError = MutableStateFlow<String?>(null)
+
+    val isCheckingUpdate: StateFlow<Boolean> = _isCheckingUpdate.asStateFlow()
+    val availableUpdate: StateFlow<AppUpdateInfo?> = _availableUpdate.asStateFlow()
+    val updateError: StateFlow<String?> = _updateError.asStateFlow()
+    val appVersion: String = repository.localVersionName()
 
     val uiState: StateFlow<SettingsUiState> = combine(
         repository.userSettings,
@@ -111,6 +121,36 @@ class SettingsViewModel @Inject constructor(
 
     fun setThemeMode(themeMode: ThemeMode) {
         repository.updateThemeMode(themeMode)
+    }
+
+    fun checkForUpdates() {
+        if (_isCheckingUpdate.value) return
+        viewModelScope.launch {
+            _isCheckingUpdate.value = true
+            _updateError.value = null
+            val isFr = repository.userSettings.value.language == SupportedLanguage.FR
+            try {
+                val result = repository.checkForAppUpdate()
+                result.fold(
+                    onSuccess = { info ->
+                        _availableUpdate.value = info
+                        if (info == null) {
+                            _updateError.value = null
+                        }
+                    },
+                    onFailure = { err ->
+                        _updateError.value = err.localizedMessage
+                            ?: if (isFr) {
+                                "Impossible de vérifier les mises à jour."
+                            } else {
+                                "Could not check for updates."
+                            }
+                    }
+                )
+            } finally {
+                _isCheckingUpdate.value = false
+            }
+        }
     }
 
     fun clearMessages() {

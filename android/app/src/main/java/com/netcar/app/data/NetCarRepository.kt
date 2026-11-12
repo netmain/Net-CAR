@@ -12,8 +12,10 @@ import com.google.firebase.auth.OAuthProvider
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
+import com.google.gson.JsonArray
 import com.google.gson.reflect.TypeToken
 import com.netcar.app.di.FirebaseModule
+import com.netcar.app.model.AppUpdateInfo
 import com.netcar.app.model.Expense
 import com.netcar.app.model.ExpenseCategory
 import com.netcar.app.model.FillUp
@@ -852,6 +854,101 @@ class NetCarRepository @Inject constructor(
     fun updateThemeMode(themeMode: ThemeMode) {
         _userSettings.value = _userSettings.value.copy(themeMode = themeMode)
         persistLocalData()
+    }
+
+    /** Version name of the installed APK (e.g. "1.0.28"). */
+    fun localVersionName(): String = runCatching {
+        context.packageManager.getPackageInfo(context.packageName, 0).versionName
+    }.getOrNull() ?: "1.0.0"
+
+    /**
+     * Checks the public GitHub release feed for a newer Android build.
+     * Returns null when the installed version is already the latest one.
+     */
+    suspend fun checkForAppUpdate(): Result<AppUpdateInfo?> = withContext(Dispatchers.IO) {
+        val isFr = _userSettings.value.language == SupportedLanguage.FR
+        var connection: HttpURLConnection? = null
+        try {
+            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            val localVersionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                packageInfo.longVersionCode.toInt()
+            } else {
+                @Suppress("DEPRECATION")
+                packageInfo.versionCode
+            }
+
+            connection = URL(RELEASE_API_URL).openConnection() as HttpURLConnection
+            connection.connectTimeout = 15000
+            connection.readTimeout = 15000
+            connection.requestMethod = "GET"
+            connection.setRequestProperty("Accept", "application/vnd.github+json")
+            connection.setRequestProperty("User-Agent", "Net-CAR-Android")
+
+            val status = connection.responseCode
+            if (status !in 200..299) {
+                return@withContext Result.failure(
+                    IOException(
+                        if (isFr) {
+                            "Impossible de vérifier les mises à jour (HTTP $status)."
+                        } else {
+                            "Could not check for updates (HTTP $status)."
+                        }
+                    )
+                )
+            }
+
+            val payload = connection.inputStream.bufferedReader().use { it.readText() }
+            val releases = gson.fromJson(payload, JsonArray::class.java)
+
+            // The permanent releases are tagged v1.0.<run>; pick the highest one.
+            var remoteVersionCode = 0
+            var remoteTag = ""
+            var sizeBytes = 0L
+            releases.forEach { element ->
+                val release = element.asJsonObject
+                val tag = release.get("tag_name")?.takeIf { !it.isJsonNull }?.asString.orEmpty()
+                if (!tag.startsWith("v")) return@forEach
+                val code = tag.substringAfterLast('.').toIntOrNull() ?: 0
+                if (code > remoteVersionCode) {
+                    remoteVersionCode = code
+                    remoteTag = tag
+                    sizeBytes = 0L
+                    release.getAsJsonArray("assets")?.forEach { assetElement ->
+                        val asset = assetElement.asJsonObject
+                        if (asset.get("name")?.asString == APK_ASSET_NAME) {
+                            sizeBytes = asset.get("size")?.asLong ?: 0L
+                        }
+                    }
+                }
+            }
+
+            if (remoteVersionCode > localVersionCode) {
+                Result.success(
+                    AppUpdateInfo(
+                        versionName = remoteTag.removePrefix("v"),
+                        versionCode = remoteVersionCode,
+                        sizeBytes = sizeBytes,
+                        downloadUrl = RELEASE_ASSET_URL,
+                        releasePageUrl = RELEASE_PAGE_URL
+                    )
+                )
+            } else {
+                Result.success(null)
+            }
+        } catch (e: Exception) {
+            Result.failure(
+                IllegalStateException(
+                    if (isFr) {
+                        "Impossible de vérifier les mises à jour. Vérifiez votre connexion."
+                    } else {
+                        "Could not check for updates. Check your connection."
+                    },
+                    e
+                )
+            )
+        } finally {
+            connection?.disconnect()
+        }
     }
 
     fun addCustomExpenseCategory(name: String) {
@@ -2323,5 +2420,14 @@ class NetCarRepository @Inject constructor(
     private companion object {
         const val KEY_PENDING_REMINDER_UPDATES = "pending_reminder_updates"
         const val KEY_PENDING_REMINDER_DELETES = "pending_reminder_deletes"
+
+        // Public release feed used for the in-app update check.
+        const val RELEASE_API_URL =
+            "https://api.github.com/repos/netmain/Net-CAR/releases?per_page=50"
+        const val RELEASE_ASSET_URL =
+            "https://github.com/netmain/Net-CAR/releases/latest/download/Net-CAR.apk"
+        const val RELEASE_PAGE_URL =
+            "https://github.com/netmain/Net-CAR/releases/tag/latest-apk"
+        const val APK_ASSET_NAME = "Net-CAR.apk"
     }
 }

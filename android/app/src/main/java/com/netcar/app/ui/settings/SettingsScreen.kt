@@ -26,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
@@ -41,10 +42,12 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -100,6 +103,11 @@ fun SettingsScreen(
     val isFr = settings.language == SupportedLanguage.FR
     val dateFormatter = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
+    val appVersion = viewModel.appVersion
+    val isCheckingUpdate by viewModel.isCheckingUpdate.collectAsState()
+    val availableUpdate by viewModel.availableUpdate.collectAsState()
+    val updateError by viewModel.updateError.collectAsState()
+    val updateChecked = availableUpdate != null || !updateError.isNullOrBlank()
 
     var emailInput by remember { mutableStateOf(settings.connectedEmail ?: "") }
     var passwordInput by remember { mutableStateOf("") }
@@ -977,7 +985,166 @@ fun SettingsScreen(
                 }
             }
 
-            // 6. About Section
+            // 6. Application Updates
+            item {
+                Card(
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(18.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.SystemUpdate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = if (isFr) "Application" else "Application",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Text(
+                                text = "v$appVersion",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = if (isFr) {
+                                "Recherchez automatiquement une nouvelle version de Net-CAR sur GitHub."
+                            } else {
+                                "Check GitHub for a newer Net-CAR build."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        if (availableUpdate != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.secondaryContainer
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isFr) {
+                                                "Version ${availableUpdate?.versionName} disponible"
+                                            } else {
+                                                "Version ${availableUpdate?.versionName} available"
+                                            },
+                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                        val sizeMb = (availableUpdate?.sizeBytes ?: 0L) / 1024.0 / 1024.0
+                                        Text(
+                                            text = String.format(Locale.US, "%.1f Mo", sizeMb),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Button(
+                                        onClick = {
+                                            val url = availableUpdate?.downloadUrl
+                                            if (url != null) {
+                                                runCatching {
+                                                    context.startActivity(
+                                                        android.content.Intent(
+                                                            android.content.Intent.ACTION_VIEW,
+                                                            Uri.parse(url)
+                                                        )
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary
+                                        )
+                                    ) {
+                                        Text(if (isFr) "Télécharger" else "Download")
+                                    }
+                                }
+                            }
+                        } else if (updateChecked && updateError == null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = SuccessGreen,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isFr) {
+                                        "Vous utilisez la dernière version."
+                                    } else {
+                                        "You are running the latest version."
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        if (!updateError.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = updateError ?: "",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        OutlinedButton(
+                            onClick = { viewModel.checkForUpdates() },
+                            enabled = !isCheckingUpdate,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            if (isCheckingUpdate) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                            }
+                            Text(
+                                text = if (isFr) {
+                                    "Vérifier les mises à jour"
+                                } else {
+                                    "Check for updates"
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 7. About Section
             item {
                 Card(
                     shape = RoundedCornerShape(20.dp),
@@ -1010,9 +1177,9 @@ fun SettingsScreen(
 
                         Text(
                             text = if (isFr) {
-                                "Version 2.2.0 • Synchronisation Cloud multi-appareils (Web & Android) + Rappels natifs + Import/Export CSV Fuelio."
+                                "Version $appVersion • Synchronisation Cloud multi-appareils (Web & Android) + Rappels natifs + Import/Export CSV Fuelio."
                             } else {
-                                "Version 2.2.0 • Multi-device Cloud Sync (Web & Android) + Native Reminders + Fuelio CSV Import/Export."
+                                "Version $appVersion • Multi-device Cloud Sync (Web & Android) + Native Reminders + Fuelio CSV Import/Export."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
