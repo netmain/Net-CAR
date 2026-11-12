@@ -6,6 +6,9 @@ import { AppShell } from '@/components/app-shell';
 export const metadata: Metadata = {
   title: 'Net-CAR — Performance Vehicle Management & Telemetry',
   description: 'Smart vehicle management, fuel economy tracking, expense monitoring, and scheduled maintenance reminders.',
+  // The cockpit UI is dark-only: declare it before first paint so the
+  // browser never shows a white flash or light native widgets.
+  colorScheme: 'dark',
 };
 
 export default function RootLayout({
