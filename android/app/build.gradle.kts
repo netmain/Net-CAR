@@ -98,7 +98,11 @@ android {
 
 dependencies {
     // Compose BOM
-    val composeBom = platform("androidx.compose:compose-bom:2024.01.00")
+    // NOTE: compose-bom 2024.01.00 ships material3 1.1.2 together with
+    // animation-core 1.6.0 - two incompatible API generations that make every
+    // CircularProgressIndicator crash with a NoSuchMethodError. 2024.02.00
+    // pairs material3 1.2.0 with animation 1.6.1, which is consistent.
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
 
     // Core Android
