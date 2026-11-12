@@ -139,6 +139,7 @@ class SettingsViewModel @Inject constructor(
                         }
                     },
                     onFailure = { err ->
+                        android.util.Log.e("NetCarUpdate", "Update check failed", err)
                         _updateError.value = err.localizedMessage
                             ?: if (isFr) {
                                 "Impossible de vérifier les mises à jour."
@@ -147,6 +148,15 @@ class SettingsViewModel @Inject constructor(
                             }
                     }
                 )
+            } catch (t: Throwable) {
+                // Never let an update check take the app down.
+                android.util.Log.e("NetCarUpdate", "Update check crashed", t)
+                _updateError.value = t.localizedMessage
+                    ?: if (isFr) {
+                        "Impossible de vérifier les mises à jour."
+                    } else {
+                        "Could not check for updates."
+                    }
             } finally {
                 _isCheckingUpdate.value = false
             }

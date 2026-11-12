@@ -869,13 +869,15 @@ class NetCarRepository @Inject constructor(
         val isFr = _userSettings.value.language == SupportedLanguage.FR
         var connection: HttpURLConnection? = null
         try {
-            val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            val localVersionCode = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
-                packageInfo.longVersionCode.toInt()
-            } else {
-                @Suppress("DEPRECATION")
-                packageInfo.versionCode
-            }
+            val localVersionCode = runCatching {
+                val packageInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+                    packageInfo.longVersionCode.toInt()
+                } else {
+                    @Suppress("DEPRECATION")
+                    packageInfo.versionCode
+                }
+            }.getOrElse { 0 }
 
             connection = URL(RELEASE_API_URL).openConnection() as HttpURLConnection
             connection.connectTimeout = 15000
@@ -935,19 +937,21 @@ class NetCarRepository @Inject constructor(
             } else {
                 Result.success(null)
             }
-        } catch (e: Exception) {
+        } catch (t: Throwable) {
+            // Throwable (not Exception) so a crash can never take the app down.
+            android.util.Log.e(UPDATE_LOG_TAG, "Update check failed", t)
             Result.failure(
                 IllegalStateException(
-                    if (isFr) {
+                    (if (isFr) {
                         "Impossible de vérifier les mises à jour. Vérifiez votre connexion."
                     } else {
                         "Could not check for updates. Check your connection."
-                    },
-                    e
+                    }) + " (" + t.javaClass.simpleName + ")",
+                    t
                 )
             )
         } finally {
-            connection?.disconnect()
+            runCatching { connection?.disconnect() }
         }
     }
 
@@ -2429,5 +2433,6 @@ class NetCarRepository @Inject constructor(
         const val RELEASE_PAGE_URL =
             "https://github.com/netmain/Net-CAR/releases/tag/latest-apk"
         const val APK_ASSET_NAME = "Net-CAR.apk"
+        const val UPDATE_LOG_TAG = "NetCarUpdate"
     }
 }
