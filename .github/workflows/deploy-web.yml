@@ -1,18 +1,22 @@
 name: Build & Deploy Web
 
-# Builds the Next.js web app on every change and deploys it to Cloud Run.
+# Builds the Next.js web app on every change and (optionally) deploys it to
+# Vercel.
 #
-# Required repository secrets (only needed for the deploy step):
-#   GCP_SERVICE_ACCOUNT_KEY  -> service account JSON key with
-#                               "Cloud Run Admin" + "Service Account User"
-#                               on the target project.
-#   (alternative) vars.GCP_WIF_PROVIDER + vars.GCP_WIF_SERVICE_ACCOUNT
-#                               -> Workload Identity Federation (no key needed).
+# The web app lives in the `web/` workspace of this monorepo, so the Vercel
+# project must use:
+#   Root directory .... web
+#   Build command ..... npm run build
+#   Install command ... npm install
+#   Node version ...... 20
 #
-# Optional repository variables (defaults shown):
-#   CLOUD_RUN_SERVICE   = netcar-web
-#   CLOUD_RUN_REGION    = europe-west1
-#   GCP_PROJECT_ID      = axiomatic-serenity-8lvvl
+# Deploy from GitHub Actions (optional):
+#   secrets VERCEL_TOKEN        -> API token (vercel.com/account/tokens)
+#   secrets VERCEL_ORG_ID       -> team id (vercel.com/<team>/settings)
+#   secrets VERCEL_PROJECT_ID   -> project id (the project's General settings)
+#
+# Without those secrets the workflow only builds the app, uploads the build
+# artifact and verifies that the web still compiles.
 
 on:
   push:
@@ -26,7 +30,7 @@ on:
   workflow_dispatch:
     inputs:
       deploy:
-        description: 'Deploy to Cloud Run (skip for a build-only run)'
+        description: 'Deploy to Vercel (skip for a build-only run)'
         type: boolean
         default: true
 
@@ -46,10 +50,6 @@ jobs:
   build-and-deploy:
     name: Build & deploy web app
     runs-on: ubuntu-latest
-    env:
-      CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'netcar-web' }}
-      CLOUD_RUN_REGION: ${{ vars.CLOUD_RUN_REGION || 'europe-west1' }}
-      GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID || 'axiomatic-serenity-8lvvl' }}
 
     steps:
       - name: Checkout repository
@@ -60,10 +60,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --prefix web
 
       - name: Fetch the latest published APK
         # The web app serves the APK from /api/download-apk; grab the newest
@@ -78,65 +78,47 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build web app
-        run: npm run build
+        run: npm run build --prefix web
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
 
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-build-${{ github.run_number }}
           path: |
-            .next
-            server.js
-            package.json
+            web/.next
+            web/package.json
+            web/next.config.ts
           retention-days: 14
           if-no-files-found: error
 
       - name: Check deploy configuration
         id: deploy
         run: |
-          if [ -n "$GCP_SERVICE_ACCOUNT_KEY" ]; then
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "method=key" >> "$GITHUB_OUTPUT"
-          elif [ -n "$GCP_WIF_PROVIDER" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "method=wif" >> "$GITHUB_OUTPUT"
+            echo "method=vercel" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "method=none" >> "$GITHUB_OUTPUT"
-            echo "::notice::No Google Cloud credentials configured - build only."
+            echo "::notice::No Vercel credentials configured - build only."
           fi
         env:
-          GCP_SERVICE_ACCOUNT_KEY: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-          GCP_WIF_PROVIDER: ${{ vars.GCP_WIF_PROVIDER }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
-      - name: Authenticate with a service account key
-        if: steps.deploy.outputs.method == 'key'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
-
-      - name: Authenticate with Workload Identity Federation
-        if: steps.deploy.outputs.method == 'wif'
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
-          service_account: ${{ vars.GCP_WIF_SERVICE_ACCOUNT }}
-
-      - name: Deploy to Cloud Run
-        if: steps.deploy.outputs.enabled == 'true'
+      - name: Deploy to Vercel
+        if: steps.deploy.outputs.method == 'vercel'
+        working-directory: web
         run: |
-          gcloud run deploy "$CLOUD_RUN_SERVICE" \
-            --source . \
-            --region "$CLOUD_RUN_REGION" \
-            --project "$GCP_PROJECT_ID" \
-            --platform managed \
-            --allow-unauthenticated \
-            --port 3000 \
-            --set-env-vars "NODE_ENV=production"
+          npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
+          npx --yes vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN"
         env:
-          CLOUD_RUN_SERVICE: ${{ env.CLOUD_RUN_SERVICE }}
-          CLOUD_RUN_REGION: ${{ env.CLOUD_RUN_REGION }}
-          GCP_PROJECT_ID: ${{ env.GCP_PROJECT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
       - name: Summary
         if: always()
@@ -145,6 +127,5 @@ jobs:
             echo "### Web build"
             echo ""
             echo "- commit: \`${GITHUB_SHA}\`"
-            echo "- service: \`${CLOUD_RUN_SERVICE}\` (${GCP_PROJECT_ID} / ${CLOUD_RUN_REGION})"
-            echo "- deployed: \`${{ steps.deploy.outputs.enabled }}\`"
+            echo "- deployed to Vercel: \`${{ steps.deploy.outputs.enabled }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
