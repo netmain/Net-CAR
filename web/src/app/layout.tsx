@@ -8,7 +8,9 @@ export const metadata: Metadata = {
   description: 'Smart vehicle management, fuel economy tracking, expense monitoring, and scheduled maintenance reminders.',
   // The cockpit UI is dark-only: declare it before first paint so the
   // browser never shows a white flash or light native widgets.
-  colorScheme: 'dark',
+  other: {
+    'color-scheme': 'dark',
+  },
 };
 
 export default function RootLayout({
