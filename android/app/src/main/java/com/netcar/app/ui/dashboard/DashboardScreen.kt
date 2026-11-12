@@ -117,13 +117,6 @@ fun DashboardScreen(
             title = "Net-CAR",
             showLogo = true,
             actions = {
-                IconButton(onClick = onNavigateToVehicles) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsCar,
-                        contentDescription = if (isFr) "Véhicules" else "Vehicles",
-                        tint = MaterialTheme.colorScheme.onSurface
-                    )
-                }
                 IconButton(onClick = onNavigateToReports) {
                     Icon(
                         imageVector = Icons.Outlined.BarChart,
@@ -569,22 +562,37 @@ private fun VehicleSwitcherCard(
                 )
             }
 
-            TextButton(
-                onClick = onChangePhoto,
-                enabled = selectedVehicle != null,
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
-                colors = ButtonDefaults.textButtonColors(contentColor = heroForeground)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PhotoCamera,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = if (isFr) "Modifier la photo" else "Change photo",
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(
+                    onClick = onChangePhoto,
+                    enabled = selectedVehicle != null,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = heroForeground)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PhotoCamera,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = if (isFr) "Modifier la photo" else "Change photo",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                TextButton(
+                    onClick = onManageVehicles,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 4.dp),
+                    colors = ButtonDefaults.textButtonColors(contentColor = heroForeground)
+                ) {
+                    Text(
+                        text = if (isFr) "Mes véhicules" else "My vehicles",
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold)
+                    )
+                }
             }
         }
     }
