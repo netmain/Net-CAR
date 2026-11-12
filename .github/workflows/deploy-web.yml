@@ -111,7 +111,6 @@ jobs:
 
       - name: Deploy to Vercel
         if: steps.deploy.outputs.method == 'vercel'
-        working-directory: web
         run: |
           npx --yes vercel@latest pull --yes --environment=production --token="$VERCEL_TOKEN"
           npx --yes vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN"
