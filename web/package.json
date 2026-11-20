@@ -9,6 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@astryxdesign/cli": "^0.7.16",
+    "@astryxdesign/core": "^0.7.16",
+    "@astryxdesign/theme-neutral": "^0.7.16",
+    "@stylexjs/stylex": "^0.19.2",
     "@tailwindcss/postcss": "^4.3.5",
     "clsx": "^2.1.1",
     "date-fns": "^4.4.0",
