@@ -120,7 +120,7 @@ export default function VehiclesPage() {
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-50 flex items-center gap-3">
             <span>{t.vehicles.title}</span>
             <span className="rounded-full bg-slate-800 border border-slate-700 px-2.5 py-0.5 text-xs font-mono text-amber-400">
               {vehicles.length}
@@ -142,11 +142,11 @@ export default function VehiclesPage() {
 
       {/* Empty State */}
       {vehicles.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-800 bg-[#121826]/60 p-12 text-center shadow-xl">
+        <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-800/60 p-12 text-center shadow-xl">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
             <Car className="h-8 w-8" />
           </div>
-          <h2 className="mt-4 text-xl font-bold text-white">{t.dashboard.addFirstVehicle}</h2>
+          <h2 className="mt-4 text-xl font-bold text-slate-50">{t.dashboard.addFirstVehicle}</h2>
           <p className="mt-2 text-sm text-slate-400 max-w-md mx-auto">
             Ajoutez votre véhicule quotidien, de collection ou votre flotte pour suivre consommation, vidanges et dépenses.
           </p>
@@ -171,14 +171,14 @@ export default function VehiclesPage() {
               <div
                 key={v.id}
                 onClick={() => setActiveVehicleId(v.id)}
-                className={`group relative flex flex-col justify-between overflow-hidden rounded-3xl border bg-[#121826]/80 backdrop-blur-xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] cursor-pointer ${
+                className={`group relative flex flex-col justify-between overflow-hidden rounded-3xl border bg-slate-800/80 backdrop-blur-xl shadow-xl transition-all duration-300 hover:shadow-2xl hover:scale-[1.01] cursor-pointer ${
                   isActive 
                     ? 'border-amber-500/80 ring-2 ring-amber-500/20' 
                     : 'border-slate-800/80 hover:border-amber-500/40'
                 }`}
               >
                 {/* Photo Header */}
-                <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-[#0B0F19] to-[#1a2233]">
+                <div className="relative h-48 w-full overflow-hidden bg-gradient-to-br from-canvas to-slate-800">
                   {isLoadableVehiclePhotoUrl(v.photoUrl) ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -211,7 +211,7 @@ export default function VehiclesPage() {
                           e.stopPropagation();
                           setActiveVehicleId(v.id);
                         }}
-                        className="rounded-full bg-slate-950/90 border border-amber-500/50 backdrop-blur px-3.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer shadow-md"
+                        className="rounded-full bg-canvas/90 border border-amber-500/50 backdrop-blur px-3.5 py-1 text-xs font-bold text-amber-300 hover:bg-amber-500 hover:text-slate-950 transition cursor-pointer shadow-md"
                       >
                         Sélectionner
                       </button>
@@ -228,7 +228,7 @@ export default function VehiclesPage() {
                   {/* Plate pill on bottom right (if available) */}
                   {v.plate ? (
                     <div className="absolute bottom-3 right-3 z-10">
-                      <span className="rounded-xl border border-slate-700 bg-slate-950/90 backdrop-blur px-2.5 py-1 text-xs font-mono font-black uppercase tracking-wider text-amber-300 shadow-sm">
+                      <span className="rounded-xl border border-slate-700 bg-canvas/90 backdrop-blur px-2.5 py-1 text-xs font-mono font-black uppercase tracking-wider text-amber-300 shadow-sm">
                         {v.plate}
                       </span>
                     </div>
@@ -245,7 +245,7 @@ export default function VehiclesPage() {
                             {v.name}
                           </span>
                         )}
-                        <h2 className="text-lg font-black text-white group-hover:text-amber-400 transition">
+                        <h2 className="text-lg font-black text-slate-50 group-hover:text-amber-400 transition">
                           {v.make} {v.model}
                         </h2>
                         <p className="text-xs text-slate-400 font-medium mt-0.5">
@@ -255,7 +255,7 @@ export default function VehiclesPage() {
                     </div>
 
                     {/* Mileage and Info */}
-                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-[#0B0F19]/80 p-3 text-xs">
+                    <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-slate-800 bg-canvas/80 p-3 text-xs">
                       <div>
                         <span className="text-slate-500 block font-bold text-[10px] uppercase tracking-wider">{t.dashboard.statsOdometer}</span>
                         <span className="font-mono font-black text-cyan-300 text-sm">
@@ -286,7 +286,7 @@ export default function VehiclesPage() {
                           e.stopPropagation();
                           handleOpenEdit(v);
                         }}
-                        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+                        className="flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-300 hover:bg-slate-800 hover:text-slate-50 transition cursor-pointer"
                       >
                         <Edit3 className="h-3.5 w-3.5 text-slate-400" />
                         <span>{t.common.edit}</span>
@@ -335,12 +335,12 @@ export default function VehiclesPage() {
         titleId="vehicles-edit-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-lg rounded-3xl border border-slate-800 bg-[#0F1522] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-lg rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-              <h2 id="vehicles-edit-title" className="text-lg font-black text-white">{t.vehicles.editVehicle}</h2>
+              <h2 id="vehicles-edit-title" className="text-lg font-black text-slate-50">{t.vehicles.editVehicle}</h2>
               <button
                 onClick={() => setEditingVehicle(null)}
-                className="rounded-xl p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition"
+                className="rounded-xl p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-50 transition"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -357,7 +357,7 @@ export default function VehiclesPage() {
                     autoFocus
                     value={editForm.make || ''}
                     onChange={(e) => setEditForm({ ...editForm, make: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-medium focus:border-amber-500 focus:outline-none"
                   />
                   {editErrors.make && <p className="mt-1 text-xs text-red-400">{editErrors.make}</p>}
                 </div>
@@ -370,7 +370,7 @@ export default function VehiclesPage() {
                     type="text"
                     value={editForm.model || ''}
                     onChange={(e) => setEditForm({ ...editForm, model: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-medium focus:border-amber-500 focus:outline-none"
                   />
                   {editErrors.model && <p className="mt-1 text-xs text-red-400">{editErrors.model}</p>}
                 </div>
@@ -385,7 +385,7 @@ export default function VehiclesPage() {
                     type="number"
                     value={editForm.year || ''}
                     onChange={(e) => setEditForm({ ...editForm, year: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-medium focus:border-amber-500 focus:outline-none"
                   />
                   {editErrors.year && <p className="mt-1 text-xs text-red-400">{editErrors.year}</p>}
                 </div>
@@ -398,7 +398,7 @@ export default function VehiclesPage() {
                     type="text"
                     value={editForm.plate || ''}
                     onChange={(e) => setEditForm({ ...editForm, plate: e.target.value })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-mono font-bold focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-mono font-bold focus:border-amber-500 focus:outline-none"
                   />
                 </div>
               </div>
@@ -411,10 +411,10 @@ export default function VehiclesPage() {
                   <select
                     value={editForm.fuelType || 'gasoline'}
                     onChange={(e) => setEditForm({ ...editForm, fuelType: e.target.value as FuelType })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-medium focus:border-amber-500 focus:outline-none"
                   >
                     {(Object.keys(t.fuelTypes) as FuelType[]).map((ft) => (
-                      <option key={ft} value={ft} className="bg-slate-900 text-white">
+                      <option key={ft} value={ft} className="bg-slate-900 text-slate-50">
                         {t.fuelTypes[ft]}
                       </option>
                     ))}
@@ -429,7 +429,7 @@ export default function VehiclesPage() {
                     type="number"
                     value={editForm.currentOdometer || ''}
                     onChange={(e) => setEditForm({ ...editForm, currentOdometer: Number(e.target.value) })}
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-mono font-bold focus:border-amber-500 focus:outline-none"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-mono font-bold focus:border-amber-500 focus:outline-none"
                   />
                   {editErrors.currentOdometer && <p className="mt-1 text-xs text-red-400">{editErrors.currentOdometer}</p>}
                 </div>
@@ -466,7 +466,7 @@ export default function VehiclesPage() {
                   placeholder="https://..."
                   value={editForm.photoUrl || ''}
                   onChange={(e) => setEditForm({ ...editForm, photoUrl: e.target.value })}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-medium focus:border-amber-500 focus:outline-none"
                 />
               </div>
 
@@ -478,7 +478,7 @@ export default function VehiclesPage() {
                   rows={2}
                   value={editForm.notes || ''}
                   onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-white font-medium focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-sm text-slate-50 font-medium focus:border-amber-500 focus:outline-none"
                 />
               </div>
 
@@ -508,12 +508,12 @@ export default function VehiclesPage() {
         titleId="vehicles-delete-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-3xl border border-slate-800 bg-[#0F1522] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/15 border border-red-500/30">
                 <AlertTriangle className="h-5 w-5" />
               </div>
-              <h2 id="vehicles-delete-title" className="text-lg font-black text-white">{t.common.delete}</h2>
+              <h2 id="vehicles-delete-title" className="text-lg font-black text-slate-50">{t.common.delete}</h2>
             </div>
             <p className="mt-3 text-sm text-slate-400 leading-relaxed">
               {t.vehicles.deleteConfirm}

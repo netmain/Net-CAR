@@ -190,21 +190,21 @@ export function AddVehicleModal() {
       titleId="add-vehicle-title"
       closedby="closerequest"
     >
-      <div className="relative mx-auto w-full max-w-2xl rounded-3xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
+      <div className="relative mx-auto w-full max-w-2xl rounded-3xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-2xl my-8 max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between border-b border-slate-800 pb-4">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
               <Car className="h-5 w-5" />
             </div>
             <div>
-              <h2 id="add-vehicle-title" className="text-lg font-black text-white">{t.vehicles.addVehicle}</h2>
+              <h2 id="add-vehicle-title" className="text-lg font-black text-slate-50">{t.vehicles.addVehicle}</h2>
               <p className="text-xs text-slate-400">{t.vehicles.subtitle}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white transition cursor-pointer"
+            className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-50 transition cursor-pointer"
             aria-label="Close"
           >
             <X className="h-5 w-5" />

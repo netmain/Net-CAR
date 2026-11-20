@@ -230,7 +230,7 @@ export default function MaintenancePage() {
       {/* KPI Cockpit Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Cost */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {t.maintenance.serviceCost} {lang === 'fr' ? 'Cumulé' : 'Total'}
@@ -251,7 +251,7 @@ export default function MaintenancePage() {
         </div>
 
         {/* Total Service Count */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {lang === 'fr' ? 'Services Réalisés' : 'Completed Services'}
@@ -274,7 +274,7 @@ export default function MaintenancePage() {
         </div>
 
         {/* Last Service Odometer */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {lang === 'fr' ? 'Dernière Révision' : 'Last Service'}
@@ -303,7 +303,7 @@ export default function MaintenancePage() {
             placeholder={lang === 'fr' ? 'Rechercher description, pièces...' : 'Search description, parts, mileage...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-800 bg-[#0F1522] pl-10 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
+            className="w-full rounded-xl border border-slate-800 bg-slate-900 pl-10 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm"
           />
         </div>
 
@@ -312,7 +312,7 @@ export default function MaintenancePage() {
           <select
             value={selectedType}
             onChange={(e) => setSelectedType(e.target.value)}
-            className="w-full sm:w-auto rounded-xl border border-slate-800 bg-[#0F1522] px-3.5 py-2 text-sm font-mono font-semibold text-slate-200 shadow-sm focus:border-amber-500 focus:outline-none"
+            className="w-full sm:w-auto rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-sm font-mono font-semibold text-slate-200 shadow-sm focus:border-amber-500 focus:outline-none"
           >
             <option value="all" className="bg-slate-900">
               {lang === 'fr' ? 'Tous les types' : 'All Service Types'} ({vehicleServices.length})
@@ -328,7 +328,7 @@ export default function MaintenancePage() {
 
       {/* Timeline / Card List */}
       {filteredServices.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-slate-800 bg-[#0F1522]/50 p-12 text-center shadow-xl">
+        <div className="rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/50 p-12 text-center shadow-xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
             <Wrench className="h-7 w-7" />
           </div>
@@ -358,7 +358,7 @@ export default function MaintenancePage() {
             return (
               <div
                 key={service.id}
-                className="relative overflow-hidden rounded-2xl border border-slate-800 bg-[#0F1522] p-6 shadow-xl shadow-black/40 hover:border-slate-700 transition"
+                className="relative overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-xl shadow-black/40 hover:border-slate-700 transition"
               >
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                   {/* Left: Icon, Type, Description */}
@@ -462,7 +462,7 @@ export default function MaintenancePage() {
         titleId="maintenance-add-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
@@ -672,7 +672,7 @@ export default function MaintenancePage() {
         titleId="maintenance-category-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
                 <Tag className="h-5 w-5" />
@@ -722,7 +722,7 @@ export default function MaintenancePage() {
         titleId="maintenance-delete-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 border border-red-500/30 text-red-400">
                 <AlertTriangle className="h-5 w-5" />

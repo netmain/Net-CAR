@@ -402,7 +402,7 @@ export default function FuelPage() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-800/80 pb-5">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white whitespace-nowrap">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-50 whitespace-nowrap">
               {t.fuel.title}
             </h1>
             {activeVehicle && (
@@ -419,7 +419,7 @@ export default function FuelPage() {
         <div className="flex flex-wrap items-center gap-2.5 shrink-0">
           {/* Fuelio CSV Import */}
           <label
-            className={`inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700/80 bg-[#111827] px-4 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-sky-500/50 hover:text-sky-300 transition shadow-sm whitespace-nowrap ${
+            className={`inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700/80 bg-slate-800 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-sky-500/50 hover:text-sky-300 transition shadow-sm whitespace-nowrap ${
               !activeVehicle || importingCsv ? 'opacity-50 pointer-events-none' : 'cursor-pointer'
             }`}
             title={
@@ -453,7 +453,7 @@ export default function FuelPage() {
             type="button"
             onClick={handleExportFuelioCsv}
             disabled={!activeVehicle}
-            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700/80 bg-[#111827] px-4 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-50 transition shadow-sm cursor-pointer whitespace-nowrap"
+            className="inline-flex items-center justify-center gap-2 rounded-2xl border border-slate-700/80 bg-slate-800 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-300 disabled:opacity-50 transition shadow-sm cursor-pointer whitespace-nowrap"
             title={
               lang === 'fr'
                 ? 'Exporter les pleins et coûts au format CSV compatible Fuelio'
@@ -496,7 +496,7 @@ export default function FuelPage() {
           <button
             type="button"
             onClick={() => setCsvStatus(null)}
-            className="rounded-lg p-1 text-slate-400 hover:text-white transition"
+            className="rounded-lg p-1 text-slate-400 hover:text-slate-50 transition"
             aria-label="Close notification"
           >
             <X className="h-4 w-4" />
@@ -507,7 +507,7 @@ export default function FuelPage() {
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Avg Consumption */}
-        <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-800/90 p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               {t.dashboard.statsFuelEconomy}
@@ -517,7 +517,7 @@ export default function FuelPage() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-white">
+            <span className="font-mono text-3xl font-black text-slate-50">
               {avgEconomy > 0 ? avgEconomy : '—'}
             </span>
             <span className="text-xs font-bold text-slate-400">{economyUnit}</span>
@@ -530,7 +530,7 @@ export default function FuelPage() {
         </div>
 
         {/* Total Spent */}
-        <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-800/90 p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               {t.fuel.totalCost}
@@ -552,7 +552,7 @@ export default function FuelPage() {
         </div>
 
         {/* Total Volume */}
-        <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-800/90 p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               {lang === 'fr' ? 'Volume Total' : 'Total Volume'}
@@ -562,7 +562,7 @@ export default function FuelPage() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-white">
+            <span className="font-mono text-3xl font-black text-slate-50">
               {totalVolumeSum.toFixed(1)}
             </span>
             <span className="text-xs font-bold text-slate-400">{volumeUnit}</span>
@@ -573,7 +573,7 @@ export default function FuelPage() {
         </div>
 
         {/* Total Fillups Count */}
-        <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-5 shadow-lg">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-800/90 p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
               {lang === 'fr' ? 'Ravitaillements' : 'Refuels'}
@@ -583,7 +583,7 @@ export default function FuelPage() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-white">
+            <span className="font-mono text-3xl font-black text-slate-50">
               {vehicleFillups.length}
             </span>
             <span className="text-xs font-bold text-slate-400">
@@ -599,7 +599,7 @@ export default function FuelPage() {
       {/* Fuel Consumption Trend Line Chart (Consumption vs. Date) */}
       <div
         data-testid="fuel-consumption-chart"
-        className="rounded-3xl border border-slate-800/80 bg-[#111827]/90 p-6 shadow-xl"
+        className="rounded-3xl border border-slate-800/80 bg-slate-800/90 p-6 shadow-xl"
       >
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800/70 pb-4">
           <div>
@@ -608,7 +608,7 @@ export default function FuelPage() {
                 <TrendingDown className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="text-base sm:text-lg font-black text-white tracking-tight">
+                <h2 className="text-base sm:text-lg font-black text-slate-50 tracking-tight">
                   {lang === 'fr'
                     ? `Évolution de la Consommation (${economyUnit} vs. Date)`
                     : `Fuel Consumption Trend (${economyUnit} vs. Date)`}
@@ -648,7 +648,7 @@ export default function FuelPage() {
           </div>
 
           {consumptionTrendData.length > 30 && (
-            <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-[#0B0F17] p-1 self-start sm:self-auto">
+            <div className="flex items-center gap-1 rounded-xl border border-slate-800 bg-canvas p-1 self-start sm:self-auto">
               <button
                 type="button"
                 onClick={() => setChartRange('last30')}
@@ -795,7 +795,7 @@ export default function FuelPage() {
               setSearchQuery(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full rounded-2xl border border-slate-800 bg-[#111827] pl-10 pr-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 shadow-inner"
+            className="w-full rounded-2xl border border-slate-800 bg-slate-800 pl-10 pr-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 shadow-inner"
           />
         </div>
 
@@ -809,7 +809,7 @@ export default function FuelPage() {
                 setCurrentPage(1);
               }}
               aria-label="Rows per page"
-              className="rounded-xl border border-slate-800 bg-[#111827] px-2.5 py-1 text-xs font-mono font-bold text-slate-200 focus:border-sky-500 focus:outline-none"
+              className="rounded-xl border border-slate-800 bg-slate-800 px-2.5 py-1 text-xs font-mono font-bold text-slate-200 focus:border-sky-500 focus:outline-none"
             >
               <option value={30}>30</option>
               <option value={60}>60</option>
@@ -828,11 +828,11 @@ export default function FuelPage() {
 
       {/* Fill-ups Table / Card list */}
       {filteredFillups.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-800 bg-[#111827]/60 p-12 text-center shadow-xl">
+        <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-800/60 p-12 text-center shadow-xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-sky-500/15 border border-sky-500/30 text-sky-400">
             <Fuel className="h-7 w-7" />
           </div>
-          <h2 className="mt-4 text-base font-bold text-white">
+          <h2 className="mt-4 text-base font-bold text-slate-50">
             {vehicleFillups.length === 0 ? 'Aucun plein enregistré pour le moment' : 'Aucun enregistrement ne correspond'}
           </h2>
           <p className="mt-1 text-xs text-slate-400 max-w-sm mx-auto">
@@ -851,7 +851,7 @@ export default function FuelPage() {
           )}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-slate-800/80 bg-[#111827]/90 shadow-2xl">
+        <div className="overflow-hidden rounded-3xl border border-slate-800/80 bg-slate-800/90 shadow-2xl">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-900/90 border-b border-slate-800 text-[11px] font-black uppercase tracking-wider text-slate-400">
@@ -1009,7 +1009,7 @@ export default function FuelPage() {
         titleId="fuel-add-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-lg rounded-3xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/90 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-lg rounded-3xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/90 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
@@ -1041,7 +1041,7 @@ export default function FuelPage() {
                     autoFocus
                     value={date}
                     onChange={(e) => setDate(e.target.value)}
-                    className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
+                    className="w-full rounded-xl border border-slate-800 bg-canvas px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
                   />
                   {formErrors.date && <p className="mt-1 text-xs text-red-400 font-mono">{formErrors.date}</p>}
                 </div>
@@ -1085,7 +1085,7 @@ export default function FuelPage() {
                         return updated;
                       });
                     }}
-                    className={`w-full rounded-xl border bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 transition ${
+                    className={`w-full rounded-xl border bg-canvas px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:outline-none focus:ring-1 transition ${
                       formErrors.odometer
                         ? 'border-red-500/80 focus:border-red-500 focus:ring-red-500/40'
                         : 'border-slate-800 focus:border-amber-500/50 focus:ring-amber-500/50'
@@ -1113,7 +1113,7 @@ export default function FuelPage() {
                       placeholder="e.g. 2000"
                       value={totalCost}
                       onChange={(e) => handleTotalCostChange(e.target.value)}
-                      className="w-full rounded-xl border border-amber-500/50 bg-[#080B11] px-3.5 py-2.5 text-base font-mono font-black text-amber-400 shadow-inner placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition"
+                      className="w-full rounded-xl border border-amber-500/50 bg-canvas px-3.5 py-2.5 text-base font-mono font-black text-amber-400 shadow-inner placeholder:text-slate-600 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition"
                     />
                     {formErrors.totalCost && <p className="mt-1 text-xs text-red-400 font-mono">{formErrors.totalCost}</p>}
                   </div>
@@ -1129,7 +1129,7 @@ export default function FuelPage() {
                       placeholder="e.g. 29.00"
                       value={pricePerUnit}
                       onChange={(e) => handlePriceChange(e.target.value)}
-                      className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono font-bold text-cyan-300 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition"
+                      className="w-full rounded-xl border border-slate-800 bg-canvas px-3.5 py-2.5 text-sm font-mono font-bold text-cyan-300 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition"
                     />
                   </div>
 
@@ -1151,7 +1151,7 @@ export default function FuelPage() {
                       placeholder="e.g. 68.97"
                       value={volume}
                       onChange={(e) => handleVolumeChange(e.target.value)}
-                      className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono font-bold text-cyan-300 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition"
+                      className="w-full rounded-xl border border-slate-800 bg-canvas px-3.5 py-2.5 text-sm font-mono font-bold text-cyan-300 placeholder:text-slate-600 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 transition"
                     />
                     {formErrors.volume && <p className="mt-1 text-xs text-red-400 font-mono">{formErrors.volume}</p>}
                   </div>
@@ -1174,7 +1174,7 @@ export default function FuelPage() {
                   id="full-tank"
                   checked={isFullTank}
                   onChange={(e) => setIsFullTank(e.target.checked)}
-                  className="h-4 w-4 rounded border-slate-700 bg-[#080B11] text-amber-500 focus:ring-amber-500/50"
+                  className="h-4 w-4 rounded border-slate-700 bg-canvas text-amber-500 focus:ring-amber-500/50"
                 />
                 <label htmlFor="full-tank" className="cursor-pointer select-none text-xs">
                   <span className="font-bold text-slate-200 font-mono block">{t.fuel.isFullTank}</span>
@@ -1192,7 +1192,7 @@ export default function FuelPage() {
                     placeholder="e.g. Naftal, Total, Shell"
                     value={station}
                     onChange={(e) => setStation(e.target.value)}
-                    className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
+                    className="w-full rounded-xl border border-slate-800 bg-canvas px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
                   />
                 </div>
 
@@ -1203,10 +1203,10 @@ export default function FuelPage() {
                   <select
                     value={fuelType}
                     onChange={(e) => setFuelType(e.target.value as FuelType)}
-                    className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
+                    className="w-full rounded-xl border border-slate-800 bg-canvas px-3.5 py-2.5 text-sm font-mono text-slate-100 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
                   >
                     {(Object.keys(t.fuelTypes) as FuelType[]).map((ft) => (
-                      <option key={ft} value={ft} className="bg-[#0F1522] text-slate-100">
+                      <option key={ft} value={ft} className="bg-slate-900 text-slate-100">
                         {t.fuelTypes[ft]}
                       </option>
                     ))}
@@ -1223,7 +1223,7 @@ export default function FuelPage() {
                   placeholder="e.g. Highway trip, premium fuel, tire pressure checked..."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-[#080B11] px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
+                  className="w-full rounded-xl border border-slate-800 bg-canvas px-3.5 py-2.5 text-sm font-mono text-slate-100 placeholder:text-slate-600 focus:border-amber-500/50 focus:outline-none focus:ring-1 focus:ring-amber-500/50 transition"
                 />
               </div>
 
@@ -1231,7 +1231,7 @@ export default function FuelPage() {
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                  className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-50 transition"
                 >
                   {t.common.cancel}
                 </button>
@@ -1254,7 +1254,7 @@ export default function FuelPage() {
         titleId="fuel-delete-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-3xl bg-[#0F1522] border border-red-500/30 p-6 shadow-2xl shadow-black/90 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-md rounded-3xl bg-slate-900 border border-red-500/30 p-6 shadow-2xl shadow-black/90 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 border border-red-500/30 text-red-400">
                 <AlertTriangle className="h-5 w-5" />
@@ -1268,7 +1268,7 @@ export default function FuelPage() {
               <button
                 autoFocus
                 onClick={() => setDeleteConfirmId(null)}
-                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-white transition"
+                className="rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-800 hover:text-slate-50 transition"
               >
                 {t.common.cancel}
               </button>

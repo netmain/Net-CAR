@@ -317,7 +317,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Section 1: Localization & Units */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-lg space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-lg space-y-6">
         <h2 className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
             <Globe className="h-5 w-5" />
@@ -424,7 +424,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Section 2: Real Firebase Cloud Synchronization & Local Backup */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-lg space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-lg space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="space-y-1">
             <h2 className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-3">
@@ -760,7 +760,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Section 3: User Profile */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-lg space-y-6">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-lg space-y-6">
         <h2 className="text-base font-bold text-slate-100 font-mono tracking-tight flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400">
             <User className="h-5 w-5" />

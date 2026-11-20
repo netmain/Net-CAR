@@ -165,7 +165,7 @@ export default function NewVehiclePage() {
       <div className="flex items-center gap-4 border-b border-slate-800/80 pb-4">
         <Link
           href="/vehicles"
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-[#0F1522] text-slate-300 shadow-md hover:bg-slate-800 hover:text-white transition"
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-300 shadow-md hover:bg-slate-800 hover:text-slate-50 transition"
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
@@ -180,7 +180,7 @@ export default function NewVehiclePage() {
       </div>
 
       {/* Main Form Card */}
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-xl shadow-black/40 space-y-6">
+      <form onSubmit={handleSubmit} className="rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-xl shadow-black/40 space-y-6">
         {/* Section 1: Basic Vehicle Specs */}
         <div>
           <h2 className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400 mb-4 flex items-center gap-2">
@@ -426,7 +426,7 @@ export default function NewVehiclePage() {
                 }}
               />
               {(make.trim() || model.trim()) && (
-                <div className="absolute bottom-2.5 left-2.5 rounded-lg bg-slate-950/80 border border-slate-700/80 px-2.5 py-1 backdrop-blur-sm">
+                <div className="absolute bottom-2.5 left-2.5 rounded-lg bg-canvas/80 border border-slate-700/80 px-2.5 py-1 backdrop-blur-sm">
                   <span className="text-xs font-mono font-bold text-slate-100">
                     {[make.trim(), model.trim(), year].filter(Boolean).join(' • ')}
                   </span>

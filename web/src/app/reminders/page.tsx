@@ -265,7 +265,7 @@ export default function RemindersPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800 pb-5">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-50">
               {t.reminders.title}
             </h1>
             {activeVehicle && (
@@ -332,11 +332,11 @@ export default function RemindersPage() {
 
       {/* Reminders List */}
       {displayedReminders.length === 0 ? (
-        <div className="rounded-3xl border border-dashed border-slate-800 bg-[#121826]/60 p-12 text-center shadow-xl">
+        <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-800/60 p-12 text-center shadow-xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
             <Bell className="h-7 w-7" />
           </div>
-          <h2 className="mt-4 text-base font-bold text-white">
+          <h2 className="mt-4 text-base font-bold text-slate-50">
             {activeTab === 'active' ? 'Aucun rappel actif programmé' : 'Aucun rappel terminé'}
           </h2>
           <p className="mt-1 text-xs text-slate-400 max-w-sm mx-auto">
@@ -362,7 +362,7 @@ export default function RemindersPage() {
             return (
               <div
                 key={r.id}
-                className={`flex flex-col justify-between rounded-3xl border bg-[#121826]/80 p-6 shadow-xl backdrop-blur-xl transition hover:shadow-2xl ${
+                className={`flex flex-col justify-between rounded-3xl border bg-slate-800/80 p-6 shadow-xl backdrop-blur-xl transition hover:shadow-2xl ${
                   status.isOverdue
                     ? 'border-red-500/60 ring-1 ring-red-500/30 bg-red-950/10'
                     : status.isDueSoon
@@ -428,7 +428,7 @@ export default function RemindersPage() {
                   </div>
 
                   {/* Title & Service Type */}
-                  <h3 className="mt-3.5 text-lg font-black text-white">
+                  <h3 className="mt-3.5 text-lg font-black text-slate-50">
                     {r.title || t.serviceTypes[r.type] || r.type}
                   </h3>
 
@@ -510,7 +510,7 @@ export default function RemindersPage() {
         titleId="reminders-add-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
@@ -676,7 +676,7 @@ export default function RemindersPage() {
         titleId="reminders-category-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
                 <Tag className="h-5 w-5" />
@@ -726,7 +726,7 @@ export default function RemindersPage() {
         titleId="reminders-delete-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 border border-red-500/30 text-red-400">
                 <AlertTriangle className="h-5 w-5" />

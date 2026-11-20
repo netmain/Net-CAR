@@ -197,7 +197,7 @@ export default function ReportsPage() {
                 setActiveVehicleId(val);
               }
             }}
-            className="rounded-xl border border-slate-800 bg-[#0F1522] px-3.5 py-2 text-sm font-mono font-semibold text-slate-200 shadow-sm focus:border-amber-500 focus:outline-none"
+            className="rounded-xl border border-slate-800 bg-slate-900 px-3.5 py-2 text-sm font-mono font-semibold text-slate-200 shadow-sm focus:border-amber-500 focus:outline-none"
           >
             <option value="all" className="bg-slate-900">
               {lang === 'fr' ? 'Tous les véhicules (Flotte)' : 'All Vehicles (Fleet)'}
@@ -212,7 +212,7 @@ export default function ReportsPage() {
           {/* Export CSV Button */}
           <button
             onClick={handleExportCSV}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-[#0F1522] px-4 py-2 text-sm font-mono font-bold text-slate-300 shadow-sm hover:bg-slate-800/70 hover:text-white transition"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-800 bg-slate-900 px-4 py-2 text-sm font-mono font-bold text-slate-300 shadow-sm hover:bg-slate-800/70 hover:text-slate-50 transition"
           >
             <Download className="h-4 w-4 text-cyan-400" />
             <span>{t.common.export}</span>
@@ -232,7 +232,7 @@ export default function ReportsPage() {
       {/* KPI Overview Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Cost of Ownership */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {t.reports.totalSpent}
@@ -253,7 +253,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Cost per km */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {t.fuel.costPerKm}
@@ -274,7 +274,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Fuel Share */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {t.reports.fuelShare}
@@ -293,7 +293,7 @@ export default function ReportsPage() {
         </div>
 
         {/* Maintenance & Services */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {t.reports.maintenanceShare}
@@ -313,7 +313,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Spending Distribution Visual Card */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-6 sm:p-8 shadow-xl shadow-black/40">
+      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-6 sm:p-8 shadow-xl shadow-black/40">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
@@ -401,7 +401,7 @@ export default function ReportsPage() {
       </div>
 
       {/* Monthly Summary Breakdown Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0F1522] shadow-xl shadow-black/40">
+      <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl shadow-black/40">
         <div className="flex items-center justify-between p-5 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">

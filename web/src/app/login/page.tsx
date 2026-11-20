@@ -134,7 +134,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 sm:p-8 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-200">
+      <div className="w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-200">
         {/* Brand Crest */}
         <div className="flex items-center gap-3 mb-6">
           <div className="relative flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 via-orange-600 to-red-600 text-white shadow-lg shadow-orange-500/25">
@@ -210,7 +210,7 @@ export default function LoginPage() {
           type="button"
           onClick={handleGoogleClick}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 shadow-sm hover:bg-slate-800 hover:border-slate-600 hover:text-white transition"
+          className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 shadow-sm hover:bg-slate-800 hover:border-slate-600 hover:text-slate-50 transition"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24">
             <path
@@ -239,7 +239,7 @@ export default function LoginPage() {
             <div className="w-full border-t border-slate-800" />
           </div>
           <div className="relative flex justify-center text-[11px] font-mono uppercase tracking-wider text-slate-500">
-            <span className="bg-[#0F1522] px-3">{t.auth.orDivider}</span>
+            <span className="bg-slate-900 px-3">{t.auth.orDivider}</span>
           </div>
         </div>
 

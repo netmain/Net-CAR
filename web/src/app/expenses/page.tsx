@@ -242,7 +242,7 @@ export default function ExpensesPage() {
       {/* KPI Cockpit Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {/* Total Expenses */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {t.expenses.totalExpenses}
@@ -263,7 +263,7 @@ export default function ExpensesPage() {
         </div>
 
         {/* Top Expense Category */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {lang === 'fr' ? 'Dépense principale' : 'Top Expense'}
@@ -285,7 +285,7 @@ export default function ExpensesPage() {
         </div>
 
         {/* Average Per Entry */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0F1522] p-5 shadow-xl shadow-black/40">
+        <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 shadow-xl shadow-black/40">
           <div className="flex items-center justify-between">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-400">
               {lang === 'fr' ? 'Coût moyen' : 'Average Cost'}
@@ -313,7 +313,7 @@ export default function ExpensesPage() {
           className={`rounded-xl px-4 py-2 text-xs font-mono font-bold transition shadow-sm ${
             selectedCategory === 'all'
               ? 'bg-amber-500 text-slate-950 shadow-amber-500/20'
-              : 'border border-slate-800 bg-[#0F1522] text-slate-300 hover:bg-slate-800/60 hover:text-white'
+              : 'border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800/60 hover:text-slate-50'
           }`}
         >
           {t.common.all} ({vehicleExpenses.length})
@@ -328,7 +328,7 @@ export default function ExpensesPage() {
               className={`rounded-xl px-4 py-2 text-xs font-mono font-bold transition shadow-sm ${
                 selectedCategory === cat
                   ? 'bg-amber-500 text-slate-950 shadow-amber-500/20'
-                  : 'border border-slate-800 bg-[#0F1522] text-slate-300 hover:bg-slate-800/60 hover:text-white'
+                  : 'border border-slate-800 bg-slate-900 text-slate-300 hover:bg-slate-800/60 hover:text-slate-50'
               }`}
             >
               {t.categories[cat] || cat} {count > 0 ? `(${count})` : ''}
@@ -346,7 +346,7 @@ export default function ExpensesPage() {
             placeholder={lang === 'fr' ? 'Rechercher description, notes...' : 'Search description, notes...'}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-xl border border-slate-800 bg-[#0F1522] pl-10 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm font-sans"
+            className="w-full rounded-xl border border-slate-800 bg-slate-900 pl-10 pr-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 shadow-sm font-sans"
           />
         </div>
 
@@ -359,7 +359,7 @@ export default function ExpensesPage() {
 
       {/* Expenses Table */}
       {filteredExpenses.length === 0 ? (
-        <div className="rounded-2xl border-2 border-dashed border-slate-800 bg-[#0F1522]/50 p-12 text-center shadow-xl">
+        <div className="rounded-2xl border-2 border-dashed border-slate-800 bg-slate-900/50 p-12 text-center shadow-xl">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-400">
             <Receipt className="h-7 w-7" />
           </div>
@@ -382,7 +382,7 @@ export default function ExpensesPage() {
           )}
         </div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0F1522] shadow-xl shadow-black/50">
+        <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-xl shadow-black/50">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead className="bg-slate-900/80 border-b border-slate-800 text-[11px] font-mono font-bold uppercase tracking-wider text-slate-400">
@@ -476,7 +476,7 @@ export default function ExpensesPage() {
         titleId="expense-add-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
@@ -632,7 +632,7 @@ export default function ExpensesPage() {
         titleId="expense-category-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80">
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
                 <Tag className="h-5 w-5" />
@@ -683,7 +683,7 @@ export default function ExpensesPage() {
         titleId="expense-delete-title"
         closedby="closerequest"
       >
-          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
+          <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 shadow-2xl shadow-black/80 animate-in fade-in zoom-in-95 duration-150">
             <div className="flex items-center gap-3 text-red-400">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-500/15 border border-red-500/30 text-red-400">
                 <AlertTriangle className="h-5 w-5" />

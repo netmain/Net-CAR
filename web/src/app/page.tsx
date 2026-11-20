@@ -111,7 +111,7 @@ export default function DashboardPage() {
     <div className="space-y-8">
       {/* Hero Vehicle Cockpit Card */}
       {activeVehicle ? (
-        <div className="relative overflow-hidden rounded-3xl border border-slate-800/90 bg-gradient-to-br from-[#131C31] via-[#0F172A] to-[#090D16] p-6 sm:p-8 shadow-2xl">
+        <div className="relative overflow-hidden rounded-3xl border border-slate-800/90 bg-gradient-to-br from-slate-800 via-slate-900 to-canvas p-6 sm:p-8 shadow-2xl">
           <div className="pointer-events-none absolute -top-24 -right-24 h-64 w-64 rounded-full bg-sky-500/10 blur-3xl" />
           {/* Quick Vehicle Switcher Bar inside Cockpit Hero */}
           {vehicles.length > 0 && (
@@ -139,7 +139,7 @@ export default function DashboardPage() {
                     {v.plate && (
                       <span
                         className={`text-[10px] px-1.5 py-0.5 rounded ${
-                          isSelected ? 'bg-slate-950/30 text-sky-100' : 'bg-slate-800 text-sky-400'
+                          isSelected ? 'bg-canvas/30 text-sky-100' : 'bg-slate-800 text-sky-400'
                         }`}
                       >
                         {v.plate}
@@ -181,7 +181,7 @@ export default function DashboardPage() {
 
               {/* Title & Specs */}
               <div>
-                <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-white flex items-center gap-3">
+                <h1 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-50 flex items-center gap-3">
                   <span>{activeVehicle.make} {activeVehicle.model}</span>
                   <span className="text-base sm:text-xl font-bold text-slate-400">({activeVehicle.year})</span>
                 </h1>
@@ -216,7 +216,7 @@ export default function DashboardPage() {
 
               <Link
                 href="/expenses"
-                className="flex items-center gap-2 rounded-2xl border border-slate-700/80 bg-[#111827] px-4 py-3 text-sm font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-300 hover:bg-amber-500/10 transition-all shadow-sm"
+                className="flex items-center gap-2 rounded-2xl border border-slate-700/80 bg-slate-800 px-4 py-3 text-sm font-bold text-slate-200 hover:border-amber-500/50 hover:text-amber-300 hover:bg-amber-500/10 transition-all shadow-sm"
               >
                 <Receipt className="h-4 w-4 text-amber-400" />
                 <span>{t.dashboard.logExpense}</span>
@@ -224,7 +224,7 @@ export default function DashboardPage() {
 
               <Link
                 href="/maintenance"
-                className="flex items-center gap-2 rounded-2xl border border-slate-700/80 bg-[#111827] px-4 py-3 text-sm font-bold text-slate-200 hover:border-emerald-500/50 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all shadow-sm"
+                className="flex items-center gap-2 rounded-2xl border border-slate-700/80 bg-slate-800 px-4 py-3 text-sm font-bold text-slate-200 hover:border-emerald-500/50 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all shadow-sm"
               >
                 <Wrench className="h-4 w-4 text-emerald-400" />
                 <span>{t.dashboard.logService}</span>
@@ -233,7 +233,7 @@ export default function DashboardPage() {
           </div>
         </div>
       ) : (
-        <div className="rounded-3xl border border-dashed border-slate-800 bg-[#121826]/60 p-8 text-center shadow-xl">
+        <div className="rounded-3xl border border-dashed border-slate-800 bg-slate-800/60 p-8 text-center shadow-xl">
           <Car className="mx-auto h-12 w-12 text-slate-500" />
           <h2 className="mt-3 text-lg font-bold text-slate-200">{t.dashboard.addFirstVehicle}</h2>
           <Link
@@ -249,7 +249,7 @@ export default function DashboardPage() {
       {/* 4 Telemetry HUD KPI Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Fuel Economy Gauge */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-[#121826]/80 p-5 shadow-lg hover:border-slate-700 transition group">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-800/80 p-5 shadow-lg hover:border-slate-700 transition group">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
               {t.dashboard.statsFuelEconomy}
@@ -259,7 +259,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-white">{avgEconomy}</span>
+            <span className="font-mono text-3xl font-black text-slate-50">{avgEconomy}</span>
             <span className="text-xs font-bold text-slate-400">{economyUnit}</span>
           </div>
           <div className="mt-2.5 flex items-center justify-between text-xs">
@@ -275,7 +275,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Monthly Cost */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-[#121826]/80 p-5 shadow-lg hover:border-slate-700 transition group">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-800/80 p-5 shadow-lg hover:border-slate-700 transition group">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
               {t.dashboard.statsMonthlyCost}
@@ -298,7 +298,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Due Reminders & Health */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-[#121826]/80 p-5 shadow-lg hover:border-slate-700 transition group">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-800/80 p-5 shadow-lg hover:border-slate-700 transition group">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
               {t.dashboard.statsDueReminders}
@@ -312,7 +312,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="font-mono text-3xl font-black text-white">{activeReminders.length}</span>
+            <span className="font-mono text-3xl font-black text-slate-50">{activeReminders.length}</span>
             <span className="text-xs font-bold text-slate-400">{t.reminders.dueSoon}</span>
           </div>
           <p className="mt-2 text-xs text-amber-400 font-semibold truncate flex items-center gap-1.5">
@@ -325,7 +325,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Live Odometer */}
-        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-[#121826]/80 p-5 shadow-lg hover:border-slate-700 transition group">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800/80 bg-slate-800/80 p-5 shadow-lg hover:border-slate-700 transition group">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">
               {t.dashboard.statsOdometer}
@@ -335,7 +335,7 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-1">
-            <span className="font-mono text-3xl font-black text-white">
+            <span className="font-mono text-3xl font-black text-slate-50">
               {activeVehicle ? activeVehicle.currentOdometer.toLocaleString() : '0'}
             </span>
             <span className="text-xs font-bold text-slate-400">{distUnit}</span>
@@ -356,14 +356,14 @@ export default function DashboardPage() {
       {/* Two-Column Cockpit Telemetry Section */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Service Alerts & Radar */}
-        <div className="rounded-3xl border border-slate-800/80 bg-[#121826]/80 p-6 shadow-xl backdrop-blur-xl">
+        <div className="rounded-3xl border border-slate-800/80 bg-slate-800/80 p-6 shadow-xl backdrop-blur-xl">
           <div className="flex items-center justify-between pb-4 border-b border-slate-800">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
                 <Bell className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="font-bold text-white text-base">{t.dashboard.upcomingServices}</h2>
+                <h2 className="font-bold text-slate-50 text-base">{t.dashboard.upcomingServices}</h2>
                 <p className="text-[11px] text-slate-400">
                   {lang === 'fr' ? 'Maintenance préventive programmée' : 'Scheduled preventative maintenance'}
                 </p>
@@ -387,7 +387,7 @@ export default function DashboardPage() {
                 return (
                   <div 
                     key={r.id} 
-                    className="rounded-2xl border border-slate-800/80 bg-[#0B0F19]/80 p-4 hover:border-slate-700 transition"
+                    className="rounded-2xl border border-slate-800/80 bg-canvas/80 p-4 hover:border-slate-700 transition"
                   >
                     <div className="flex items-start justify-between">
                       <div>
@@ -443,14 +443,14 @@ export default function DashboardPage() {
         </div>
 
         {/* Cost Distribution & Telemetry */}
-        <div className="rounded-3xl border border-slate-800/80 bg-[#121826]/80 p-6 shadow-xl backdrop-blur-xl">
+        <div className="rounded-3xl border border-slate-800/80 bg-slate-800/80 p-6 shadow-xl backdrop-blur-xl">
           <div className="flex items-center justify-between pb-4 border-b border-slate-800">
             <div className="flex items-center gap-2.5">
               <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-500/15 border border-violet-500/30 text-violet-400">
                 <Receipt className="h-4 w-4" />
               </div>
               <div>
-                <h2 className="font-bold text-white text-base">{t.dashboard.spendingChart}</h2>
+                <h2 className="font-bold text-slate-50 text-base">{t.dashboard.spendingChart}</h2>
                 <p className="text-[11px] text-slate-400">
                   {lang === 'fr' ? 'Répartition budgétaire totale' : 'Total cost breakdown'}
                 </p>
@@ -508,14 +508,14 @@ export default function DashboardPage() {
       </div>
 
       {/* Recent Activity Table (Dark Glass) */}
-      <div className="rounded-3xl border border-slate-800/80 bg-[#121826]/80 p-6 shadow-xl backdrop-blur-xl">
+      <div className="rounded-3xl border border-slate-800/80 bg-slate-800/80 p-6 shadow-xl backdrop-blur-xl">
         <div className="flex items-center justify-between pb-4 border-b border-slate-800">
           <div className="flex items-center gap-2.5">
             <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400">
               <Fuel className="h-4 w-4" />
             </div>
             <div>
-              <h2 className="font-bold text-white text-base">{t.dashboard.recentFillups}</h2>
+              <h2 className="font-bold text-slate-50 text-base">{t.dashboard.recentFillups}</h2>
               <p className="text-[11px] text-slate-400">
                 {lang === 'fr' ? 'Derniers ravitaillements en carburant' : 'Latest fuel refuel entries'}
               </p>

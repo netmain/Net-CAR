@@ -32,7 +32,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="min-h-screen bg-[#080b11] text-slate-100 flex flex-col font-sans pb-16 md:pb-0 carbon-grid">
+    <div className="min-h-screen bg-canvas text-slate-100 flex flex-col font-sans pb-16 md:pb-0 carbon-grid">
       <Navbar />
       <AuthModal />
       <AddVehicleModal />
@@ -40,13 +40,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <div className="hidden md:block">
           <Sidebar />
         </div>
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
+        <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto">
           {children}
         </main>
       </div>
 
       {/* Mobile Sticky Bottom Telemetry Bar */}
-      <nav className="fixed bottom-0 inset-x-0 z-30 bg-[#0B0F19] border-t border-slate-800/80 py-1.5 px-2 flex justify-around items-center md:hidden shadow-lg">
+      <nav className="fixed bottom-0 inset-x-0 z-30 bg-canvas border-t border-slate-800/80 py-1.5 px-2 flex justify-around items-center md:hidden shadow-lg">
         {mobileNav.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href || (item.href !== '/' && pathname.startsWith(item.href));

@@ -136,7 +136,7 @@ export function AuthModal() {
       titleId="auth-title"
       closedby="closerequest"
     >
-      <div className="relative mx-auto w-full max-w-md rounded-2xl bg-[#0F1522] border border-slate-800 p-6 sm:p-8 shadow-2xl shadow-black/80 animate-in zoom-in-95 duration-150">
+      <div className="relative mx-auto w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 p-6 sm:p-8 shadow-2xl shadow-black/80 animate-in zoom-in-95 duration-150">
         {/* Close Button */}
         <button
           onClick={() => setAuthModalOpen(false)}
@@ -220,7 +220,7 @@ export function AuthModal() {
           type="button"
           onClick={handleGoogleClick}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 shadow-sm hover:bg-slate-800 hover:border-slate-600 hover:text-white transition"
+          className="w-full flex items-center justify-center gap-3 rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-xs font-mono font-bold text-slate-200 shadow-sm hover:bg-slate-800 hover:border-slate-600 hover:text-slate-50 transition"
         >
           {/* Google Logo SVG */}
           <svg className="h-4 w-4" viewBox="0 0 24 24">
@@ -250,7 +250,7 @@ export function AuthModal() {
             <div className="w-full border-t border-slate-800" />
           </div>
           <div className="relative flex justify-center text-[11px] font-mono uppercase tracking-wider text-slate-500">
-            <span className="bg-[#0F1522] px-3">{t.auth.orDivider}</span>
+            <span className="bg-slate-900 px-3">{t.auth.orDivider}</span>
           </div>
         </div>
 

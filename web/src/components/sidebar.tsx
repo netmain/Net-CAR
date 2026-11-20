@@ -108,7 +108,7 @@ export function Sidebar() {
             };
 
   return (
-    <aside className="w-64 border-r border-slate-800/80 bg-[#090D16]/90 min-h-[calc(100vh-4rem)] flex flex-col justify-between py-6 px-3.5">
+    <aside className="w-64 border-r border-slate-800/80 bg-canvas/90 min-h-[calc(100vh-4rem)] flex flex-col justify-between py-6 px-3.5">
       <div className="space-y-1">
         <div className="px-3 pb-3 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-500">
           <span>Cockpit</span>
@@ -203,7 +203,7 @@ export function Sidebar() {
           </button>
         )}
 
-        <div className="rounded-2xl border border-slate-800/80 bg-[#111827]/90 p-3.5 relative overflow-hidden shadow-lg">
+        <div className="rounded-2xl border border-slate-800/80 bg-slate-800/90 p-3.5 relative overflow-hidden shadow-lg">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-bold text-xs text-slate-200">
               <Radio

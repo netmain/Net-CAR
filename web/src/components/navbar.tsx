@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useApp } from '@/lib/app-context';
+import { ThemeToggle } from './theme-toggle';
 import {
   Car,
   Plus,
@@ -20,6 +21,7 @@ import {
   Cloud,
   RefreshCw,
   Download,
+  LogIn,
 } from 'lucide-react';
 
 export function Navbar() {
@@ -72,7 +74,7 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-[#090D16]/90 backdrop-blur-xl px-4 sm:px-6 shadow-lg shadow-black/20">
+      <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-800/80 bg-canvas/90 backdrop-blur-xl px-4 sm:px-6 shadow-lg shadow-black/20">
         {/* Brand & Active Vehicle */}
         <div className="flex items-center gap-3 sm:gap-4">
           {/* Mobile hamburger button */}
@@ -91,7 +93,7 @@ export function Navbar() {
               <div className="absolute inset-0 rounded-xl border border-white/25 pointer-events-none" />
             </div>
             <div className="hidden sm:flex flex-col">
-              <span className="font-black text-lg tracking-tight bg-gradient-to-r from-white via-sky-100 to-sky-400 bg-clip-text text-transparent">
+              <span className="font-black text-lg tracking-tight bg-gradient-to-r from-slate-50 via-sky-100 to-sky-400 bg-clip-text text-transparent">
                 Net-CAR
               </span>
               <span className="text-[9px] font-extrabold uppercase tracking-widest text-sky-400/90 -mt-1">
@@ -100,13 +102,14 @@ export function Navbar() {
             </div>
           </Link>
 
-          {/* Vehicle Selector Dropdown */}
+          {/* Vehicle Selector Dropdown — desktop only; the mobile drawer
+              carries a compact vehicle list instead. */}
           {vehicles.length > 0 && (
-            <div className="relative flex items-center ml-1 sm:ml-2">
+            <div className="relative hidden md:flex items-center ml-1 sm:ml-2">
               <label htmlFor="vehicle-select" className="sr-only">
                 {t.common.selectVehicle}
               </label>
-              <div className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-[#111827] px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-200 hover:border-sky-500/60 transition max-w-[210px] sm:max-w-none shadow-inner">
+              <div className="flex items-center gap-2 rounded-xl border border-slate-700/80 bg-slate-800 px-3 py-1.5 text-xs sm:text-sm font-semibold text-slate-200 hover:border-sky-500/60 transition max-w-[210px] sm:max-w-none shadow-inner">
                 <div className="h-2 w-2 rounded-full bg-emerald-400 shrink-0 shadow-sm shadow-emerald-400/50" />
                 <select
                   ref={selectRef}
@@ -121,7 +124,7 @@ export function Navbar() {
                     <option
                       key={v.id}
                       value={v.id}
-                      className="bg-[#111827] text-slate-100 py-1"
+                      className="bg-slate-800 text-slate-100 py-1"
                     >
                       {v.make} {v.model} {v.plate ? `(${v.plate})` : ''}
                     </option>
@@ -219,7 +222,7 @@ export function Navbar() {
           )}
 
           {/* Language Switcher - Rocker Pill */}
-          <div className="flex items-center rounded-xl border border-slate-800 bg-[#121826]/90 p-1 text-xs font-bold shadow-inner">
+          <div className="flex items-center rounded-xl border border-slate-800 bg-slate-800/90 p-1 text-xs font-bold shadow-inner">
             <button
               onClick={() => setLang('en')}
               className={`px-2.5 py-1 rounded-lg transition-all ${
@@ -242,12 +245,15 @@ export function Navbar() {
             </button>
           </div>
 
+          {/* Light / dark theme rocker */}
+          <ThemeToggle />
+
           {/* User Account / Sign In */}
           {user ? (
             <div className="flex items-center gap-2 pl-1 sm:pl-2">
               <Link
                 href="/settings"
-                className="flex items-center gap-2 rounded-xl border border-slate-800 bg-[#121826]/90 p-1 pr-2 sm:pr-3 hover:border-slate-700 transition"
+                className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-800/90 p-1 pr-2 sm:pr-3 hover:border-slate-700 transition"
               >
                 <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400/20 to-orange-500/20 border border-amber-500/30 text-amber-400 font-extrabold text-xs">
                   {user.email ? user.email.slice(0, 2).toUpperCase() : 'KM'}
@@ -268,9 +274,11 @@ export function Navbar() {
           ) : (
             <button
               onClick={() => setAuthModalOpen(true)}
-              className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-3.5 py-1.5 text-xs font-mono font-bold text-slate-950 shadow-md shadow-orange-500/20 hover:opacity-95 transition"
+              aria-label={t.auth.signInBtn}
+              className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-2.5 sm:px-3.5 py-1.5 text-xs font-mono font-bold text-slate-950 shadow-md shadow-orange-500/20 hover:opacity-95 transition"
             >
-              {t.auth.signInBtn}
+              <LogIn className="h-3.5 w-3.5 sm:hidden" />
+              <span className="hidden sm:inline">{t.auth.signInBtn}</span>
             </button>
           )}
         </div>
@@ -278,7 +286,42 @@ export function Navbar() {
 
       {/* Mobile Dropdown Navigation Drawer */}
       {mobileMenuOpen && (
-        <div className="fixed inset-x-0 top-16 z-20 border-b border-slate-800 bg-[#0B0F19]/95 backdrop-blur-2xl p-4 shadow-2xl md:hidden animate-in fade-in slide-in-from-top-2 duration-150">
+        <div className="fixed inset-x-0 top-16 z-20 border-b border-slate-800 bg-canvas/95 backdrop-blur-2xl p-4 shadow-2xl md:hidden animate-in fade-in slide-in-from-top-2 duration-150">
+          {vehicles.length > 0 && (
+            <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
+              {vehicles.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveVehicleId(v.id);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                    activeVehicle?.id === v.id
+                      ? 'border-amber-500/60 bg-amber-500/15 text-amber-400'
+                      : 'border-slate-800 bg-slate-900 text-slate-400'
+                  }`}
+                >
+                  <Car className="h-3.5 w-3.5 shrink-0" />
+                  <span className="max-w-[180px] truncate">
+                    {v.make} {v.model}
+                  </span>
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  setAddVehicleModalOpen(true);
+                }}
+                aria-label={t.vehicles.addVehicle}
+                className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-900 text-slate-400"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+            </div>
+          )}
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
