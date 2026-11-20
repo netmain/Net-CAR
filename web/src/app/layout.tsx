@@ -2,7 +2,6 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { AppProvider } from '@/lib/app-context';
 import { AppShell } from '@/components/app-shell';
-import { AstryxThemeProvider } from '@/components/astryx-theme-provider';
 
 export const metadata: Metadata = {
   title: 'Net-CAR — Performance Vehicle Management & Telemetry',
@@ -27,11 +26,9 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full bg-canvas text-slate-100 font-sans selection:bg-amber-500 selection:text-black">
-        <AstryxThemeProvider>
-          <AppProvider>
-            <AppShell>{children}</AppShell>
-          </AppProvider>
-        </AstryxThemeProvider>
+        <AppProvider>
+          <AppShell>{children}</AppShell>
+        </AppProvider>
       </body>
     </html>
   );
