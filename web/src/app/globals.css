@@ -133,6 +133,8 @@ dialog::backdrop {
   --color-blue-600: #0b3f4a;
   --color-blue-300: #0e5a68;
   --color-blue-400: #0e5a68;
+  --color-indigo-300: #0e5a68;
+  --color-indigo-400: #0e5a68;
   --color-indigo-500: #0e4e5c;
   --color-indigo-600: #0b3f4a;
   --color-cyan-300: #0e5a68;
@@ -150,6 +152,7 @@ dialog::backdrop {
   --color-violet-300: #5b21b6;
   --color-violet-400: #6d28d9;
   --color-violet-500: #6d28d9;
+  --color-purple-300: #7e22ce;
   --color-purple-400: #7e22ce;
   --color-purple-500: #6b21a8;
   --color-orange-300: #9a3412;
