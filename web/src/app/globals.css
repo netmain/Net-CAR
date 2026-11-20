@@ -131,18 +131,27 @@ dialog::backdrop {
   --color-sky-600: #0b3f4a;
   --color-blue-500: #0e4e5c;
   --color-blue-600: #0b3f4a;
+  --color-blue-300: #0e5a68;
+  --color-blue-400: #0e5a68;
   --color-indigo-500: #0e4e5c;
   --color-indigo-600: #0b3f4a;
   --color-cyan-300: #0e5a68;
   --color-cyan-400: #0e5a68;
   --color-cyan-500: #0e6b7a;
   --color-cyan-600: #0b4a56;
+  --color-teal-300: #0e5a68;
+  --color-teal-400: #0e5a68;
+  --color-teal-500: #0e6b7a;
+  --color-teal-600: #0b4a56;
   --color-red-300: #991b1b;
   --color-red-400: #b91c1c;
   --color-rose-300: #9f1239;
   --color-rose-400: #be123c;
   --color-violet-300: #5b21b6;
   --color-violet-400: #6d28d9;
+  --color-violet-500: #6d28d9;
+  --color-purple-400: #7e22ce;
+  --color-purple-500: #6b21a8;
   --color-orange-300: #9a3412;
   --color-blue-400: #1d4ed8;
 
